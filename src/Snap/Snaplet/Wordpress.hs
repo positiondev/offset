@@ -21,7 +21,7 @@ import qualified Data.Text            as T
 import qualified Data.Text.Encoding   as T
 import           Database.Redis       (Redis)
 import           Heist
-import           Heist.Interpreted
+import           Heist.Compiled
 import           Snap
 import           Snap.Snaplet.Heist   (Heist, addConfig)
 import           Snap.Snaplet.RedisDB (RedisDB)
@@ -42,7 +42,7 @@ instance Default WordpressConfig where
 
 data Wordpress b = Wordpress { runRedis :: forall a. Redis a -> Handler b b a}
 
-data Post = Post Int Text
+data Post = Post {postId :: Int, postTitle :: Text}
 
 
 instance FromJSON Post where
@@ -63,7 +63,7 @@ initWordpress' :: WordpressConfig
 initWordpress' wpconf heist r =
   makeSnaplet "wordpress" "" Nothing $
     do conf <- getSnapletUserConfig
-       addConfig heist mempty { hcInterpretedSplices = wordpressSplices wpconf }
+       addConfig heist mempty { hcCompiledSplices = wordpressSplices wpconf }
        return $ Wordpress (R.runRedisDB r)
 
 wordpressSplices :: WordpressConfig -> Splices (Splice (Handler b b))
@@ -71,12 +71,13 @@ wordpressSplices conf = "wpPosts" ## wpPostsSplice conf
 
 
 wpPostsSplice :: WordpressConfig -> Splice (Handler b b)
-wpPostsSplice conf = case requester conf of
-                       Just r -> do res <- liftIO $ r (endpoint conf ++ "/posts")
-                                    case (T.encodeUtf8 <$> res) >>= decodeStrict of
-                                      Just posts -> mapSplices (runChildrenWith . postSplices) posts
-                                      Nothing -> return []
+wpPostsSplice conf =
+  case requester conf of
+    Just r -> do res <- liftIO $ r (endpoint conf ++ "/posts")
+                 case (T.encodeUtf8 <$> res) >>= decodeStrict of
+                   Just posts -> manyWithSplices runChildren postSplices (return posts)
+                   Nothing -> return (yieldPureText "")
 
-postSplices :: Post -> Splices (Splice (Handler b b))
-postSplices (Post i t) = do "wpId" ## textSplice (T.pack (show i))
-                            "wpTitle" ## textSplice t
+postSplices :: Monad m => Splices (RuntimeSplice m Post -> Splice m)
+postSplices = mapS (pureSplice . textSplice)$ do "wpId" ## T.pack . show . postId
+                                                 "wpTitle" ## postTitle
