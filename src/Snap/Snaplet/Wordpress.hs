@@ -9,23 +9,26 @@ module Snap.Snaplet.Wordpress (
  , initWordpress
  , initWordpress') where
 
-import           Prelude              hiding ((++))
+import           Prelude                  hiding ((++))
 
+import           Blaze.ByteString.Builder
 import           Control.Applicative
 import           Control.Lens
 import           Data.Aeson
+import qualified Data.Attoparsec.Text     as A
 import           Data.Default
 import           Data.Monoid
-import           Data.Text            (Text)
-import qualified Data.Text            as T
-import qualified Data.Text.Encoding   as T
-import           Database.Redis       (Redis)
+import           Data.Text                (Text)
+import qualified Data.Text                as T
+import qualified Data.Text.Encoding       as T
+import           Database.Redis           (Redis)
 import           Heist
 import           Heist.Compiled
+import           Heist.Compiled.LowLevel
 import           Snap
-import           Snap.Snaplet.Heist   (Heist, addConfig)
-import           Snap.Snaplet.RedisDB (RedisDB)
-import qualified Snap.Snaplet.RedisDB as R
+import           Snap.Snaplet.Heist       (Heist, addConfig)
+import           Snap.Snaplet.RedisDB     (RedisDB)
+import qualified Snap.Snaplet.RedisDB     as R
 
 (++) :: Monoid a => a -> a -> a
 (++) = mappend
@@ -67,7 +70,8 @@ initWordpress' wpconf heist r =
        return $ Wordpress (R.runRedisDB r)
 
 wordpressSplices :: WordpressConfig -> Splices (Splice (Handler b b))
-wordpressSplices conf = "wpPosts" ## wpPostsSplice conf
+wordpressSplices conf = do "wpPosts" ## wpPostsSplice conf
+                           "wpPostByPermalink" ## wpPostByPermalinkSplice conf
 
 
 wpPostsSplice :: WordpressConfig -> Splice (Handler b b)
@@ -77,6 +81,34 @@ wpPostsSplice conf =
                  case (T.encodeUtf8 <$> res) >>= decodeStrict of
                    Just posts -> manyWithSplices runChildren postSplices (return posts)
                    Nothing -> return (yieldPureText "")
+
+wpPostByPermalinkSplice :: WordpressConfig -> Splice (Handler b b)
+wpPostByPermalinkSplice conf =
+  case requester conf of
+    Just r ->
+      do promise <- newEmptyPromise
+         outputChildren <- withSplices runChildren postSplices (getPromise promise)
+         return $ yieldRuntime $
+           do mperma <- (parsePermalink . T.decodeUtf8 . rqURI) <$> lift getRequest
+              case mperma of
+                Nothing -> codeGen (yieldPureText "")
+                Just (year, month, slug) ->
+                  do res <- liftIO $ r (endpoint conf ++ "/posts?filter[year]=" ++ year
+                                                      ++ "&filter[monthnum]=" ++ month
+                                                      ++ "&filter[name]=" ++ slug)
+                     case (T.encodeUtf8 <$> res) >>= decodeStrict of
+                       Just (post:_) -> do putPromise promise post
+                                           codeGen outputChildren
+                       _ -> codeGen (yieldPureText "")
+
+parsePermalink = either (const Nothing) Just . A.parseOnly parser
+  where parser = do A.char '/'
+                    year <- A.count 4 A.digit
+                    A.char '/'
+                    month <- A.count 2 A.digit
+                    A.char '/'
+                    slug <- A.many1 (A.letter <|> A.char '-')
+                    return (T.pack year, T.pack month, T.pack slug)
 
 postSplices :: Monad m => Splices (RuntimeSplice m Post -> Splice m)
 postSplices = mapS (pureSplice . textSplice)$ do "wpId" ## T.pack . show . postId
