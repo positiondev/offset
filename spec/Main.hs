@@ -63,7 +63,7 @@ app tmpls = makeSnaplet "app" "An snaplet example application." Nothing $ do
                                                                   , cachePeriod = NoCache
                                                                   }
                                                               h
-                                                              r
+                                                              redis
                return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)

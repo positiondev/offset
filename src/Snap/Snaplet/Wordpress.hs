@@ -66,14 +66,13 @@ initWordpress = initWordpress' def
 
 initWordpress' :: WordpressConfig
                -> Snaplet (Heist b)
-               -> Snaplet RedisDB
+               -> Simple Lens b (Snaplet RedisDB)
                -> SnapletInit b (Wordpress b)
 initWordpress' wpconf heist redis =
   makeSnaplet "wordpress" "" Nothing $
     do conf <- getSnapletUserConfig
        addConfig heist mempty { hcCompiledSplices = wordpressSplices wpconf }
-       let redisdb = view snapletValue redis
-       return $ Wordpress $ liftIO . R.runRedis (view R.redisConnection redisdb)
+       return $ Wordpress $ withTop' id . R.runRedisDB redis
 
 wordpressSplices :: WordpressConfig -> Splices (Splice (Handler b b))
 wordpressSplices conf = do "wpPosts" ## wpPostsSplice conf
