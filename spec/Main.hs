@@ -6,7 +6,7 @@ module Main where
 import           Prelude                     hiding ((++))
 
 import           Blaze.ByteString.Builder
-import           Control.Lens
+import           Control.Lens                hiding ((.=))
 import           Control.Monad               (join)
 import           Control.Monad.Trans         (liftIO)
 import           Control.Monad.Trans.Either
@@ -18,6 +18,8 @@ import           Data.Monoid
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import qualified Data.Text.Encoding          as T
+import qualified Data.Text.Lazy              as TL
+import qualified Data.Text.Lazy.Encoding     as TL
 import qualified Database.Redis              as R
 import           Heist
 import           Heist.Compiled
@@ -45,8 +47,10 @@ makeLenses ''App
 instance HasHeist App where
     heistLens = subSnaplet heist
 
-article1 = "{\"ID\": 1, \"title\": \"Foo bar\"}"
-article2 = "{\"ID\": 2, \"title\": \"The post\"}"
+mkO = TL.toStrict . TL.decodeUtf8 . encode . object
+
+article1 = mkO ["ID" .= (1 :: Int), "title" .= ("Foo bar" :: Text), "excerpt" .= ("summary" :: Text)]
+article2 = mkO ["ID" .= (2 :: Int), "title" .= ("The post" :: Text), "excerpt" .= ("summary" :: Text)]
 
 fakeRequester "/posts" = return $ Just $ "[" ++  article1 ++ "]"
 fakeRequester "/posts?filter[year]=2009&filter[monthnum]=10&filter[name]=the-post" =
@@ -96,14 +100,23 @@ shouldRenderAtUrl url tags match =
 clearRedisCache :: Handler App App (Either R.Reply Integer)
 clearRedisCache = runRedisDB redis (R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:*"])
 
+shouldTransformTo :: Text -> Text -> Spec
+shouldTransformTo from to =
+  it (T.unpack ("should convert " ++ from ++ " to " ++ to)) $ transformName from `shouldBe` to
+
 main :: IO ()
 main = hspec $ do
   describe "<wpPosts>" $ do
     "<wpPosts><wpTitle/></wpPosts>" `shouldRenderTo` "Foo bar"
+    "<wpPosts><wpID/></wpPosts>" `shouldRenderTo` "1"
+    "<wpPosts><wpExcerpt/></wpPosts>" `shouldRenderTo` "summary"
   describe "<wpPostByPermalink>" $ do
     shouldRenderAtUrl "/2009/10/the-post/"
                       "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
                       "The post"
+    shouldRenderAtUrl "/2009/10/the-post/"
+                      "<wpPostByPermalink><wpTitle/>: <wpExcerpt/></wpPostByPermalink>"
+                      "The post: summary"
   describe "caching" $ snap (route []) (app []) $ afterEval (void clearRedisCache) $ do
     it "should find nothing for a non-existent post" $ do
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
@@ -113,3 +126,7 @@ main = hspec $ do
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
       let Just postcontent = decodeStrict (T.encodeUtf8 article1)
       p `shouldEqual` (Just postcontent)
+  describe "transformName" $ do
+    "ID" `shouldTransformTo` "wpID"
+    "title" `shouldTransformTo` "wpTitle"
+    "post_tag" `shouldTransformTo` "wpPostTag"

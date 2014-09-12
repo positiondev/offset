@@ -9,9 +9,9 @@ module Snap.Snaplet.Wordpress (
  , CachePeriod(..)
  , initWordpress
  , initWordpress'
- , Post(..)
  , PostCacheKey(..)
  , cacheLookup
+ , transformName
  ) where
 
 import           Prelude                  hiding ((++))
@@ -22,7 +22,9 @@ import           Control.Lens
 import           Data.Aeson
 import qualified Data.Attoparsec.Text     as A
 import           Data.ByteString          (ByteString)
+import           Data.Char                (toUpper)
 import           Data.Default
+import qualified Data.HashMap.Strict      as M
 import           Data.Monoid
 import           Data.Set                 (Set)
 import           Data.Text                (Text)
@@ -52,15 +54,6 @@ instance Default WordpressConfig where
   def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600)
 
 data Wordpress b = Wordpress { runRedis :: forall a. Redis a -> Handler b (Wordpress b) a}
-
-data Post = Post {postId :: Int, postTitle :: Text} deriving (Eq, Show)
-
-
-instance FromJSON Post where
-   parseJSON (Object v) = Post <$> v .: "ID"
-                               <*> v .: "title"
-   parseJSON _          = mzero
-
 
 initWordpress = initWordpress' def
 
@@ -116,10 +109,19 @@ parsePermalink = either (const Nothing) Just . A.parseOnly parser
                     slug <- A.many1 (A.letter <|> A.char '-')
                     return (T.pack year, T.pack month, T.pack slug)
 
-postSplices :: Monad m => Splices (RuntimeSplice m Post -> Splice m)
-postSplices = mapS (pureSplice . textSplice)$ do "wpId" ## T.pack . show . postId
-                                                 "wpTitle" ## postTitle
+postSplices :: Monad m => Splices (RuntimeSplice m Object -> Splice m)
+postSplices = mapS (pureSplice . textSplice) $ mconcat (map buildSplice ["ID", "title", "type", "content", "excerpt", "date"])
+  where buildSplice n = transformName n ## \o -> case M.lookup n o of
+                                                   Just (String t) -> t
+                                                   Just (Number i) -> T.pack $ show i
+                                                   _ -> ""
 
+
+transformName :: Text -> Text
+transformName = T.append "wp" . snd . T.foldl f (True, "")
+  where f (True, rest) next = (False, T.snoc rest (toUpper next))
+        f (False, rest) '_' = (True, rest)
+        f (False, rest) next = (False, T.snoc rest next)
 
 
 type Year = Text
@@ -136,7 +138,7 @@ instance FormatKey PostCacheKey where
 
 data PostsCacheKey = PostsKey (Set Filter)
 
-cacheLookup :: PostCacheKey -> Handler b (Wordpress b) (Maybe Post)
+cacheLookup :: PostCacheKey -> Handler b (Wordpress b) (Maybe Object)
 cacheLookup key = do (Wordpress run) <- view snapletValue <$> getSnapletState
                      res <- run $ R.get (formatKey key)
                      case res of
