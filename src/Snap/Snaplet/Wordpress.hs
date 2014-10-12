@@ -9,8 +9,9 @@ module Snap.Snaplet.Wordpress (
  , CachePeriod(..)
  , initWordpress
  , initWordpress'
- , PostCacheKey(..)
+ , CacheKey(..)
  , cacheLookup
+ , cacheSet
  , transformName
  ) where
 
@@ -22,9 +23,11 @@ import           Control.Lens
 import           Data.Aeson
 import qualified Data.Attoparsec.Text     as A
 import           Data.ByteString          (ByteString)
+import           Data.ByteString.Lazy     (toStrict)
 import           Data.Char                (toUpper)
 import           Data.Default
 import qualified Data.HashMap.Strict      as M
+import           Data.Map.Syntax
 import           Data.Monoid
 import           Data.Set                 (Set)
 import           Data.Text                (Text)
@@ -60,20 +63,23 @@ initWordpress = initWordpress' def
 initWordpress' :: WordpressConfig
                -> Snaplet (Heist b)
                -> Simple Lens b (Snaplet RedisDB)
+               -> SnapletLens b (Wordpress b)
                -> SnapletInit b (Wordpress b)
-initWordpress' wpconf heist redis =
+initWordpress' wpconf heist redis wordpress =
   makeSnaplet "wordpress" "" Nothing $
     do conf <- getSnapletUserConfig
-       addConfig heist mempty { hcCompiledSplices = wordpressSplices wpconf }
+       addConfig heist $ set scCompiledSplices (wordpressSplices wpconf wordpress) mempty
        return $ Wordpress $ withTop' id . R.runRedisDB redis
 
-wordpressSplices :: WordpressConfig -> Splices (Splice (Handler b b))
-wordpressSplices conf = do "wpPosts" ## wpPostsSplice conf
-                           "wpPostByPermalink" ## wpPostByPermalinkSplice conf
+wordpressSplices :: WordpressConfig
+                 -> SnapletLens b (Wordpress b)
+                 -> Splices (Splice (Handler b b))
+wordpressSplices conf wordpress = do "wpPosts" ## wpPostsSplice conf wordpress
+                                     "wpPostByPermalink" ## wpPostByPermalinkSplice conf wordpress
 
 
-wpPostsSplice :: WordpressConfig -> Splice (Handler b b)
-wpPostsSplice conf =
+wpPostsSplice :: WordpressConfig -> SnapletLens b (Wordpress b) -> Splice (Handler b b)
+wpPostsSplice conf wordpress =
   case requester conf of
     Just r -> do res <- liftIO $ r (endpoint conf ++ "/posts")
                  case (T.encodeUtf8 <$> res) >>= decodeStrict of
@@ -81,8 +87,8 @@ wpPostsSplice conf =
                    Nothing -> return (yieldPureText "")
 
 
-wpPostByPermalinkSplice :: WordpressConfig -> Splice (Handler b b)
-wpPostByPermalinkSplice conf =
+wpPostByPermalinkSplice :: WordpressConfig -> SnapletLens b (Wordpress b) -> Splice (Handler b b)
+wpPostByPermalinkSplice conf wordpress =
   case requester conf of
     Just r ->
       do promise <- newEmptyPromise
@@ -92,10 +98,15 @@ wpPostByPermalinkSplice conf =
               case mperma of
                 Nothing -> codeGen (yieldPureText "")
                 Just (year, month, slug) ->
-                  do res <- liftIO $ r (endpoint conf ++ "/posts?filter[year]=" ++ year
-                                                      ++ "&filter[monthnum]=" ++ month
-                                                      ++ "&filter[name]=" ++ slug)
-                     case (T.encodeUtf8 <$> res) >>= decodeStrict of
+                  do mres <- lift $ with wordpress $ cacheLookup (PostByPermalinkKey year month slug)
+                     res <- case mres of
+                              Just r -> return (Just [r])
+                              Nothing ->
+                                ((>>= decodeStrict) . fmap T.encodeUtf8) <$>
+                                  (liftIO $ r (endpoint conf ++ "/posts?filter[year]=" ++ year
+                                              ++ "&filter[monthnum]=" ++ month
+                                              ++ "&filter[name]=" ++ slug))
+                     case res of
                        Just (post:_) -> do putPromise promise post
                                            codeGen outputChildren
                        _ -> codeGen (yieldPureText "")
@@ -110,7 +121,7 @@ parsePermalink = either (const Nothing) Just . A.parseOnly parser
                     return (T.pack year, T.pack month, T.pack slug)
 
 postSplices :: Monad m => Splices (RuntimeSplice m Object -> Splice m)
-postSplices = mapS (pureSplice . textSplice) $ mconcat (map buildSplice ["ID", "title", "type", "content", "excerpt", "date"])
+postSplices = mapV (pureSplice . textSplice) $ mconcat (map buildSplice ["ID", "title", "type", "content", "excerpt", "date"])
   where buildSplice n = transformName n ## \o -> case M.lookup n o of
                                                    Just (String t) -> t
                                                    Just (Number i) -> T.pack $ show i
@@ -128,19 +139,26 @@ type Year = Text
 type Month = Text
 type Slug = Text
 type Filter = Text
-data PostCacheKey = PostByPermalinkKey Year Month Slug
 class FormatKey a where
   formatKey :: a -> ByteString
 
-instance FormatKey PostCacheKey where
+data CacheKey = PostByPermalinkKey Year Month Slug
+              | PostsKey (Set Filter)
+
+instance FormatKey CacheKey where
   formatKey (PostByPermalinkKey y m s) =
     T.encodeUtf8 $ "wordpress:post_perma:" ++ y ++ "_" ++ m ++ "_" ++ s
 
-data PostsCacheKey = PostsKey (Set Filter)
-
-cacheLookup :: PostCacheKey -> Handler b (Wordpress b) (Maybe Object)
+cacheLookup :: CacheKey -> Handler b (Wordpress b) (Maybe Object)
 cacheLookup key = do (Wordpress run) <- view snapletValue <$> getSnapletState
                      res <- run $ R.get (formatKey key)
                      case res of
                        Left err -> return Nothing
                        Right val -> return $ val >>= decodeStrict
+
+cacheSet :: CacheKey -> Object -> Handler b (Wordpress b) Bool
+cacheSet key o = do (Wordpress run) <- view snapletValue <$> getSnapletState
+                    res <- run $ R.set (formatKey key) (toStrict $ encode o)
+                    case res of
+                      Left err -> return False
+                      Right val -> return True

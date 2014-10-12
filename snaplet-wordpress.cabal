@@ -23,7 +23,7 @@ library
                      , blaze-builder >= 0.3.3.3
                      , data-default
                      , hedis
-                     , heist >= 0.13.1.2
+                     , heist >= 0.14
                      , lens < 4.4
                      , snap >= 0.13 && < 0.14
                      , snap-core >= 0.9 && < 0.10

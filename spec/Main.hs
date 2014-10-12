@@ -47,20 +47,27 @@ makeLenses ''App
 instance HasHeist App where
     heistLens = subSnaplet heist
 
-mkO = TL.toStrict . TL.decodeUtf8 . encode . object
+enc = TL.toStrict . TL.decodeUtf8 . encode
 
-article1 = mkO ["ID" .= (1 :: Int), "title" .= ("Foo bar" :: Text), "excerpt" .= ("summary" :: Text)]
-article2 = mkO ["ID" .= (2 :: Int), "title" .= ("The post" :: Text), "excerpt" .= ("summary" :: Text)]
+article1 = object [ "ID" .= (1 :: Int)
+                  , "title" .= ("Foo bar" :: Text)
+                  , "excerpt" .= ("summary" :: Text)
+                  ]
 
-fakeRequester "/posts" = return $ Just $ "[" ++  article1 ++ "]"
+article2 = object [ "ID" .= (2 :: Int)
+                  , "title" .= ("The post" :: Text)
+                  , "excerpt" .= ("summary" :: Text)
+                  ]
+
+fakeRequester "/posts" = return $ Just $ "[" ++  enc article1 ++ "]"
 fakeRequester "/posts?filter[year]=2009&filter[monthnum]=10&filter[name]=the-post" =
-  return $ Just $ "[" ++ article2 ++ "]"
+  return $ Just $ "[" ++ enc article2 ++ "]"
 fakeRequster _ = return Nothing
 
 app :: [(Text, Text)] -> SnapletInit App App
 app tmpls = makeSnaplet "app" "An snaplet example application." Nothing $ do
                h <- nestSnaplet "" heist $ heistInit "templates"
-               addConfig h mempty { hcTemplateLocations = return templates}
+               addConfig h $ set scTemplateLocations (return templates) mempty
                r <- nestSnaplet "" redis redisDBInitConf
                w <- nestSnaplet "" wordpress $ initWordpress' def { endpoint = ""
                                                                   , requester = Just fakeRequester
@@ -68,6 +75,7 @@ app tmpls = makeSnaplet "app" "An snaplet example application." Nothing $ do
                                                                   }
                                                               h
                                                               redis
+                                                              wordpress
                return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
@@ -90,12 +98,17 @@ shouldRenderTo tags match =
             else setResult (Fail "Didn't contain.")
 
 shouldRenderAtUrl :: Text -> Text -> Text -> Spec
-shouldRenderAtUrl url tags match =
+shouldRenderAtUrl = shouldRenderAtUrlPre (return ())
+
+shouldRenderAtUrlPre :: Handler App App () -> Text -> Text -> Text -> Spec
+shouldRenderAtUrlPre act url tags match =
   snap (route [(T.encodeUtf8 url, h)]) (app [("test", tags)]) $
     it (T.unpack $ "rendered with url " ++ url ++  ", should contain " ++ match) $
-      get url >>= shouldHaveText match
+      do eval act
+         get url >>= shouldHaveText match
   where h = do st <- getHeistState
                render "test"
+
 
 clearRedisCache :: Handler App App (Either R.Reply Integer)
 clearRedisCache = runRedisDB redis (R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:*"])
@@ -117,14 +130,21 @@ main = hspec $ do
     shouldRenderAtUrl "/2009/10/the-post/"
                       "<wpPostByPermalink><wpTitle/>: <wpExcerpt/></wpPostByPermalink>"
                       "The post: summary"
+    describe "should grab post from cache if it's there" $
+      let (Object a2) = article2 in
+      shouldRenderAtUrlPre
+        (void $ with wordpress $ cacheSet (PostByPermalinkKey "2001" "10" "the-post") a2)
+        "/2001/10/the-post/"
+        "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
+        "The post"
   describe "caching" $ snap (route []) (app []) $ afterEval (void clearRedisCache) $ do
     it "should find nothing for a non-existent post" $ do
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` Nothing
     it "should find something if there is a post in cache" $ do
-      eval (runRedisDB redis (R.set "wordpress:post_perma:2000_1_the-article" (T.encodeUtf8 article1)))
+      eval (runRedisDB redis (R.set "wordpress:post_perma:2000_1_the-article" (T.encodeUtf8 $ enc article1)))
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
-      let Just postcontent = decodeStrict (T.encodeUtf8 article1)
+      let Just postcontent = decodeStrict (T.encodeUtf8 $ enc article1)
       p `shouldEqual` (Just postcontent)
   describe "transformName" $ do
     "ID" `shouldTransformTo` "wpID"
