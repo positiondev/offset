@@ -59,24 +59,28 @@ article2 = object [ "ID" .= (2 :: Int)
                   , "excerpt" .= ("summary" :: Text)
                   ]
 
-fakeRequester "/posts" = return $ "[" ++  enc article1 ++ "]"
-fakeRequester "/posts?filter[year]=2009&filter[monthnum]=10&filter[name]=the-post" =
+fakeRequester "/posts" [] = return $ "[" ++  enc article1 ++ "]"
+fakeRequester "/posts" [ ("filter[year]", "2009")
+                       , ("filter[monthnum]", "10")
+                       , ("filter[name]", "the-post")] =
   return $ "[" ++ enc article2 ++ "]"
-fakeRequster _ = return ""
+fakeRequester _ _ = return ""
 
-app :: [(Text, Text)] -> SnapletInit App App
-app tmpls = makeSnaplet "app" "An snaplet example application." Nothing $ do
-               h <- nestSnaplet "" heist $ heistInit "templates"
-               addConfig h $ set scTemplateLocations (return templates) mempty
-               r <- nestSnaplet "" redis redisDBInitConf
-               w <- nestSnaplet "" wordpress $ initWordpress' def { endpoint = ""
-                                                                  , requester = Just fakeRequester
-                                                                  , cachePeriod = NoCache
-                                                                  }
-                                                              h
-                                                              redis
-                                                              wordpress
-               return $ App h r w
+app :: [(Text, Text)] -> Maybe WordpressConfig -> SnapletInit App App
+app tmpls mconf = makeSnaplet "app" "An snaplet example application." Nothing $ do
+                     h <- nestSnaplet "" heist $ heistInit "templates"
+                     addConfig h $ set scTemplateLocations (return templates) mempty
+                     r <- nestSnaplet "" redis redisDBInitConf
+                     let conf = fromMaybe (def { endpoint = ""
+                                               , requester = Just fakeRequester
+                                               , cachePeriod = NoCache
+                                               })
+                                          mconf
+                     w <- nestSnaplet "" wordpress $ initWordpress' conf
+                                                                    h
+                                                                    redis
+                                                                    wordpress
+                     return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
         templates = return $ M.fromList (map mkTmpl tmpls)
@@ -88,7 +92,7 @@ app tmpls = makeSnaplet "app" "An snaplet example application." Nothing $ do
 
 shouldRenderTo :: Text -> Text -> Spec
 shouldRenderTo tags match =
-  snap (route []) (app [("test", tags)]) $
+  snap (route []) (app [("test", tags)] Nothing) $
     it (T.unpack $ tags ++ " should render to contain " ++ match) $
       do t <- eval (do st <- getHeistState
                        builder <- (fst.fromJust) $ renderTemplate st "test"
@@ -102,7 +106,7 @@ shouldRenderAtUrl = shouldRenderAtUrlPre (return ())
 
 shouldRenderAtUrlPre :: Handler App App () -> Text -> Text -> Text -> Spec
 shouldRenderAtUrlPre act url tags match =
-  snap (route [(T.encodeUtf8 url, h)]) (app [("test", tags)]) $
+  snap (route [(T.encodeUtf8 url, h)]) (app [("test", tags)] Nothing) $
     it (T.unpack $ "rendered with url " ++ url ++  ", should contain " ++ match) $
       do eval act
          get url >>= shouldHaveText match
@@ -137,7 +141,7 @@ main = hspec $ do
         "/2001/10/the-post/"
         "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
         "The post"
-  describe "caching" $ snap (route []) (app []) $ afterEval (void clearRedisCache) $ do
+  describe "caching" $ snap (route []) (app [] Nothing) $ afterEval (void clearRedisCache) $ do
     it "should find nothing for a non-existent post" $ do
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` Nothing
@@ -150,3 +154,10 @@ main = hspec $ do
     "ID" `shouldTransformTo` "wpID"
     "title" `shouldTransformTo` "wpTitle"
     "post_tag" `shouldTransformTo` "wpPostTag"
+
+  describe "live tests" $
+    snap (route [("/2014/10/a-war-for-power", render "single")])
+         (app [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")]
+              (Just $ def { endpoint = "https://www.jacobinmag.com/wp-json" })) $
+      do it "should have title on page" $
+           get "/2014/10/a-war-for-power" >>= shouldHaveText "A War for Power"

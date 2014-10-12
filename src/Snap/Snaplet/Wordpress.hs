@@ -34,11 +34,14 @@ import           Data.Set                 (Set)
 import           Data.Text                (Text)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
+import qualified Data.Text.Lazy           as TL
+import qualified Data.Text.Lazy.Encoding  as TL
 import           Database.Redis           (Redis)
 import qualified Database.Redis           as R
 import           Heist
 import           Heist.Compiled
 import           Heist.Compiled.LowLevel
+import qualified Network.Wreq             as W
 import           Snap
 import           Snap.Snaplet.Heist       (Heist, addConfig)
 import           Snap.Snaplet.RedisDB     (RedisDB)
@@ -50,7 +53,7 @@ import qualified Snap.Snaplet.RedisDB     as R
 data CachePeriod = NoCache | CacheSeconds Int
 
 data WordpressConfig = WordpressConfig { endpoint    :: Text
-                                       , requester   :: Maybe (Text -> IO Text)
+                                       , requester   :: Maybe (Text -> [(Text, Text)] -> IO Text)
                                        , cachePeriod :: CachePeriod
                                        }
 
@@ -58,7 +61,7 @@ instance Default WordpressConfig where
   def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600)
 
 data Wordpress b = Wordpress { runRedis :: forall a. Redis a -> Handler b (Wordpress b) a
-                             , runHTTP  :: Text -> IO Text
+                             , runHTTP  :: Text -> [(Text, Text)] -> IO Text
                              }
 
 initWordpress = initWordpress' def
@@ -90,7 +93,7 @@ wpPostsSplice conf wordpress =
      outputChildren <- manyWithSplices runChildren postSplices (getPromise promise)
      return $ yieldRuntime $
        do (Wordpress _ req) <- lift (use (wordpress . snapletValue))
-          res <- liftIO $ req (endpoint conf ++ "/posts")
+          res <- liftIO $ req (endpoint conf ++ "/posts") []
           case decodeStrict . T.encodeUtf8 $ res of
             Just posts -> do putPromise promise posts
                              codeGen outputChildren
@@ -114,9 +117,10 @@ wpPostByPermalinkSplice conf wordpress =
                           Nothing ->
                             do (Wordpress _ req) <- lift $ use (wordpress . snapletValue)
                                (decodeStrict . T.encodeUtf8) <$>
-                                 (liftIO $ req  (endpoint conf ++ "/posts?filter[year]=" ++ year
-                                                    ++ "&filter[monthnum]=" ++ month
-                                                    ++ "&filter[name]=" ++ slug))
+                                 (liftIO $ req  (endpoint conf ++ "/posts")
+                                                [("filter[year]",year)
+                                                ,("filter[monthnum]", month)
+                                                ,("filter[name]", slug)])
                  case res of
                    Just (post:_) -> do putPromise promise post
                                        codeGen outputChildren
@@ -174,5 +178,6 @@ cacheSet key o = do (Wordpress run _) <- view snapletValue <$> getSnapletState
                       Left err -> return False
                       Right val -> return True
 
-wreqRequester :: Text -> IO Text
-wreqRequester = undefined
+wreqRequester :: Text -> [(Text, Text)] -> IO Text
+wreqRequester u ps = do r <- W.getWith (set W.params ps W.defaults) (T.unpack u)
+                        return $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
