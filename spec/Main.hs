@@ -59,10 +59,10 @@ article2 = object [ "ID" .= (2 :: Int)
                   , "excerpt" .= ("summary" :: Text)
                   ]
 
-fakeRequester "/posts" = return $ Just $ "[" ++  enc article1 ++ "]"
+fakeRequester "/posts" = return $ "[" ++  enc article1 ++ "]"
 fakeRequester "/posts?filter[year]=2009&filter[monthnum]=10&filter[name]=the-post" =
-  return $ Just $ "[" ++ enc article2 ++ "]"
-fakeRequster _ = return Nothing
+  return $ "[" ++ enc article2 ++ "]"
+fakeRequster _ = return ""
 
 app :: [(Text, Text)] -> SnapletInit App App
 app tmpls = makeSnaplet "app" "An snaplet example application." Nothing $ do

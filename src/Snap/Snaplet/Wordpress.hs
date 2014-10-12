@@ -28,6 +28,7 @@ import           Data.Char                (toUpper)
 import           Data.Default
 import qualified Data.HashMap.Strict      as M
 import           Data.Map.Syntax
+import           Data.Maybe               (fromMaybe)
 import           Data.Monoid
 import           Data.Set                 (Set)
 import           Data.Text                (Text)
@@ -49,67 +50,77 @@ import qualified Snap.Snaplet.RedisDB     as R
 data CachePeriod = NoCache | CacheSeconds Int
 
 data WordpressConfig = WordpressConfig { endpoint    :: Text
-                                       , requester   :: Maybe (Text -> IO (Maybe Text))
+                                       , requester   :: Maybe (Text -> IO Text)
                                        , cachePeriod :: CachePeriod
                                        }
 
 instance Default WordpressConfig where
   def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600)
 
-data Wordpress b = Wordpress { runRedis :: forall a. Redis a -> Handler b (Wordpress b) a}
+data Wordpress b = Wordpress { runRedis :: forall a. Redis a -> Handler b (Wordpress b) a
+                             , runHTTP  :: Text -> IO Text
+                             }
 
 initWordpress = initWordpress' def
 
 initWordpress' :: WordpressConfig
                -> Snaplet (Heist b)
                -> Simple Lens b (Snaplet RedisDB)
-               -> SnapletLens b (Wordpress b)
+               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                -> SnapletInit b (Wordpress b)
 initWordpress' wpconf heist redis wordpress =
   makeSnaplet "wordpress" "" Nothing $
     do conf <- getSnapletUserConfig
        addConfig heist $ set scCompiledSplices (wordpressSplices wpconf wordpress) mempty
-       return $ Wordpress $ withTop' id . R.runRedisDB redis
+       let req = fromMaybe wreqRequester (requester wpconf)
+       return $ Wordpress (withTop' id . R.runRedisDB redis) req
 
 wordpressSplices :: WordpressConfig
-                 -> SnapletLens b (Wordpress b)
+                 -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                  -> Splices (Splice (Handler b b))
 wordpressSplices conf wordpress = do "wpPosts" ## wpPostsSplice conf wordpress
                                      "wpPostByPermalink" ## wpPostByPermalinkSplice conf wordpress
 
 
-wpPostsSplice :: WordpressConfig -> SnapletLens b (Wordpress b) -> Splice (Handler b b)
+wpPostsSplice :: WordpressConfig
+              -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+              -> Splice (Handler b b)
 wpPostsSplice conf wordpress =
-  case requester conf of
-    Just r -> do res <- liftIO $ r (endpoint conf ++ "/posts")
-                 case (T.encodeUtf8 <$> res) >>= decodeStrict of
-                   Just posts -> manyWithSplices runChildren postSplices (return posts)
-                   Nothing -> return (yieldPureText "")
+  do promise <- newEmptyPromise
+     outputChildren <- manyWithSplices runChildren postSplices (getPromise promise)
+     return $ yieldRuntime $
+       do (Wordpress _ req) <- lift (use (wordpress . snapletValue))
+          res <- liftIO $ req (endpoint conf ++ "/posts")
+          case decodeStrict . T.encodeUtf8 $ res of
+            Just posts -> do putPromise promise posts
+                             codeGen outputChildren
+            Nothing -> codeGen (yieldPureText "")
 
 
-wpPostByPermalinkSplice :: WordpressConfig -> SnapletLens b (Wordpress b) -> Splice (Handler b b)
+wpPostByPermalinkSplice :: WordpressConfig
+                        -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+                        -> Splice (Handler b b)
 wpPostByPermalinkSplice conf wordpress =
-  case requester conf of
-    Just r ->
-      do promise <- newEmptyPromise
-         outputChildren <- withSplices runChildren postSplices (getPromise promise)
-         return $ yieldRuntime $
-           do mperma <- (parsePermalink . T.decodeUtf8 . rqURI) <$> lift getRequest
-              case mperma of
-                Nothing -> codeGen (yieldPureText "")
-                Just (year, month, slug) ->
-                  do mres <- lift $ with wordpress $ cacheLookup (PostByPermalinkKey year month slug)
-                     res <- case mres of
-                              Just r -> return (Just [r])
-                              Nothing ->
-                                ((>>= decodeStrict) . fmap T.encodeUtf8) <$>
-                                  (liftIO $ r (endpoint conf ++ "/posts?filter[year]=" ++ year
-                                              ++ "&filter[monthnum]=" ++ month
-                                              ++ "&filter[name]=" ++ slug))
-                     case res of
-                       Just (post:_) -> do putPromise promise post
-                                           codeGen outputChildren
-                       _ -> codeGen (yieldPureText "")
+  do promise <- newEmptyPromise
+     outputChildren <- withSplices runChildren postSplices (getPromise promise)
+     return $ yieldRuntime $
+       do mperma <- (parsePermalink . T.decodeUtf8 . rqURI) <$> lift getRequest
+          case mperma of
+            Nothing -> codeGen (yieldPureText "")
+            Just (year, month, slug) ->
+              do mres <- lift $ with wordpress $ cacheLookup (PostByPermalinkKey year month slug)
+                 res <- case mres of
+                          Just r' -> return (Just [r'])
+                          Nothing ->
+                            do (Wordpress _ req) <- lift $ use (wordpress . snapletValue)
+                               (decodeStrict . T.encodeUtf8) <$>
+                                 (liftIO $ req  (endpoint conf ++ "/posts?filter[year]=" ++ year
+                                                    ++ "&filter[monthnum]=" ++ month
+                                                    ++ "&filter[name]=" ++ slug))
+                 case res of
+                   Just (post:_) -> do putPromise promise post
+                                       codeGen outputChildren
+                   _ -> codeGen (yieldPureText "")
 
 parsePermalink = either (const Nothing) Just . A.parseOnly parser
   where parser = do A.char '/'
@@ -150,15 +161,18 @@ instance FormatKey CacheKey where
     T.encodeUtf8 $ "wordpress:post_perma:" ++ y ++ "_" ++ m ++ "_" ++ s
 
 cacheLookup :: CacheKey -> Handler b (Wordpress b) (Maybe Object)
-cacheLookup key = do (Wordpress run) <- view snapletValue <$> getSnapletState
+cacheLookup key = do (Wordpress run _) <- view snapletValue <$> getSnapletState
                      res <- run $ R.get (formatKey key)
                      case res of
                        Left err -> return Nothing
                        Right val -> return $ val >>= decodeStrict
 
 cacheSet :: CacheKey -> Object -> Handler b (Wordpress b) Bool
-cacheSet key o = do (Wordpress run) <- view snapletValue <$> getSnapletState
+cacheSet key o = do (Wordpress run _) <- view snapletValue <$> getSnapletState
                     res <- run $ R.set (formatKey key) (toStrict $ encode o)
                     case res of
                       Left err -> return False
                       Right val -> return True
+
+wreqRequester :: Text -> IO Text
+wreqRequester = undefined
