@@ -105,13 +105,18 @@ wpPostsSplice conf wordpress =
      outputChildren <- manyWithSplices runChildren postSplices (getPromise promise)
      n <- getParamNode
      let limit = (fromMaybe 20 $ readSafe =<< X.getAttribute "limit" n) :: Int
-         offset = (fromMaybe 0 $ readSafe =<< X.getAttribute "offset" n) :: Int
+         num = (fromMaybe 20 $ readSafe =<< X.getAttribute "num" n) :: Int
+         offset' = (fromMaybe 0 $ readSafe =<< X.getAttribute "offset" n) :: Int
+         page' = (fromMaybe 1 $ readSafe =<< X.getAttribute "page" n) :: Int
+         page = if page' < 1 then 1 else page'
+         offset = num * (page - 1) + offset'
      return $ yieldRuntime $
        do (Wordpress _ req) <- lift (use (wordpress . snapletValue))
-          res <- liftIO $ req (endpoint conf ++ "/posts") [("filter[posts_per_page]", tshow limit)
-                                                          ,("filter[offset]", tshow offset)]
+          res <- liftIO $ req (endpoint conf ++ "/posts") [("filter[posts_per_page]", tshow num)
+                                                          ,("filter[offset]", tshow offset)
+                                                          ]
           case decodeStrict . T.encodeUtf8 $ res of
-            Just posts -> do putPromise promise posts
+            Just posts -> do putPromise promise (take limit posts)
                              codeGen outputChildren
             Nothing -> codeGen (yieldPureText "")
 

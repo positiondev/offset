@@ -159,19 +159,39 @@ main = hspec $ do
     snap (route [("/2014/10/a-war-for-power", render "single")
                 ,("/many", render "many")
                 ,("/many2", render "many2")
-                ,("/many3", render "many3")])
+                ,("/many3", render "many3")
+                ,("/page1", render "page1")
+                ,("/page2", render "page2")
+                ,("/num1", render "num1")
+                ,("/num2", render "num2")
+                ,("/num3", render "num3")
+                ])
          (app [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
               ,("many", "<wpPosts limit=2><wpTitle/></wpPosts>")
               ,("many2", "<wpPosts offset=1 limit=1><wpTitle/></wpPosts>")
-              ,("many3", "<wpPosts offset=0 limit=1><wpTitle/></wpPosts>")]
+              ,("many3", "<wpPosts offset=0 limit=1><wpTitle/></wpPosts>")
+              ,("page1", "<wpPosts limit=10 page=1><wpTitle/></wpPosts>")
+              ,("page2", "<wpPosts limit=10 page=2><wpTitle/></wpPosts>")
+              ,("num1", "<wpPosts num=2><wpTitle/></wpPosts>")
+              ,("num2", "<wpPosts num=2 page=2 limit=1><wpTitle/></wpPosts>")
+              ,("num3", "<wpPosts num=1 page=3><wpTitle/></wpPosts>")
+              ]
               (Just $ def { endpoint = "https://sandbox.jacobinmag.com/wp-json" })) $
       do it "should have title on page" $
            get "/2014/10/a-war-for-power" >>= shouldHaveText "A War for Power"
          describe "NOTE: This is a fragile test (not super useful longterm)." $
            it "should not have most recent post's title" $
              get "/many" >>= shouldNotHaveText "All in the Family"
-         describe "NOTE: This is a fragile test." $
-           it "should be able to offset" $
-             do res <- get "/many2"
-                res2 <- get "/many3"
-                res `shouldNotEqual` res2
+         it "should be able to offset" $
+           do res <- get "/many2"
+              res2 <- get "/many3"
+              res `shouldNotEqual` res2
+         it "should be able to get page 2" $
+           do p1 <- get "/page1"
+              get "/page2" >>= shouldNotEqual p1
+         it "should be able to use page, num, and limit" $
+           do p1 <- get "/num1"
+              p2 <- get "/num2"
+              p3 <- get "/num3"
+              p1 `shouldNotEqual` p2
+              p2 `shouldEqual` p3
