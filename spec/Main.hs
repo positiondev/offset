@@ -91,13 +91,19 @@ app tmpls mconf = makeSnaplet "app" "An snaplet example application." Nothing $ 
 ----------------------------------------------------------
 
 shouldRenderTo :: Text -> Text -> Spec
-shouldRenderTo tags match =
+shouldRenderTo = shouldRenderToPred T.isInfixOf
+
+shouldRenderToExact :: Text -> Text -> Spec
+shouldRenderToExact = shouldRenderToPred (==)
+
+shouldRenderToPred :: (Text -> Text -> Bool) -> Text -> Text -> Spec
+shouldRenderToPred pred tags match =
   snap (route []) (app [("test", tags)] Nothing) $
     it (T.unpack $ tags ++ " should render to contain " ++ match) $
       do t <- eval (do st <- getHeistState
                        builder <- (fst.fromJust) $ renderTemplate st "test"
                        return $ T.decodeUtf8 $ toByteString builder)
-         if match `T.isInfixOf` t
+         if pred match t
            then setResult Success
             else setResult (Fail "Didn't contain.")
 
@@ -127,6 +133,15 @@ main = hspec $ do
     "<wpPosts><wpTitle/></wpPosts>" `shouldRenderTo` "Foo bar"
     "<wpPosts><wpID/></wpPosts>" `shouldRenderTo` "1"
     "<wpPosts><wpExcerpt/></wpPosts>" `shouldRenderTo` "summary"
+  describe "<wpNoPostDuplicates/>" $ do
+    "<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>"
+      `shouldRenderToExact` "Foo bar"
+    "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts>"
+      `shouldRenderToExact` "Foo barFoo bar"
+    "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>"
+      `shouldRenderToExact` "Foo barFoo bar"
+    "<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>"
+      `shouldRenderToExact` "Foo barFoo bar"
   describe "<wpPostByPermalink>" $ do
     shouldRenderAtUrl "/2009/10/the-post/"
                       "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"

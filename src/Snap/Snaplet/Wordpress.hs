@@ -28,9 +28,12 @@ import           Data.Char                (toUpper)
 import qualified Data.Configurator        as C
 import           Data.Default
 import qualified Data.HashMap.Strict      as M
+import           Data.IntSet              (IntSet)
+import qualified Data.IntSet              as IntSet
 import           Data.Map.Syntax
 import           Data.Maybe               (fromMaybe, listToMaybe)
 import           Data.Monoid
+import           Data.Ratio
 import           Data.Set                 (Set)
 import           Data.Text                (Text)
 import qualified Data.Text                as T
@@ -48,6 +51,8 @@ import           Snap.Snaplet.Heist       (Heist, addConfig)
 import           Snap.Snaplet.RedisDB     (RedisDB)
 import qualified Snap.Snaplet.RedisDB     as R
 import qualified Text.XmlHtml             as X
+
+import           Debug.Trace
 
 (++) :: Monoid a => a -> a -> a
 (++) = mappend
@@ -67,8 +72,9 @@ data WordpressConfig = WordpressConfig { endpoint    :: Text
 instance Default WordpressConfig where
   def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600)
 
-data Wordpress b = Wordpress { runRedis :: forall a. Redis a -> Handler b (Wordpress b) a
-                             , runHTTP  :: Text -> [(Text, Text)] -> IO Text
+data Wordpress b = Wordpress { runRedis       :: forall a. Redis a -> Handler b (Wordpress b) a
+                             , runHTTP        :: Text -> [(Text, Text)] -> IO Text
+                             , requestPostSet :: Maybe IntSet
                              }
 
 
@@ -88,14 +94,26 @@ initWordpress' wpconf heist redis wordpress =
                               p <- liftIO $ C.require conf "password"
                               return $ wreqRequester u p
                 Just r -> return r
-       return $ Wordpress (withTop' id . R.runRedisDB redis) req
+       return $ Wordpress (withTop' id . R.runRedisDB redis) req Nothing
 
 wordpressSplices :: WordpressConfig
                  -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                  -> Splices (Splice (Handler b b))
-wordpressSplices conf wordpress = do "wpPosts" ## wpPostsSplice conf wordpress
-                                     "wpPostByPermalink" ## wpPostByPermalinkSplice conf wordpress
+wordpressSplices conf wordpress =
+  do "wpPosts" ## wpPostsSplice conf wordpress
+     "wpPostByPermalink" ## wpPostByPermalinkSplice conf wordpress
+     "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wordpress
 
+
+wpNoPostDuplicatesSplice :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+                         -> Splice (Handler b b)
+wpNoPostDuplicatesSplice wordpress =
+  return $ yieldRuntime $
+    do (Wordpress red ht ps) <- lift $ use (wordpress . snapletValue)
+       case ps of
+         Nothing -> lift $ assign (wordpress . snapletValue) (Wordpress red ht (Just IntSet.empty))
+         Just _ -> return ()
+       codeGen $ yieldPureText ""
 
 wpPostsSplice :: WordpressConfig
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
@@ -111,14 +129,39 @@ wpPostsSplice conf wordpress =
          page = if page' < 1 then 1 else page'
          offset = num * (page - 1) + offset'
      return $ yieldRuntime $
-       do (Wordpress _ req) <- lift (use (wordpress . snapletValue))
+       do (Wordpress _ req postSet) <- lift (use (wordpress . snapletValue))
           res <- liftIO $ req (endpoint conf ++ "/posts") [("filter[posts_per_page]", tshow num)
                                                           ,("filter[offset]", tshow offset)
                                                           ]
           case decodeStrict . T.encodeUtf8 $ res of
-            Just posts -> do putPromise promise (take limit posts)
+            Just posts -> do let postsW = extractPostIds posts
+                             let postsND = noDuplicates postSet . take limit $ postsW
+                             lift $ addPostIds wordpress (map fst postsND)
+                             putPromise promise (map snd postsND)
                              codeGen outputChildren
             Nothing -> codeGen (yieldPureText "")
+  where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
+        noDuplicates Nothing = id
+        noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
+
+extractPostIds :: [Object] -> [(Int, Object)]
+extractPostIds = map (\p -> let i = M.lookup "ID" p
+                                is = case i of
+                                      Just (String n) -> readSafe n
+                                      Just (Number n) ->
+                                        let rat = toRational n in
+                                        case denominator rat of
+                                          1 -> Just $ fromInteger (numerator rat)
+                                          _ -> Nothing
+                                      _ -> Nothing
+                                id' = fromMaybe 0 is in
+                              (id', p))
+
+addPostIds :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b)) -> [Int] -> Handler b b ()
+addPostIds wordpress ids =
+  do (Wordpress red req postSet) <- use (wordpress . snapletValue)
+     assign (wordpress . snapletValue)
+            (Wordpress red req ((`IntSet.union` (IntSet.fromList ids)) <$> postSet))
 
 
 wpPostByPermalinkSplice :: WordpressConfig
@@ -136,7 +179,7 @@ wpPostByPermalinkSplice conf wordpress =
                  res <- case mres of
                           Just r' -> return (Just [r'])
                           Nothing ->
-                            do (Wordpress _ req) <- lift $ use (wordpress . snapletValue)
+                            do (Wordpress _ req posts) <- lift $ use (wordpress . snapletValue)
                                (decodeStrict . T.encodeUtf8) <$>
                                  (liftIO $ req  (endpoint conf ++ "/posts")
                                                 [("filter[year]",year)
@@ -186,14 +229,14 @@ instance FormatKey CacheKey where
     T.encodeUtf8 $ "wordpress:post_perma:" ++ y ++ "_" ++ m ++ "_" ++ s
 
 cacheLookup :: CacheKey -> Handler b (Wordpress b) (Maybe Object)
-cacheLookup key = do (Wordpress run _) <- view snapletValue <$> getSnapletState
+cacheLookup key = do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
                      res <- run $ R.get (formatKey key)
                      case res of
                        Left err -> return Nothing
                        Right val -> return $ val >>= decodeStrict
 
 cacheSet :: CacheKey -> Object -> Handler b (Wordpress b) Bool
-cacheSet key o = do (Wordpress run _) <- view snapletValue <$> getSnapletState
+cacheSet key o = do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
                     res <- run $ R.set (formatKey key) (toStrict $ encode o)
                     case res of
                       Left err -> return False

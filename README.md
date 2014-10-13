@@ -49,3 +49,12 @@ posts are returned, but if you have set `page`, the first `page` full
 pages of posts (each of size `num`) will be skipped, then an
 additional `offset` posts will be skipped, and finally, `limit` posts
 will be returned.
+
+
+`<wpPostByPermalink>` - This tag expects to have the url be `/YYYY/MM/SLUG`, and finds
+the post accordingly.
+
+`<wpNoPostDuplicates/>` - This is a side-effect only tag, that causes, from this point
+in the page forward, no duplicate posts to be returned from `<wpPosts/>`. This can make
+certain layouts easier to express, rather than figuring out exactly how to combine the
+various numeric arguments to avoid duplication.
