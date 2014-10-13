@@ -169,6 +169,28 @@ main = hspec $ do
     "ID" `shouldTransformTo` "wpID"
     "title" `shouldTransformTo` "wpTitle"
     "post_tag" `shouldTransformTo` "wpPostTag"
+  describe "tag-specs" $ do
+    it "should parse bare tag plus" $
+      read "foo-bar" `shouldBe` (TagPlus "foo-bar")
+    it "should parse tag plus" $
+      read "+foo-bar" `shouldBe` (TagPlus "foo-bar")
+    it "should parse tag minus" $
+      read "-foo-bar" `shouldBe` (TagMinus "foo-bar")
+    it "should parse a list" $
+      read "foo-bar,baz" `shouldBe` (TagSpecList [TagPlus "foo-bar", TagPlus "baz"])
+    it "should parse a list with mixed pluses and minuses" $
+      read "+foo-bar,-baz,-qux" `shouldBe`
+        (TagSpecList [TagPlus "foo-bar", TagMinus "baz", TagMinus "qux"])
+    it "should round trip tag plus" $
+      show (read "+foo-bar" :: TagSpec) `shouldBe` "+foo-bar"
+    it "should round trip tag minus" $
+      show (read "-foo-bar" :: TagSpec) `shouldBe` "-foo-bar"
+    it "should add plus to bare tag plus when round tripping" $
+      show (read "foo-bar" :: TagSpec) `shouldBe` "+foo-bar"
+    it "should round trip list" $
+      show (read "+foo-bar,-baz,-qux" :: TagSpecList) `shouldBe` "+foo-bar,-baz,-qux"
+    it "should add plus to bare tag pluses in list roundtrip" $
+      show (read "foo-bar,-baz,-qux" :: TagSpecList) `shouldBe` "+foo-bar,-baz,-qux"
 
   describe "live tests (which require config file w/ user and pass)" $
     snap (route [("/2014/10/a-war-for-power", render "single")
@@ -180,9 +202,17 @@ main = hspec $ do
                 ,("/num1", render "num1")
                 ,("/num2", render "num2")
                 ,("/num3", render "num3")
+                ,("/tag1", render "tag1")
+                ,("/tag2", render "tag2")
+                ,("/tag3", render "tag3")
+                ,("/tag4", render "tag4")
+                ,("/tag5", render "tag5")
+                ,("/tag6", render "tag6")
+                ,("/tag7", render "tag7")
                 ])
          (app [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
               ,("many", "<wpPosts limit=2><wpTitle/></wpPosts>")
+              ,("many1", "<wpPosts><wpTitle/></wpPosts>")
               ,("many2", "<wpPosts offset=1 limit=1><wpTitle/></wpPosts>")
               ,("many3", "<wpPosts offset=0 limit=1><wpTitle/></wpPosts>")
               ,("page1", "<wpPosts limit=10 page=1><wpTitle/></wpPosts>")
@@ -190,13 +220,20 @@ main = hspec $ do
               ,("num1", "<wpPosts num=2><wpTitle/></wpPosts>")
               ,("num2", "<wpPosts num=2 page=2 limit=1><wpTitle/></wpPosts>")
               ,("num3", "<wpPosts num=1 page=3><wpTitle/></wpPosts>")
+              ,("tag1", "<wpPosts tags=\"home-featured\" limit=10><wpTitle/></wpPosts>")
+              ,("tag2", "<wpPosts limit=10><wpTitle/></wpPosts>")
+              ,("tag3", "<wpPosts tags=\"+home-featured\" limit=10><wpTitle/></wpPosts>")
+              ,("tag4", "<wpPosts tags=\"-home-featured\" limit=1><wpTitle/></wpPosts>")
+              ,("tag5", "<wpPosts tags=\"+home-featured\" limit=1><wpTitle/></wpPosts>")
+              ,("tag6", "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>")
+              ,("tag7", "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>")
               ]
               (Just $ def { endpoint = "https://sandbox.jacobinmag.com/wp-json" })) $
       do it "should have title on page" $
            get "/2014/10/a-war-for-power" >>= shouldHaveText "A War for Power"
-         describe "NOTE: This is a fragile test (not super useful longterm)." $
-           it "should not have most recent post's title" $
-             get "/many" >>= shouldNotHaveText "All in the Family"
+         it "should not have most recent post's title" $
+           do p1 <- get "/many"
+              get "/many1" >>= shouldNotEqual p1
          it "should be able to offset" $
            do res <- get "/many2"
               res2 <- get "/many3"
@@ -210,3 +247,15 @@ main = hspec $ do
               p3 <- get "/num3"
               p1 `shouldNotEqual` p2
               p2 `shouldEqual` p3
+         it "should be able to restrict based on tags" $
+           do p1 <- get "/tag1"
+              get "/tag2" >>= shouldNotEqual p1
+         it "should be able to say +tag instead of tag" $
+           do p1 <- get "/tag1"
+              get "/tag3" >>= shouldEqual p1
+         it "should be able to say -tag to NOT match a tag" $
+           do p1 <- get "/tag4"
+              get "/tag5" >>= shouldNotEqual p1
+         it "should be able to have multiple tag queries" $
+           do p1 <- get "/tag6"
+              get "/tag7" >>= shouldNotEqual p1

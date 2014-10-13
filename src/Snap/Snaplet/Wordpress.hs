@@ -12,7 +12,10 @@ module Snap.Snaplet.Wordpress (
  , CacheKey(..)
  , cacheLookup
  , cacheSet
+
  , transformName
+ , TagSpec(..)
+ , TagSpecList(..)
  ) where
 
 import           Prelude                  hiding ((++))
@@ -30,8 +33,10 @@ import           Data.Default
 import qualified Data.HashMap.Strict      as M
 import           Data.IntSet              (IntSet)
 import qualified Data.IntSet              as IntSet
+import           Data.List                (intercalate)
 import           Data.Map.Syntax
-import           Data.Maybe               (fromMaybe, listToMaybe)
+import           Data.Maybe               (catMaybes, fromMaybe, isJust,
+                                           listToMaybe)
 import           Data.Monoid
 import           Data.Ratio
 import           Data.Set                 (Set)
@@ -115,6 +120,33 @@ wpNoPostDuplicatesSplice wordpress =
          Just _ -> return ()
        codeGen $ yieldPureText ""
 
+data TagSpec = TagPlus Text | TagMinus Text deriving (Eq, Ord)
+
+data TagSpecId = TagPlusId Int | TagMinusId Int deriving (Eq, Show, Ord)
+
+instance Show TagSpec where
+  show (TagPlus t) = "+" ++ (T.unpack t)
+  show (TagMinus t) = "-" ++ (T.unpack t)
+
+tagChars = ['a'..'z'] ++ "-"
+
+instance Read TagSpec where
+  readsPrec _ ('+':cs) | all (`elem` tagChars) cs = [(TagPlus (T.pack cs), "")]
+  readsPrec _ ('-':cs) | all (`elem` tagChars) cs = [(TagMinus (T.pack cs), "")]
+  readsPrec _ cs | all (`elem` tagChars) cs = [(TagPlus (T.pack cs), "")]
+  readsPrec _ _ = []
+
+newtype TagSpecList = TagSpecList { unTagSpecList :: [TagSpec]} deriving (Eq, Ord)
+
+instance Show TagSpecList where
+  show (TagSpecList ts) = intercalate "," (map show ts)
+
+instance Read TagSpecList where
+  readsPrec _ ts = let vs = map (readSafe) $ T.splitOn "," $ T.pack ts in
+                     if all isJust vs
+                        then [(TagSpecList $ catMaybes vs, "")]
+                        else []
+
 wpPostsSplice :: WordpressConfig
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
               -> Splice (Handler b b)
@@ -128,6 +160,8 @@ wpPostsSplice conf wordpress =
          page' = (fromMaybe 1 $ readSafe =<< X.getAttribute "page" n) :: Int
          page = if page' < 1 then 1 else page'
          offset = num * (page - 1) + offset'
+         tags' = unTagSpecList (fromMaybe (TagSpecList []) $ readSafe =<< X.getAttribute "tags" n)
+     -- tags <- lift $ lookupTagIds conf tags'
      return $ yieldRuntime $
        do (Wordpress _ req postSet) <- lift (use (wordpress . snapletValue))
           res <- liftIO $ req (endpoint conf ++ "/posts") [("filter[posts_per_page]", tshow num)
@@ -143,6 +177,17 @@ wpPostsSplice conf wordpress =
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
+
+newtype TagRes = TagRes (Int, Text)
+
+instance FromJSON TagRes where
+  parseJSON (Object o) = TagRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
+  parseJSON _ = mzero
+
+lookupTagIds :: WordpressConfig -> [TagSpec] -> IO [TagSpecId]
+lookupTagIds conf specs = do res <- W.get $ (T.unpack $ endpoint conf) ++ "/taxonomies/post_tag/terms"
+                             let (Just tags) = decode $ res ^. W.responseBody :: Maybe [TagRes]
+                             undefined
 
 extractPostIds :: [Object] -> [(Int, Object)]
 extractPostIds = map (\p -> let i = M.lookup "ID" p
