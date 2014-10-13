@@ -1,0 +1,4 @@
+wordpress {
+  username = "name"
+  password = "pass"
+}
