@@ -25,10 +25,11 @@ import qualified Data.Attoparsec.Text     as A
 import           Data.ByteString          (ByteString)
 import           Data.ByteString.Lazy     (toStrict)
 import           Data.Char                (toUpper)
+import qualified Data.Configurator        as C
 import           Data.Default
 import qualified Data.HashMap.Strict      as M
 import           Data.Map.Syntax
-import           Data.Maybe               (fromMaybe)
+import           Data.Maybe               (fromMaybe, listToMaybe)
 import           Data.Monoid
 import           Data.Set                 (Set)
 import           Data.Text                (Text)
@@ -46,9 +47,15 @@ import           Snap
 import           Snap.Snaplet.Heist       (Heist, addConfig)
 import           Snap.Snaplet.RedisDB     (RedisDB)
 import qualified Snap.Snaplet.RedisDB     as R
+import qualified Text.XmlHtml             as X
 
 (++) :: Monoid a => a -> a -> a
 (++) = mappend
+
+readSafe :: Read a => Text -> Maybe a
+readSafe = fmap fst . listToMaybe . reads . T.unpack
+
+tshow = T.pack . show
 
 data CachePeriod = NoCache | CacheSeconds Int
 
@@ -64,6 +71,7 @@ data Wordpress b = Wordpress { runRedis :: forall a. Redis a -> Handler b (Wordp
                              , runHTTP  :: Text -> [(Text, Text)] -> IO Text
                              }
 
+
 initWordpress = initWordpress' def
 
 initWordpress' :: WordpressConfig
@@ -75,7 +83,11 @@ initWordpress' wpconf heist redis wordpress =
   makeSnaplet "wordpress" "" Nothing $
     do conf <- getSnapletUserConfig
        addConfig heist $ set scCompiledSplices (wordpressSplices wpconf wordpress) mempty
-       let req = fromMaybe wreqRequester (requester wpconf)
+       req <- case requester wpconf of
+                Nothing -> do u <- liftIO $ C.require conf "username"
+                              p <- liftIO $ C.require conf "password"
+                              return $ wreqRequester u p
+                Just r -> return r
        return $ Wordpress (withTop' id . R.runRedisDB redis) req
 
 wordpressSplices :: WordpressConfig
@@ -91,9 +103,13 @@ wpPostsSplice :: WordpressConfig
 wpPostsSplice conf wordpress =
   do promise <- newEmptyPromise
      outputChildren <- manyWithSplices runChildren postSplices (getPromise promise)
+     n <- getParamNode
+     let limit = (fromMaybe 20 $ readSafe =<< X.getAttribute "limit" n) :: Int
+         offset = (fromMaybe 0 $ readSafe =<< X.getAttribute "offset" n) :: Int
      return $ yieldRuntime $
        do (Wordpress _ req) <- lift (use (wordpress . snapletValue))
-          res <- liftIO $ req (endpoint conf ++ "/posts") []
+          res <- liftIO $ req (endpoint conf ++ "/posts") [("filter[posts_per_page]", tshow limit)
+                                                          ,("filter[offset]", tshow offset)]
           case decodeStrict . T.encodeUtf8 $ res of
             Just posts -> do putPromise promise posts
                              codeGen outputChildren
@@ -178,6 +194,13 @@ cacheSet key o = do (Wordpress run _) <- view snapletValue <$> getSnapletState
                       Left err -> return False
                       Right val -> return True
 
-wreqRequester :: Text -> [(Text, Text)] -> IO Text
-wreqRequester u ps = do r <- W.getWith (set W.params ps W.defaults) (T.unpack u)
-                        return $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
+wreqRequester :: Text -> Text -> Text -> [(Text, Text)] -> IO Text
+wreqRequester user pass u ps =
+  do let opts = (W.defaults & W.params .~ ps
+                            & W.auth .~ W.basicAuth user' pass'
+                            )
+     -- print (u, ps, view W.headers opts, view W.auth opts)
+     r <- W.getWith opts (T.unpack u)
+     return $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
+  where user' = T.encodeUtf8 user
+        pass' = T.encodeUtf8 pass

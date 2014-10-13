@@ -13,6 +13,7 @@ import           Control.Monad.Trans.Either
 import           Data.Aeson                  hiding (Success)
 import           Data.Default
 import qualified Data.HashMap.Strict         as M
+import           Data.List                   (intersect)
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Text                   (Text)
@@ -59,12 +60,11 @@ article2 = object [ "ID" .= (2 :: Int)
                   , "excerpt" .= ("summary" :: Text)
                   ]
 
-fakeRequester "/posts" [] = return $ "[" ++  enc article1 ++ "]"
-fakeRequester "/posts" [ ("filter[year]", "2009")
-                       , ("filter[monthnum]", "10")
-                       , ("filter[name]", "the-post")] =
+fakeRequester "/posts" ps | length (ps `intersect` [ ("filter[year]", "2009")
+                                                   , ("filter[monthnum]", "10")
+                                                   , ("filter[name]", "the-post")]) == 3 =
   return $ "[" ++ enc article2 ++ "]"
-fakeRequester _ _ = return ""
+fakeRequester "/posts" _ = return $ "[" ++  enc article1 ++ "]"
 
 app :: [(Text, Text)] -> Maybe WordpressConfig -> SnapletInit App App
 app tmpls mconf = makeSnaplet "app" "An snaplet example application." Nothing $ do
@@ -155,9 +155,23 @@ main = hspec $ do
     "title" `shouldTransformTo` "wpTitle"
     "post_tag" `shouldTransformTo` "wpPostTag"
 
-  describe "live tests" $
-    snap (route [("/2014/10/a-war-for-power", render "single")])
-         (app [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")]
-              (Just $ def { endpoint = "https://www.jacobinmag.com/wp-json" })) $
+  describe "live tests (which require config file w/ user and pass)" $
+    snap (route [("/2014/10/a-war-for-power", render "single")
+                ,("/many", render "many")
+                ,("/many2", render "many2")
+                ,("/many3", render "many3")])
+         (app [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
+              ,("many", "<wpPosts limit=2><wpTitle/></wpPosts>")
+              ,("many2", "<wpPosts offset=1 limit=1><wpTitle/></wpPosts>")
+              ,("many3", "<wpPosts offset=0 limit=1><wpTitle/></wpPosts>")]
+              (Just $ def { endpoint = "https://sandbox.jacobinmag.com/wp-json" })) $
       do it "should have title on page" $
            get "/2014/10/a-war-for-power" >>= shouldHaveText "A War for Power"
+         describe "NOTE: This is a fragile test (not super useful longterm)." $
+           it "should not have most recent post's title" $
+             get "/many" >>= shouldNotHaveText "All in the Family"
+         describe "NOTE: This is a fragile test." $
+           it "should be able to offset" $
+             do res <- get "/many2"
+                res2 <- get "/many3"
+                res `shouldNotEqual` res2

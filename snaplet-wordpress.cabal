@@ -24,6 +24,7 @@ library
                      , data-default
                      , hedis
                      , heist >= 0.14
+                     , map-syntax
                      , lens < 4.4
                      , snap >= 0.13 && < 0.14
                      , snap-core >= 0.9 && < 0.10
@@ -31,6 +32,7 @@ library
                      , text
                      , bytestring
                      , wreq < 0.2
+                     , configurator
                      , xmlhtml >= 0.2.3.2
                      -- NOTE(dbp 2014-09-10): network is a transitive dependency,
                      -- because cabal couldn't figure it out.

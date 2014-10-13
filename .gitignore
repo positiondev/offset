@@ -2,3 +2,4 @@
 cabal.sandbox.config
 TAGS
 dist
+test.cfg
