@@ -10,8 +10,10 @@ module Snap.Snaplet.Wordpress (
  , initWordpress
  , initWordpress'
  , CacheKey(..)
+ , Filter(..)
  , cacheLookup
  , cacheSet
+ , expirePost
 
  , transformName
  , TagSpec(..)
@@ -220,17 +222,20 @@ lookupTagIds conf specs =
                                        (TagRes  (i,_):_) -> constr i
 
 extractPostIds :: [Object] -> [(Int, Object)]
-extractPostIds = map (\p -> let i = M.lookup "ID" p
-                                is = case i of
-                                      Just (String n) -> readSafe n
-                                      Just (Number n) ->
-                                        let rat = toRational n in
-                                        case denominator rat of
-                                          1 -> Just $ fromInteger (numerator rat)
-                                          _ -> Nothing
-                                      _ -> Nothing
-                                id' = fromMaybe 0 is in
-                              (id', p))
+extractPostIds = map extractPostId
+
+extractPostId :: Object -> (Int, Object)
+extractPostId p = let i = M.lookup "ID" p
+                      is = case i of
+                            Just (String n) -> readSafe n
+                            Just (Number n) ->
+                              let rat = toRational n in
+                              case denominator rat of
+                                1 -> Just $ fromInteger (numerator rat)
+                                _ -> Nothing
+                            _ -> Nothing
+                      id' = fromMaybe 0 is in
+                    (id', p)
 
 addPostIds :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b)) -> [Int] -> Handler b b ()
 addPostIds wordpress ids =
@@ -317,7 +322,8 @@ instance Show Filter where
 class FormatKey a where
   formatKey :: a -> ByteString
 
-data CacheKey = PostByPermalinkKey Year Month Slug
+data CacheKey = PostKey Int
+              | PostByPermalinkKey Year Month Slug
               | PostsKey (Set Filter)
               deriving (Eq, Show)
 
@@ -326,22 +332,54 @@ instance FormatKey CacheKey where
     T.encodeUtf8 $ "wordpress:post_perma:" ++ y ++ "_" ++ m ++ "_" ++ s
   formatKey (PostsKey filters) =
     T.encodeUtf8 $ "wordpress:posts:" ++ T.intercalate "_" (map tshow $ Set.toAscList filters)
+  formatKey (PostKey n) = T.encodeUtf8 $ "wordpress:post:" ++ tshow n
 
 cacheLookup :: CacheKey -> Handler b (Wordpress b) (Maybe Text)
 cacheLookup key = do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
                      res <- run $ R.get (formatKey key)
                      case res of
-                       Left err -> return Nothing
-                       Right val -> return (T.decodeUtf8 <$> val)
-
+                       Right (Just val) ->
+                         case key of
+                           PostByPermalinkKey{} ->
+                             do res' <- run $ R.get val
+                                case res' of
+                                  Left err -> return Nothing
+                                  Right val -> return (T.decodeUtf8 <$> val)
+                           _ -> return (Just $ T.decodeUtf8 val)
+                       _ -> return Nothing
 cacheSet :: Int -> CacheKey -> Text -> Handler b (Wordpress b) Bool
-cacheSet seconds key o = do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
-                            res <- run $ R.setex (formatKey key)
-                                                 (toInteger seconds)
-                                                 (T.encodeUtf8 o)
-                            case res of
-                              Left err -> return False
-                              Right val -> return True
+cacheSet seconds key o =
+  do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
+     res <- case key of
+              PostByPermalinkKey{} ->
+                do let (Just p) = decodeStrict . T.encodeUtf8 $ o
+                       (i,_) = extractPostId p
+                   r <- run $ R.setex (formatKey $ PostKey i)
+                                      (toInteger seconds)
+                                      (T.encodeUtf8 o)
+                   case r of
+                     Left err -> return r
+                     Right _ ->
+                       run $ R.setex (formatKey key)
+                                     (toInteger seconds)
+                                     (formatKey $ PostKey i)
+              _ -> run $ R.setex (formatKey key)
+                                 (toInteger seconds)
+                                 (T.encodeUtf8 o)
+     case res of
+       Left err -> return False
+       Right val -> return True
+
+expirePost :: Int -> Handler b (Wordpress b) Bool
+expirePost n =
+  do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
+     r1 <- run $ R.del [formatKey $ PostKey n]
+     case r1 of
+       Left _ -> return False
+       _ -> do r2 <- run $ R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:posts:*"]
+               case r2 of
+                 Left _ -> return False
+                 Right (n :: Integer) -> return True
 
 wreqRequester :: Text -> Text -> Text -> [(Text, Text)] -> IO Text
 wreqRequester user pass u ps =

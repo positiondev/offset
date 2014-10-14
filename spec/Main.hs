@@ -16,6 +16,7 @@ import qualified Data.HashMap.Strict         as M
 import           Data.List                   (intersect)
 import           Data.Maybe
 import           Data.Monoid
+import qualified Data.Set                    as Set
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import qualified Data.Text.Encoding          as T
@@ -179,9 +180,29 @@ main = hspec $ do
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` Nothing
     it "should find something if there is a post in cache" $ do
-      eval (runRedisDB redis (R.set "wordpress:post_perma:2000_1_the-article" (T.encodeUtf8 $ enc article1)))
+      eval (with wordpress $ cacheSet 10 (PostByPermalinkKey "2000" "1" "the-article")
+                                         (enc article1))
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` (Just $ enc article1)
+    it "should not find single post after expire handler is called" $
+      do eval (with wordpress $ cacheSet 10 (PostByPermalinkKey "2000" "1" "the-article")
+                                            (enc article1))
+         eval (with wordpress $ expirePost 1)
+         eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
+           >>= shouldEqual Nothing
+    it "should not find post aggregates after expire handler is called" $
+      do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0, PageFilter 1, LimitFilter 20])
+         eval (with wordpress $ cacheSet 10 key ("[" ++ enc article1 ++ "]"))
+         eval (with wordpress $ expirePost 1)
+         eval (with wordpress $ cacheLookup key)
+           >>= shouldEqual Nothing
+    it "should find a different single post after expiring another" $
+      do let key1 = (PostByPermalinkKey "2000" "1" "the-article")
+             key2 = (PostByPermalinkKey "2001" "2" "another-article")
+         eval (with wordpress $ cacheSet 10 key1 (enc article1))
+         eval (with wordpress $ cacheSet 10 key2 (enc article2))
+         eval (with wordpress $ expirePost 1)
+         eval (with wordpress $ cacheLookup key2) >>= shouldEqual (Just (enc article2))
   describe "transformName" $ do
     "ID" `shouldTransformTo` "wpID"
     "title" `shouldTransformTo` "wpTitle"
