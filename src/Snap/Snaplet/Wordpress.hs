@@ -289,17 +289,18 @@ parsePermalink = either (const Nothing) Just . A.parseOnly parser
                     return (T.pack year, T.pack month, T.pack slug)
 
 -- TODO(dbp 2014-10-14): date should be parsed and nested.
-data Field = F Text -- A single flat field
-           | N Text [Field] -- A nested object field
-           | M Text [Field] -- A list field, where each element is an object
-postFields :: [Field]
+data Field m = F Text -- A single flat field
+             | P Text (RuntimeSplice m Text -> Splice m) -- A customly parsed flat field
+             | N Text [Field m] -- A nested object field
+             | M Text [Field m] -- A list field, where each element is an object
+postFields :: (Functor m, Monad m) => [Field m]
 postFields = [F "ID"
              ,F "title"
              ,F "status"
              ,F "type"
              ,N "author" [F "ID",F "name",F "first_name",F "last_name",F "description"]
              ,F "content"
-             ,F "date"
+             ,P "date" dateSplice
              ,F "slug"
              ,F "excerpt"
              ,N "custom_fields" [F "test"]
@@ -320,13 +321,24 @@ postFields = [F "ID"
                         ,M "post_tag" [F "ID", F "name", F "slug", F "count"]]
              ]
 
+dateSplice :: (Functor m, Monad m) => RuntimeSplice m Text -> Splice m
+dateSplice d = withSplices runChildren splices (parseDate <$> d)
+  where splices = do "wpYear" ## pureSplice $ textSplice fst3
+                     "wpMonth" ## pureSplice $ textSplice snd3
+                     "wpDay" ## pureSplice $ textSplice trd3
+        parseDate :: Text -> (Text,Text,Text)
+        parseDate = tuplify . T.splitOn "-" . T.takeWhile (/= 'T')
+        tuplify (y:m:d:_) = (y,m,d)
+        fst3 (a,_,_) = a
+        snd3 (_,a,_) = a
+        trd3 (_,_,a) = a
+
 postSplices :: (Functor m, Monad m) => Splices (RuntimeSplice m Object -> Splice m)
 postSplices = mconcat (map buildSplice postFields)
   where buildSplice (F n) =
-          transformName n ## pureSplice . textSplice $ \o -> case M.lookup n o of
-                                                              Just (String t) -> t
-                                                              Just (Number i) -> T.pack $ show i
-                                                              _ -> ""
+          transformName n ## pureSplice . textSplice $ getText n
+        buildSplice (P n splice) =
+          transformName n ## \o -> splice (getText n <$> o)
         buildSplice (N n fs) = transformName n ## \o ->
                                  withSplices runChildren
                                                 (mconcat $ map buildSplice fs)
@@ -337,6 +349,10 @@ postSplices = mconcat (map buildSplice postFields)
                                                     (unArray . fromJust . M.lookup n <$> o)
         unObj (Object o) = o
         unArray (Array v) = map unObj $ V.toList v
+        getText n o = case M.lookup n o of
+                        Just (String t) -> t
+                        Just (Number i) -> T.pack $ show i
+                        _ -> ""
 
 
 

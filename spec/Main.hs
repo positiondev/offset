@@ -247,7 +247,7 @@ main = hspec $ do
                 ,("/tag5", render "tag5")
                 ,("/tag6", render "tag6")
                 ,("/tag7", render "tag7")
-                ,("/2014/10/the-assassination-of-detroit/", render "author")
+                ,("/2014/10/the-assassination-of-detroit/", render "author-date")
                 ])
          (app [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
               ,("many", "<wpPosts limit=2><wpTitle/></wpPosts>")
@@ -266,7 +266,7 @@ main = hspec $ do
               ,("tag5", "<wpPosts tags=\"+home-featured\" limit=1><wpTitle/></wpPosts>")
               ,("tag6", "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>")
               ,("tag7", "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>")
-              ,("author", "<wpPostByPermalink><wpAuthor><wpName/></wpAuthor></wpPostByPermalink>")
+              ,("author-date", "<wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink>")
               ]
               (Just $ def { cachePeriod = NoCache,
                             endpoint = "https://sandbox.jacobinmag.com/wp-json" })) $
@@ -302,3 +302,5 @@ main = hspec $ do
               get "/tag7" >>= shouldNotEqual p1
          it "should be able to get nested attribute author name" $
            get "/2014/10/the-assassination-of-detroit/" >>= shouldHaveText "Carlos Salazar"
+         it "should be able to get customly parsed attribute date" $
+           get "/2014/10/the-assassination-of-detroit/" >>= shouldHaveText "2014/10"
