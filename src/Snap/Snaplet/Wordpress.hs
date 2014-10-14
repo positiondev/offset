@@ -33,7 +33,7 @@ import           Data.Default
 import qualified Data.HashMap.Strict      as M
 import           Data.IntSet              (IntSet)
 import qualified Data.IntSet              as IntSet
-import           Data.List                (intercalate)
+import           Data.List                (intercalate, partition)
 import           Data.Map.Syntax
 import           Data.Maybe               (catMaybes, fromMaybe, isJust,
                                            listToMaybe)
@@ -161,12 +161,16 @@ wpPostsSplice conf wordpress =
          page = if page' < 1 then 1 else page'
          offset = num * (page - 1) + offset'
          tags' = unTagSpecList (fromMaybe (TagSpecList []) $ readSafe =<< X.getAttribute "tags" n)
-     -- tags <- lift $ lookupTagIds conf tags'
+     (tagsPlus, tagsMinus) <- partition (\t -> case t of
+                                                 (TagPlusId _) -> True
+                                                 (TagMinusId _) -> False) <$>
+                                (lift $ lookupTagIds conf tags')
      return $ yieldRuntime $
        do (Wordpress _ req postSet) <- lift (use (wordpress . snapletValue))
-          res <- liftIO $ req (endpoint conf ++ "/posts") [("filter[posts_per_page]", tshow num)
-                                                          ,("filter[offset]", tshow offset)
-                                                          ]
+          res <- liftIO $ req (endpoint conf ++ "/posts") $ [("filter[posts_per_page]", tshow num)
+                                                            ,("filter[offset]", tshow offset)
+                                                            ] ++ (map (\(TagPlusId i) -> ("filter[tag__in]", tshow i)) tagsPlus)
+                                                              ++ (map (\(TagMinusId i) -> ("filter[tag__not_in]", tshow i)) tagsMinus)
           case decodeStrict . T.encodeUtf8 $ res of
             Just posts -> do let postsW = extractPostIds posts
                              let postsND = noDuplicates postSet . take limit $ postsW
@@ -185,9 +189,16 @@ instance FromJSON TagRes where
   parseJSON _ = mzero
 
 lookupTagIds :: WordpressConfig -> [TagSpec] -> IO [TagSpecId]
-lookupTagIds conf specs = do res <- W.get $ (T.unpack $ endpoint conf) ++ "/taxonomies/post_tag/terms"
-                             let (Just tags) = decode $ res ^. W.responseBody :: Maybe [TagRes]
-                             undefined
+lookupTagIds _ [] = return []
+lookupTagIds conf specs =
+  do res <- W.get $ (T.unpack $ endpoint conf) ++ "/taxonomies/post_tag/terms"
+     let (Just tags) = decode $ res ^. W.responseBody :: Maybe [TagRes]
+     return $ map (getSpecId tags) specs
+ where getSpecId tags (TagPlus slug) = matchWith tags slug TagPlusId
+       getSpecId tags (TagMinus slug) = matchWith tags slug TagMinusId
+       matchWith tags slug constr = case filter (\(TagRes (_,s)) -> s == slug) tags of
+                                       [] -> error $ "Couldn't find tag: " ++ T.unpack slug
+                                       (TagRes  (i,_):_) -> constr i
 
 extractPostIds :: [Object] -> [(Int, Object)]
 extractPostIds = map (\p -> let i = M.lookup "ID" p
