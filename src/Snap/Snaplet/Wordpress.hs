@@ -37,8 +37,8 @@ import           Data.IntSet              (IntSet)
 import qualified Data.IntSet              as IntSet
 import           Data.List                (intercalate, partition)
 import           Data.Map.Syntax
-import           Data.Maybe               (catMaybes, fromMaybe, isJust,
-                                           listToMaybe)
+import           Data.Maybe               (catMaybes, fromJust, fromMaybe,
+                                           isJust, listToMaybe)
 import           Data.Monoid
 import           Data.Ratio
 import           Data.Set                 (Set)
@@ -48,6 +48,7 @@ import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Lazy           as TL
 import qualified Data.Text.Lazy.Encoding  as TL
+import qualified Data.Vector              as V
 import           Database.Redis           (Redis)
 import qualified Database.Redis           as R
 import           Heist
@@ -287,12 +288,56 @@ parsePermalink = either (const Nothing) Just . A.parseOnly parser
                     slug <- A.many1 (A.letter <|> A.char '-')
                     return (T.pack year, T.pack month, T.pack slug)
 
-postSplices :: Monad m => Splices (RuntimeSplice m Object -> Splice m)
-postSplices = mapV (pureSplice . textSplice) $ mconcat (map buildSplice ["ID", "title", "type", "content", "excerpt", "date"])
-  where buildSplice n = transformName n ## \o -> case M.lookup n o of
-                                                   Just (String t) -> t
-                                                   Just (Number i) -> T.pack $ show i
-                                                   _ -> ""
+-- TODO(dbp 2014-10-14): date should be parsed and nested.
+data Field = F Text -- A single flat field
+           | N Text [Field] -- A nested object field
+           | M Text [Field] -- A list field, where each element is an object
+postFields :: [Field]
+postFields = [F "ID"
+             ,F "title"
+             ,F "status"
+             ,F "type"
+             ,N "author" [F "ID",F "name",F "first_name",F "last_name",F "description"]
+             ,F "content"
+             ,F "date"
+             ,F "slug"
+             ,F "excerpt"
+             ,N "custom_fields" [F "test"]
+             ,N "featured_image" [F "content"
+                                 ,F "source"
+                                 ,N "attachment_meta" [F "width"
+                                                      ,F "height"
+                                                      ,N "sizes" [N "thumbnail" [F "width"
+                                                                                ,F "height"
+                                                                                ,F "url"]
+                                                                 ,N "mag-featured" [F "width"
+                                                                                   ,F "height"
+                                                                                   ,F "url"]
+                                                                 ,N "single-featured" [F "width"
+                                                                                      ,F "height"
+                                                                                      ,F "url"]]]]
+             ,N "terms" [M "category" [F "ID", F "name", F "slug", F "count"]
+                        ,M "post_tag" [F "ID", F "name", F "slug", F "count"]]
+             ]
+
+postSplices :: (Functor m, Monad m) => Splices (RuntimeSplice m Object -> Splice m)
+postSplices = mconcat (map buildSplice postFields)
+  where buildSplice (F n) =
+          transformName n ## pureSplice . textSplice $ \o -> case M.lookup n o of
+                                                              Just (String t) -> t
+                                                              Just (Number i) -> T.pack $ show i
+                                                              _ -> ""
+        buildSplice (N n fs) = transformName n ## \o ->
+                                 withSplices runChildren
+                                                (mconcat $ map buildSplice fs)
+                                                (unObj . fromJust . M.lookup n <$> o)
+        buildSplice (M n fs) = transformName n ## \o ->
+                                 manyWithSplices runChildren
+                                                    (mconcat $ map buildSplice fs)
+                                                    (unArray . fromJust . M.lookup n <$> o)
+        unObj (Object o) = o
+        unArray (Array v) = map unObj $ V.toList v
+
 
 
 transformName :: Text -> Text

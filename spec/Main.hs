@@ -247,6 +247,7 @@ main = hspec $ do
                 ,("/tag5", render "tag5")
                 ,("/tag6", render "tag6")
                 ,("/tag7", render "tag7")
+                ,("/2014/10/the-assassination-of-detroit/", render "author")
                 ])
          (app [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
               ,("many", "<wpPosts limit=2><wpTitle/></wpPosts>")
@@ -265,6 +266,7 @@ main = hspec $ do
               ,("tag5", "<wpPosts tags=\"+home-featured\" limit=1><wpTitle/></wpPosts>")
               ,("tag6", "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>")
               ,("tag7", "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>")
+              ,("author", "<wpPostByPermalink><wpAuthor><wpName/></wpAuthor></wpPostByPermalink>")
               ]
               (Just $ def { cachePeriod = NoCache,
                             endpoint = "https://sandbox.jacobinmag.com/wp-json" })) $
@@ -298,3 +300,5 @@ main = hspec $ do
          it "should be able to have multiple tag queries" $
            do p1 <- get "/tag6"
               get "/tag7" >>= shouldNotEqual p1
+         it "should be able to get nested attribute author name" $
+           get "/2014/10/the-assassination-of-detroit/" >>= shouldHaveText "Carlos Salazar"
