@@ -33,6 +33,7 @@ import           Test.Hspec.Core             (Result (..))
 import           Test.Hspec.Snap
 import qualified Text.XmlHtml                as X
 
+(++) :: Monoid a => a -> a -> a
 (++) = mappend
 
 ----------------------------------------------------------
@@ -65,6 +66,7 @@ fakeRequester "/posts" ps | length (ps `intersect` [ ("filter[year]", "2009")
                                                    , ("filter[name]", "the-post")]) == 3 =
   return $ "[" ++ enc article2 ++ "]"
 fakeRequester "/posts" _ = return $ "[" ++  enc article1 ++ "]"
+fakeRequester a b = error $ show a ++ show b
 
 app :: [(Text, Text)] -> Maybe WordpressConfig -> SnapletInit App App
 app tmpls mconf = makeSnaplet "app" "An snaplet example application." Nothing $ do
@@ -112,13 +114,28 @@ shouldRenderAtUrl = shouldRenderAtUrlPre (return ())
 
 shouldRenderAtUrlPre :: Handler App App () -> Text -> Text -> Text -> Spec
 shouldRenderAtUrlPre act url tags match =
-  snap (route [(T.encodeUtf8 url, h)]) (app [("test", tags)] Nothing) $
+  snap (route [(T.encodeUtf8 url, h)]) (app [("test", tags)]
+                                            (Just def { requester = Just fakeRequester
+                                                      , endpoint = ""
+                                                      , cachePeriod = NoCache
+                                                      })) $
     it (T.unpack $ "rendered with url " ++ url ++  ", should contain " ++ match) $
       do eval act
          get url >>= shouldHaveText match
   where h = do st <- getHeistState
                render "test"
 
+shouldRenderAtUrlPreCache :: Handler App App () -> Text -> Text -> Text -> Spec
+shouldRenderAtUrlPreCache act url tags match =
+  snap (route [(T.encodeUtf8 url, h)]) (app [("test", tags)]
+                                            (Just def { requester = Just fakeRequester
+                                                      , endpoint = ""
+                                                      })) $
+    it (T.unpack $ "rendered with url " ++ url ++  ", should contain " ++ match) $
+      do eval act
+         get url >>= shouldHaveText match
+  where h = do st <- getHeistState
+               render "test"
 
 clearRedisCache :: Handler App App (Either R.Reply Integer)
 clearRedisCache = runRedisDB redis (R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:*"])
@@ -151,8 +168,9 @@ main = hspec $ do
                       "The post: summary"
     describe "should grab post from cache if it's there" $
       let (Object a2) = article2 in
-      shouldRenderAtUrlPre
-        (void $ with wordpress $ cacheSet (PostByPermalinkKey "2001" "10" "the-post") a2)
+      shouldRenderAtUrlPreCache
+        (void $ with wordpress $ cacheSet 10 (PostByPermalinkKey "2001" "10" "the-post")
+                                             (TL.toStrict $ TL.decodeUtf8 $ encode a2))
         "/2001/10/the-post/"
         "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
         "The post"
@@ -163,8 +181,7 @@ main = hspec $ do
     it "should find something if there is a post in cache" $ do
       eval (runRedisDB redis (R.set "wordpress:post_perma:2000_1_the-article" (T.encodeUtf8 $ enc article1)))
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
-      let Just postcontent = decodeStrict (T.encodeUtf8 $ enc article1)
-      p `shouldEqual` (Just postcontent)
+      p `shouldEqual` (Just $ enc article1)
   describe "transformName" $ do
     "ID" `shouldTransformTo` "wpID"
     "title" `shouldTransformTo` "wpTitle"
@@ -228,7 +245,8 @@ main = hspec $ do
               ,("tag6", "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>")
               ,("tag7", "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>")
               ]
-              (Just $ def { endpoint = "https://sandbox.jacobinmag.com/wp-json" })) $
+              (Just $ def { cachePeriod = NoCache,
+                            endpoint = "https://sandbox.jacobinmag.com/wp-json" })) $
       do it "should have title on page" $
            get "/2014/10/a-war-for-power" >>= shouldHaveText "A War for Power"
          it "should not have most recent post's title" $

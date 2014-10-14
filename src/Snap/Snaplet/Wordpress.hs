@@ -40,6 +40,7 @@ import           Data.Maybe               (catMaybes, fromMaybe, isJust,
 import           Data.Monoid
 import           Data.Ratio
 import           Data.Set                 (Set)
+import qualified Data.Set                 as Set
 import           Data.Text                (Text)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
@@ -65,9 +66,10 @@ import           Debug.Trace
 readSafe :: Read a => Text -> Maybe a
 readSafe = fmap fst . listToMaybe . reads . T.unpack
 
+tshow :: Show a => a -> Text
 tshow = T.pack . show
 
-data CachePeriod = NoCache | CacheSeconds Int
+data CachePeriod = NoCache | CacheSeconds Int deriving (Show, Eq)
 
 data WordpressConfig = WordpressConfig { endpoint    :: Text
                                        , requester   :: Maybe (Text -> [(Text, Text)] -> IO Text)
@@ -165,13 +167,30 @@ wpPostsSplice conf wordpress =
                                                  (TagPlusId _) -> True
                                                  (TagMinusId _) -> False) <$>
                                 (lift $ lookupTagIds conf tags')
+     let cacheKey = PostsKey (Set.fromList $ [ LimitFilter limit
+                                             , NumFilter num
+                                             , OffsetFilter offset
+                                             , PageFilter page
+                                             ] ++ map TagFilter tags')
      return $ yieldRuntime $
        do (Wordpress _ req postSet) <- lift (use (wordpress . snapletValue))
-          res <- liftIO $ req (endpoint conf ++ "/posts") $ [("filter[posts_per_page]", tshow num)
-                                                            ,("filter[offset]", tshow offset)
-                                                            ] ++ (map (\(TagPlusId i) -> ("filter[tag__in]", tshow i)) tagsPlus)
-                                                              ++ (map (\(TagMinusId i) -> ("filter[tag__not_in]", tshow i)) tagsMinus)
-          case decodeStrict . T.encodeUtf8 $ res of
+          cached <- case cachePeriod conf of
+                      NoCache -> return Nothing
+                      _ -> lift $ with wordpress $ cacheLookup cacheKey
+          res <- case cached of
+                   Just r -> return r
+                   Nothing ->
+                     do h <- liftIO $ req (endpoint conf ++ "/posts") $
+                                          [("filter[posts_per_page]", tshow num)
+                                          ,("filter[offset]", tshow offset)
+                                          ] ++ (map (\(TagPlusId i) -> ("filter[tag__in]", tshow i)) tagsPlus)
+                                            ++ (map (\(TagMinusId i) -> ("filter[tag__not_in]", tshow i)) tagsMinus)
+                        case cachePeriod conf of
+                          NoCache -> return ()
+                          CacheSeconds n -> void $ lift $ with wordpress $ cacheSet n cacheKey h
+                        return h
+
+          case (decodeStrict . T.encodeUtf8 $ res) of
             Just posts -> do let postsW = extractPostIds posts
                              let postsND = noDuplicates postSet . take limit $ postsW
                              lift $ addPostIds wordpress (map fst postsND)
@@ -231,16 +250,24 @@ wpPostByPermalinkSplice conf wordpress =
           case mperma of
             Nothing -> codeGen (yieldPureText "")
             Just (year, month, slug) ->
-              do mres <- lift $ with wordpress $ cacheLookup (PostByPermalinkKey year month slug)
+              do let cacheKey = PostByPermalinkKey year month slug
+                 mres <- case cachePeriod conf of
+                           NoCache -> return Nothing
+                           _ -> lift $ with wordpress $ cacheLookup cacheKey
                  res <- case mres of
-                          Just r' -> return (Just [r'])
+                          Just r' -> return ((:[]) <$> (decodeStrict . T.encodeUtf8 $ r'))
                           Nothing ->
                             do (Wordpress _ req posts) <- lift $ use (wordpress . snapletValue)
-                               (decodeStrict . T.encodeUtf8) <$>
-                                 (liftIO $ req  (endpoint conf ++ "/posts")
-                                                [("filter[year]",year)
-                                                ,("filter[monthnum]", month)
-                                                ,("filter[name]", slug)])
+                               h <- liftIO $ req (endpoint conf ++ "/posts")
+                                                 [("filter[year]",year)
+                                                 ,("filter[monthnum]", month)
+                                                 ,("filter[name]", slug)]
+                               case cachePeriod conf of
+                                 NoCache -> return ()
+                                 CacheSeconds n ->
+                                   void $ lift $ with wordpress $ cacheSet n cacheKey h
+                               return $ (decodeStrict . T.encodeUtf8 $ h)
+
                  case res of
                    Just (post:_) -> do putPromise promise post
                                        codeGen outputChildren
@@ -273,30 +300,48 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
 type Year = Text
 type Month = Text
 type Slug = Text
-type Filter = Text
+data Filter = TagFilter TagSpec
+            | NumFilter Int
+            | OffsetFilter Int
+            | PageFilter Int
+            | LimitFilter Int
+            deriving (Eq, Ord)
+
+instance Show Filter where
+  show (TagFilter t) = "tag_" ++ show t
+  show (NumFilter n) = "num_" ++ show n
+  show (OffsetFilter n) = "offset_" ++ show n
+  show (PageFilter n) = "page_" ++ show n
+  show (LimitFilter n) = "limit_" ++ show n
+
 class FormatKey a where
   formatKey :: a -> ByteString
 
 data CacheKey = PostByPermalinkKey Year Month Slug
               | PostsKey (Set Filter)
+              deriving (Eq, Show)
 
 instance FormatKey CacheKey where
   formatKey (PostByPermalinkKey y m s) =
     T.encodeUtf8 $ "wordpress:post_perma:" ++ y ++ "_" ++ m ++ "_" ++ s
+  formatKey (PostsKey filters) =
+    T.encodeUtf8 $ "wordpress:posts:" ++ T.intercalate "_" (map tshow $ Set.toAscList filters)
 
-cacheLookup :: CacheKey -> Handler b (Wordpress b) (Maybe Object)
+cacheLookup :: CacheKey -> Handler b (Wordpress b) (Maybe Text)
 cacheLookup key = do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
                      res <- run $ R.get (formatKey key)
                      case res of
                        Left err -> return Nothing
-                       Right val -> return $ val >>= decodeStrict
+                       Right val -> return (T.decodeUtf8 <$> val)
 
-cacheSet :: CacheKey -> Object -> Handler b (Wordpress b) Bool
-cacheSet key o = do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
-                    res <- run $ R.set (formatKey key) (toStrict $ encode o)
-                    case res of
-                      Left err -> return False
-                      Right val -> return True
+cacheSet :: Int -> CacheKey -> Text -> Handler b (Wordpress b) Bool
+cacheSet seconds key o = do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
+                            res <- run $ R.setex (formatKey key)
+                                                 (toInteger seconds)
+                                                 (T.encodeUtf8 o)
+                            case res of
+                              Left err -> return False
+                              Right val -> return True
 
 wreqRequester :: Text -> Text -> Text -> [(Text, Text)] -> IO Text
 wreqRequester user pass u ps =
