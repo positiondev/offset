@@ -279,14 +279,17 @@ wpPostByPermalinkSplice conf wordpress =
                                        codeGen outputChildren
                    _ -> codeGen (yieldPureText "")
 
-parsePermalink = either (const Nothing) Just . A.parseOnly parser
-  where parser = do A.char '/'
-                    year <- A.count 4 A.digit
+parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
+  where parser = do A.option ' ' (A.char '/')
+                    guls <- A.many1 (A.letter <|> A.char '-')
                     A.char '/'
-                    month <- A.count 2 A.digit
+                    htnom <- A.count 2 A.digit
                     A.char '/'
-                    slug <- A.many1 (A.letter <|> A.char '-')
-                    return (T.pack year, T.pack month, T.pack slug)
+                    raey <- A.count 4 A.digit
+                    A.char '/'
+                    return (T.reverse $ T.pack raey
+                           ,T.reverse $ T.pack htnom
+                           ,T.reverse $ T.pack guls)
 
 -- TODO(dbp 2014-10-14): date should be parsed and nested.
 data Field m = F Text -- A single flat field

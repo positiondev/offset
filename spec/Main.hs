@@ -164,6 +164,12 @@ main = hspec $ do
     shouldRenderAtUrl "/2009/10/the-post/"
                       "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
                       "The post"
+    shouldRenderAtUrl "/posts/2009/10/the-post/"
+                      "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
+                      "The post"
+    shouldRenderAtUrl "/posts/2009/10/the-post"
+                      "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
+                      "The post"
     shouldRenderAtUrl "/2009/10/the-post/"
                       "<wpPostByPermalink><wpTitle/>: <wpExcerpt/></wpPostByPermalink>"
                       "The post: summary"
@@ -230,7 +236,7 @@ main = hspec $ do
     it "should add plus to bare tag pluses in list roundtrip" $
       show (read "foo-bar,-baz,-qux" :: TagSpecList) `shouldBe` "+foo-bar,-baz,-qux"
 
-  describe "live tests (which require config file w/ user and pass)" $
+  describe "live tests (which require config file w/ user and pass to sandbox.jacobinmag.com)" $
     snap (route [("/2014/10/a-war-for-power", render "single")
                 ,("/many", render "many")
                 ,("/many2", render "many2")
