@@ -50,7 +50,7 @@ makeLenses ''App
 instance HasHeist App where
     heistLens = subSnaplet heist
 
-enc = TL.toStrict . TL.decodeUtf8 . encode
+enc a = T.concat ["[", TL.toStrict . TL.decodeUtf8 . encode $ a, "]"]
 
 article1 = object [ "ID" .= (1 :: Int)
                   , "title" .= ("Foo bar" :: Text)
@@ -65,8 +65,8 @@ article2 = object [ "ID" .= (2 :: Int)
 fakeRequester "/posts" ps | length (ps `intersect` [ ("filter[year]", "2009")
                                                    , ("filter[monthnum]", "10")
                                                    , ("filter[name]", "the-post")]) == 3 =
-  return $ "[" ++ enc article2 ++ "]"
-fakeRequester "/posts" _ = return $ "[" ++  enc article1 ++ "]"
+  return $ enc article2
+fakeRequester "/posts" _ = return $ enc article1
 fakeRequester a b = error $ show a ++ show b
 
 app :: [(Text, Text)] -> Maybe WordpressConfig -> SnapletInit App App
@@ -177,7 +177,7 @@ main = hspec $ do
       let (Object a2) = article2 in
       shouldRenderAtUrlPreCache
         (void $ with wordpress $ cacheSet 10 (PostByPermalinkKey "2001" "10" "the-post")
-                                             (TL.toStrict $ TL.decodeUtf8 $ encode a2))
+                                             (enc a2))
         "/2001/10/the-post/"
         "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
         "The post"

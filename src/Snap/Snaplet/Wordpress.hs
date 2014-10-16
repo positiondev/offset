@@ -261,7 +261,7 @@ wpPostByPermalinkSplice conf wordpress =
                            NoCache -> return Nothing
                            _ -> lift $ with wordpress $ cacheLookup cacheKey
                  res <- case mres of
-                          Just r' -> return ((:[]) <$> (decodeStrict . T.encodeUtf8 $ r'))
+                          Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
                           Nothing ->
                             do (Wordpress _ req posts) <- lift $ use (wordpress . snapletValue)
                                h <- liftIO $ req (endpoint conf ++ "/posts")
@@ -416,7 +416,7 @@ cacheSet seconds key o =
   do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
      res <- case key of
               PostByPermalinkKey{} ->
-                do let (Just p) = decodeStrict . T.encodeUtf8 $ o
+                do let (Just (p:_)) = decodeStrict . T.encodeUtf8 $ o
                        (i,_) = extractPostId p
                    r <- run $ R.setex (formatKey $ PostKey i)
                                       (toInteger seconds)
