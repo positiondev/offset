@@ -16,8 +16,8 @@ module Snap.Snaplet.Wordpress (
  , expirePost
 
  , transformName
- , TagSpec(..)
- , TagSpecList(..)
+ , TaxSpec(..)
+ , TaxSpecList(..)
  ) where
 
 import           Prelude                  hiding ((++))
@@ -125,31 +125,31 @@ wpNoPostDuplicatesSplice wordpress =
          Just _ -> return ()
        codeGen $ yieldPureText ""
 
-data TagSpec = TagPlus Text | TagMinus Text deriving (Eq, Ord)
+data TaxSpec = TaxPlus Text | TaxMinus Text deriving (Eq, Ord)
 
-data TagSpecId = TagPlusId Int | TagMinusId Int deriving (Eq, Show, Ord)
+data TaxSpecId = TaxPlusId Int | TaxMinusId Int deriving (Eq, Show, Ord)
 
-instance Show TagSpec where
-  show (TagPlus t) = "+" ++ (T.unpack t)
-  show (TagMinus t) = "-" ++ (T.unpack t)
+instance Show TaxSpec where
+  show (TaxPlus t) = "+" ++ (T.unpack t)
+  show (TaxMinus t) = "-" ++ (T.unpack t)
 
 tagChars = ['a'..'z'] ++ "-"
 
-instance Read TagSpec where
-  readsPrec _ ('+':cs) | all (`elem` tagChars) cs = [(TagPlus (T.pack cs), "")]
-  readsPrec _ ('-':cs) | all (`elem` tagChars) cs = [(TagMinus (T.pack cs), "")]
-  readsPrec _ cs | all (`elem` tagChars) cs = [(TagPlus (T.pack cs), "")]
+instance Read TaxSpec where
+  readsPrec _ ('+':cs) | all (`elem` tagChars) cs = [(TaxPlus (T.pack cs), "")]
+  readsPrec _ ('-':cs) | all (`elem` tagChars) cs = [(TaxMinus (T.pack cs), "")]
+  readsPrec _ cs | all (`elem` tagChars) cs = [(TaxPlus (T.pack cs), "")]
   readsPrec _ _ = []
 
-newtype TagSpecList = TagSpecList { unTagSpecList :: [TagSpec]} deriving (Eq, Ord)
+newtype TaxSpecList = TaxSpecList { unTaxSpecList :: [TaxSpec]} deriving (Eq, Ord)
 
-instance Show TagSpecList where
-  show (TagSpecList ts) = intercalate "," (map show ts)
+instance Show TaxSpecList where
+  show (TaxSpecList ts) = intercalate "," (map show ts)
 
-instance Read TagSpecList where
+instance Read TaxSpecList where
   readsPrec _ ts = let vs = map (readSafe) $ T.splitOn "," $ T.pack ts in
                      if all isJust vs
-                        then [(TagSpecList $ catMaybes vs, "")]
+                        then [(TaxSpecList $ catMaybes vs, "")]
                         else []
 
 wpPostsSplice :: WordpressConfig
@@ -165,33 +165,44 @@ wpPostsSplice conf wordpress =
          page' = (fromMaybe 1 $ readSafe =<< X.getAttribute "page" n) :: Int
          page = if page' < 1 then 1 else page'
          offset = num * (page - 1) + offset'
-         tags' = unTagSpecList (fromMaybe (TagSpecList []) $ readSafe =<< X.getAttribute "tags" n)
+         tags' = unTaxSpecList (fromMaybe (TaxSpecList []) $
+                                readSafe =<< X.getAttribute "tags" n)
+         cats' = unTaxSpecList (fromMaybe (TaxSpecList []) $
+                                readSafe =<< X.getAttribute "categories" n)
      (tagsPlus, tagsMinus) <- partition (\t -> case t of
-                                                 (TagPlusId _) -> True
-                                                 (TagMinusId _) -> False) <$>
+                                                 (TaxPlusId _) -> True
+                                                 (TaxMinusId _) -> False) <$>
                                 (lift $ lookupTagIds conf tags')
+     (catsPlus, catsMinus) <- partition (\t -> case t of
+                                                  (TaxPlusId _) -> True
+                                                  (TaxMinusId _) -> False) <$>
+                                      (lift $ lookupCategoryIds conf cats')
      let cacheKey = PostsKey (Set.fromList $ [ LimitFilter limit
                                              , NumFilter num
                                              , OffsetFilter offset
                                              , PageFilter page
-                                             ] ++ map TagFilter tags')
+                                             ] ++ map TagFilter tags' ++ map CatFilter cats')
      return $ yieldRuntime $
        do (Wordpress _ req postSet) <- lift (use (wordpress . snapletValue))
           cached <- case cachePeriod conf of
                       NoCache -> return Nothing
                       _ -> lift $ with wordpress $ cacheLookup cacheKey
-          res <- case cached of
-                   Just r -> return r
-                   Nothing ->
-                     do h <- liftIO $ req (endpoint conf ++ "/posts") $
-                                          [("filter[posts_per_page]", tshow num)
-                                          ,("filter[offset]", tshow offset)
-                                          ] ++ (map (\(TagPlusId i) -> ("filter[tag__in]", tshow i)) tagsPlus)
-                                            ++ (map (\(TagMinusId i) -> ("filter[tag__not_in]", tshow i)) tagsMinus)
-                        case cachePeriod conf of
-                          NoCache -> return ()
-                          CacheSeconds n -> void $ lift $ with wordpress $ cacheSet n cacheKey h
-                        return h
+          res <-
+            case cached of
+              Just r -> return r
+              Nothing ->
+                do h <- liftIO $
+                     req (endpoint conf ++ "/posts") $
+                         [("filter[posts_per_page]", tshow num)
+                         ,("filter[offset]", tshow offset)
+                         ] ++ (map (\(TaxPlusId i) -> ("filter[tag__in]", tshow i)) tagsPlus)
+                           ++ (map (\(TaxMinusId i) -> ("filter[tag__not_in]", tshow i)) tagsMinus)
+                           ++ (map (\(TaxPlusId i) -> ("filter[category__in]", tshow i)) catsPlus)
+                           ++ (map (\(TaxMinusId i) -> ("filter[category__not_in]", tshow i)) catsMinus)
+                   case cachePeriod conf of
+                     NoCache -> return ()
+                     CacheSeconds n -> void $ lift $ with wordpress $ cacheSet n cacheKey h
+                   return h
 
           case (decodeStrict . T.encodeUtf8 $ res) of
             Just posts -> do let postsW = extractPostIds posts
@@ -204,23 +215,27 @@ wpPostsSplice conf wordpress =
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
 
-newtype TagRes = TagRes (Int, Text)
+newtype TaxRes = TaxRes (Int, Text)
 
-instance FromJSON TagRes where
-  parseJSON (Object o) = TagRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
+instance FromJSON TaxRes where
+  parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
   parseJSON _ = mzero
 
-lookupTagIds :: WordpressConfig -> [TagSpec] -> IO [TagSpecId]
-lookupTagIds _ [] = return []
-lookupTagIds conf specs =
-  do res <- W.get $ (T.unpack $ endpoint conf) ++ "/taxonomies/post_tag/terms"
-     let (Just tags) = decode $ res ^. W.responseBody :: Maybe [TagRes]
+lookupTagIds = lookupTaxIds "/taxonomies/post_tag/terms" "tag"
+lookupCategoryIds = lookupTaxIds "/taxonomies/category/terms" "category"
+
+lookupTaxIds :: Text -> Text -> WordpressConfig -> [TaxSpec] -> IO [TaxSpecId]
+lookupTaxIds _ _ _ [] = return []
+lookupTaxIds url desc conf specs =
+  do res <- W.get $ (T.unpack $ endpoint conf) ++ (T.unpack url)
+     let (Just tags) = decode $ res ^. W.responseBody :: Maybe [TaxRes]
      return $ map (getSpecId tags) specs
- where getSpecId tags (TagPlus slug) = matchWith tags slug TagPlusId
-       getSpecId tags (TagMinus slug) = matchWith tags slug TagMinusId
-       matchWith tags slug constr = case filter (\(TagRes (_,s)) -> s == slug) tags of
-                                       [] -> error $ "Couldn't find tag: " ++ T.unpack slug
-                                       (TagRes  (i,_):_) -> constr i
+ where getSpecId tags (TaxPlus slug) = matchWith tags slug TaxPlusId
+       getSpecId tags (TaxMinus slug) = matchWith tags slug TaxMinusId
+       matchWith tags slug constr =
+         case filter (\(TaxRes (_,s)) -> s == slug) tags of
+            [] -> error $ "Couldn't find " ++ T.unpack desc ++ ": " ++ T.unpack slug
+            (TaxRes  (i,_):_) -> constr i
 
 extractPostIds :: [Object] -> [(Int, Object)]
 extractPostIds = map extractPostId
@@ -369,7 +384,8 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
 type Year = Text
 type Month = Text
 type Slug = Text
-data Filter = TagFilter TagSpec
+data Filter = TagFilter TaxSpec
+            | CatFilter TaxSpec
             | NumFilter Int
             | OffsetFilter Int
             | PageFilter Int
@@ -378,6 +394,7 @@ data Filter = TagFilter TagSpec
 
 instance Show Filter where
   show (TagFilter t) = "tag_" ++ show t
+  show (CatFilter t) = "cat_" ++ show t
   show (NumFilter n) = "num_" ++ show n
   show (OffsetFilter n) = "offset_" ++ show n
   show (PageFilter n) = "page_" ++ show n

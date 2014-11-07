@@ -215,26 +215,26 @@ main = hspec $ do
     "post_tag" `shouldTransformTo` "wpPostTag"
   describe "tag-specs" $ do
     it "should parse bare tag plus" $
-      read "foo-bar" `shouldBe` (TagPlus "foo-bar")
+      read "foo-bar" `shouldBe` (TaxPlus "foo-bar")
     it "should parse tag plus" $
-      read "+foo-bar" `shouldBe` (TagPlus "foo-bar")
+      read "+foo-bar" `shouldBe` (TaxPlus "foo-bar")
     it "should parse tag minus" $
-      read "-foo-bar" `shouldBe` (TagMinus "foo-bar")
+      read "-foo-bar" `shouldBe` (TaxMinus "foo-bar")
     it "should parse a list" $
-      read "foo-bar,baz" `shouldBe` (TagSpecList [TagPlus "foo-bar", TagPlus "baz"])
+      read "foo-bar,baz" `shouldBe` (TaxSpecList [TaxPlus "foo-bar", TaxPlus "baz"])
     it "should parse a list with mixed pluses and minuses" $
       read "+foo-bar,-baz,-qux" `shouldBe`
-        (TagSpecList [TagPlus "foo-bar", TagMinus "baz", TagMinus "qux"])
+        (TaxSpecList [TaxPlus "foo-bar", TaxMinus "baz", TaxMinus "qux"])
     it "should round trip tag plus" $
-      show (read "+foo-bar" :: TagSpec) `shouldBe` "+foo-bar"
+      show (read "+foo-bar" :: TaxSpec) `shouldBe` "+foo-bar"
     it "should round trip tag minus" $
-      show (read "-foo-bar" :: TagSpec) `shouldBe` "-foo-bar"
+      show (read "-foo-bar" :: TaxSpec) `shouldBe` "-foo-bar"
     it "should add plus to bare tag plus when round tripping" $
-      show (read "foo-bar" :: TagSpec) `shouldBe` "+foo-bar"
+      show (read "foo-bar" :: TaxSpec) `shouldBe` "+foo-bar"
     it "should round trip list" $
-      show (read "+foo-bar,-baz,-qux" :: TagSpecList) `shouldBe` "+foo-bar,-baz,-qux"
+      show (read "+foo-bar,-baz,-qux" :: TaxSpecList) `shouldBe` "+foo-bar,-baz,-qux"
     it "should add plus to bare tag pluses in list roundtrip" $
-      show (read "foo-bar,-baz,-qux" :: TagSpecList) `shouldBe` "+foo-bar,-baz,-qux"
+      show (read "foo-bar,-baz,-qux" :: TaxSpecList) `shouldBe` "+foo-bar,-baz,-qux"
 
   describe "live tests (which require config file w/ user and pass to sandbox.jacobinmag.com)" $
     snap (route [("/2014/10/a-war-for-power", render "single")
@@ -253,6 +253,9 @@ main = hspec $ do
                 ,("/tag5", render "tag5")
                 ,("/tag6", render "tag6")
                 ,("/tag7", render "tag7")
+                ,("/cat1", render "cat1")
+                ,("/cat2", render "cat2")
+                ,("/cat3", render "cat3")
                 ,("/2014/10/the-assassination-of-detroit/", render "author-date")
                 ])
          (app [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
@@ -272,6 +275,9 @@ main = hspec $ do
               ,("tag5", "<wpPosts tags=\"+home-featured\" limit=1><wpTitle/></wpPosts>")
               ,("tag6", "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>")
               ,("tag7", "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>")
+              ,("cat1", "<wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts>")
+              ,("cat2", "<wpPosts limit=10><wpTitle/></wpPosts>")
+              ,("cat3", "<wpPosts categories=\"-bookmarx\" limit=10><wpTitle/></wpPosts>")
               ,("author-date", "<wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink>")
               ]
               (Just $ def { cachePeriod = NoCache,
@@ -310,3 +316,11 @@ main = hspec $ do
            get "/2014/10/the-assassination-of-detroit/" >>= shouldHaveText "Carlos Salazar"
          it "should be able to get customly parsed attribute date" $
            get "/2014/10/the-assassination-of-detroit/" >>= shouldHaveText "2014/10"
+         it "should be able to restrict based on category" $
+           do c1 <- get "/cat1"
+              c2 <- get "/cat2"
+              c1 `shouldNotEqual` c2
+         it "should be able to make negative category queries" $
+           do c1 <- get "/cat1"
+              c2 <- get "/cat3"
+              c1 `shouldNotEqual` c2
