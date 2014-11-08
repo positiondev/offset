@@ -69,7 +69,14 @@ fakeRequester "/posts" ps | length (ps `intersect` [ ("filter[year]", "2009")
 fakeRequester "/posts" _ = return $ enc article1
 fakeRequester a b = error $ show a ++ show b
 
-app :: [(Text, Text)] -> Maybe WordpressConfig -> SnapletInit App App
+jacobinFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-featured" [F "width"
+                                                                                      ,F "height"
+                                                                                      ,F "url"]
+                                                                    ,N "single-featured" [F "width"
+                                                                                         ,F "height"
+                                                                                         ,F "url"]]]]]
+
+app :: [(Text, Text)] -> Maybe (WordpressConfig (Handler App App)) -> SnapletInit App App
 app tmpls mconf = makeSnaplet "app" "An snaplet example application." Nothing $ do
                      h <- nestSnaplet "" heist $ heistInit "templates"
                      addConfig h $ set scTemplateLocations (return templates) mempty
@@ -77,6 +84,7 @@ app tmpls mconf = makeSnaplet "app" "An snaplet example application." Nothing $ 
                      let conf = fromMaybe (def { endpoint = ""
                                                , requester = Just fakeRequester
                                                , cachePeriod = NoCache
+                                               , extraFields = jacobinFields
                                                })
                                           mconf
                      w <- nestSnaplet "" wordpress $ initWordpress' conf
@@ -145,8 +153,40 @@ shouldTransformTo :: Text -> Text -> Spec
 shouldTransformTo from to =
   it (T.unpack ("should convert " ++ from ++ " to " ++ to)) $ transformName from `shouldBe` to
 
+-- NOTE(dbp 2014-11-07): We define equality that is 'good enough' for testing.
+-- In truth, our definition is wrong because of the functions inside of 'P' variants.
+instance (Functor m, Monad m) =>  Eq (Field m) where
+  F t1 == F t2 = t1 == t2
+  P t1 _ == P t2 _ = t1 == t2
+  N t1 n1 == N t2 n2 = t1 == t2 && n1 == n2
+  M t1 m1 == M t2 m2 = t1 == t2 && m1 == m2
+
 main :: IO ()
 main = hspec $ do
+  describe "mergeFields" $ do
+    it "should be able to right-bias merge two Field trees" $
+      mergeFields [F "ID", F "status"] ([P "status" undefined] :: [Field IO])
+        `shouldBe` [F "ID", P "status" undefined]
+    it "should be able to override nested fields" $
+      mergeFields [N "status" [F "foo"]] ([N "status" [P "foo" undefined]] :: [Field IO])
+        `shouldBe` [N "status" [P "foo" undefined]]
+    it "should be able to override nested fields, but not lose unaffected ones" $
+      mergeFields [N "status" [F "foo", F "bar"]] ([N "status" [M "foo" []]] :: [Field IO])
+        `shouldBe` [N "status" [M "foo" [], F "bar"]]
+    it "should not change order of fields in left" $
+      mergeFields [F "ID", F "status"] ([F "status", F "ID"] :: [Field IO])
+        `shouldBe` [F "ID", F "status"]
+    it "should be able to override nested with flat" $
+      mergeFields [N "status" [F "foo", F "bar"]] ([F "status"] :: [Field IO])
+        `shouldBe` [F "status"]
+    it "should be able to override flat with nested" $
+      mergeFields ([F "status"] :: [Field IO]) [N "status" [F "foo", F "bar"]]
+        `shouldBe` [N "status" [F "foo", F "bar"]]
+    it "should be able to add to elements nested" $
+      mergeFields ([N "featured_image" [N "attachment_meta" [F "standard"]]] :: [Field IO])
+                  [N "featured_image" [N "attachment_meta" [F "mag-featured"]]]
+        `shouldBe` [N "featured_image" [N "attachment_meta" [F "standard"
+                                                            ,F "mag-featured"]]]
   describe "<wpPosts>" $ do
     "<wpPosts><wpTitle/></wpPosts>" `shouldRenderTo` "Foo bar"
     "<wpPosts><wpID/></wpPosts>" `shouldRenderTo` "1"
@@ -213,6 +253,7 @@ main = hspec $ do
     "ID" `shouldTransformTo` "wpID"
     "title" `shouldTransformTo` "wpTitle"
     "post_tag" `shouldTransformTo` "wpPostTag"
+    "mag-featured" `shouldTransformTo` "wpMagFeatured"
   describe "tag-specs" $ do
     it "should parse bare tag plus" $
       read "foo-bar" `shouldBe` (TaxPlus "foo-bar")
@@ -257,6 +298,8 @@ main = hspec $ do
                 ,("/cat2", render "cat2")
                 ,("/cat3", render "cat3")
                 ,("/2014/10/the-assassination-of-detroit/", render "author-date")
+                ,("/fields", render "fields")
+                ,("/extra-fields", render "extra-fields")
                 ])
          (app [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
               ,("many", "<wpPosts limit=2><wpTitle/></wpPosts>")
@@ -279,9 +322,12 @@ main = hspec $ do
               ,("cat2", "<wpPosts limit=10><wpTitle/></wpPosts>")
               ,("cat3", "<wpPosts categories=\"-bookmarx\" limit=10><wpTitle/></wpPosts>")
               ,("author-date", "<wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink>")
+              ,("fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
+              ,("extra-fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
               ]
-              (Just $ def { cachePeriod = NoCache,
-                            endpoint = "https://sandbox.jacobinmag.com/wp-json" })) $
+              (Just $ def { cachePeriod = NoCache
+                          , endpoint = "https://sandbox.jacobinmag.com/wp-json"
+                          , extraFields = jacobinFields })) $
       do it "should have title on page" $
            get "/2014/10/a-war-for-power" >>= shouldHaveText "A War for Power"
          it "should not have most recent post's title" $
@@ -324,3 +370,6 @@ main = hspec $ do
            do c1 <- get "/cat1"
               c2 <- get "/cat3"
               c1 `shouldNotEqual` c2
+         it "should be able to use extra fields set in application" $
+           do get "/fields" >>= shouldHaveText "https://"
+              get "/extra-fields" >>= shouldHaveText "https://"

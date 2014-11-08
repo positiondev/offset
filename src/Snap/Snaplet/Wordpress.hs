@@ -18,6 +18,8 @@ module Snap.Snaplet.Wordpress (
  , transformName
  , TaxSpec(..)
  , TaxSpecList(..)
+ , Field(..)
+ , mergeFields
  ) where
 
 import           Prelude                  hiding ((++))
@@ -74,13 +76,14 @@ tshow = T.pack . show
 
 data CachePeriod = NoCache | CacheSeconds Int deriving (Show, Eq)
 
-data WordpressConfig = WordpressConfig { endpoint    :: Text
-                                       , requester   :: Maybe (Text -> [(Text, Text)] -> IO Text)
-                                       , cachePeriod :: CachePeriod
-                                       }
+data WordpressConfig m = WordpressConfig { endpoint    :: Text
+                                         , requester   :: Maybe (Text -> [(Text, Text)] -> IO Text)
+                                         , cachePeriod :: CachePeriod
+                                         , extraFields :: [Field m]
+                                         }
 
-instance Default WordpressConfig where
-  def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600)
+instance Default (WordpressConfig m) where
+  def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) []
 
 data Wordpress b = Wordpress { runRedis       :: forall a. Redis a -> Handler b (Wordpress b) a
                              , runHTTP        :: Text -> [(Text, Text)] -> IO Text
@@ -90,7 +93,7 @@ data Wordpress b = Wordpress { runRedis       :: forall a. Redis a -> Handler b 
 
 initWordpress = initWordpress' def
 
-initWordpress' :: WordpressConfig
+initWordpress' :: WordpressConfig (Handler b b)
                -> Snaplet (Heist b)
                -> Simple Lens b (Snaplet RedisDB)
                -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
@@ -106,7 +109,7 @@ initWordpress' wpconf heist redis wordpress =
                 Just r -> return r
        return $ Wordpress (withTop' id . R.runRedisDB redis) req Nothing
 
-wordpressSplices :: WordpressConfig
+wordpressSplices :: WordpressConfig (Handler b b)
                  -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                  -> Splices (Splice (Handler b b))
 wordpressSplices conf wordpress =
@@ -152,12 +155,13 @@ instance Read TaxSpecList where
                         then [(TaxSpecList $ catMaybes vs, "")]
                         else []
 
-wpPostsSplice :: WordpressConfig
+wpPostsSplice :: WordpressConfig (Handler b b)
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
               -> Splice (Handler b b)
 wpPostsSplice conf wordpress =
   do promise <- newEmptyPromise
-     outputChildren <- manyWithSplices runChildren postSplices (getPromise promise)
+     outputChildren <- manyWithSplices runChildren (postSplices (extraFields conf))
+                                                   (getPromise promise)
      n <- getParamNode
      let limit = (fromMaybe 20 $ readSafe =<< X.getAttribute "limit" n) :: Int
          num = (fromMaybe 20 $ readSafe =<< X.getAttribute "num" n) :: Int
@@ -224,7 +228,7 @@ instance FromJSON TaxRes where
 lookupTagIds = lookupTaxIds "/taxonomies/post_tag/terms" "tag"
 lookupCategoryIds = lookupTaxIds "/taxonomies/category/terms" "category"
 
-lookupTaxIds :: Text -> Text -> WordpressConfig -> [TaxSpec] -> IO [TaxSpecId]
+lookupTaxIds :: Text -> Text -> WordpressConfig (Handler b b) -> [TaxSpec] -> IO [TaxSpecId]
 lookupTaxIds _ _ _ [] = return []
 lookupTaxIds url desc conf specs =
   do res <- W.get $ (T.unpack $ endpoint conf) ++ (T.unpack url)
@@ -260,12 +264,12 @@ addPostIds wordpress ids =
             (Wordpress red req ((`IntSet.union` (IntSet.fromList ids)) <$> postSet))
 
 
-wpPostByPermalinkSplice :: WordpressConfig
+wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
                         -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                         -> Splice (Handler b b)
 wpPostByPermalinkSplice conf wordpress =
   do promise <- newEmptyPromise
-     outputChildren <- withSplices runChildren postSplices (getPromise promise)
+     outputChildren <- withSplices runChildren (postSplices (extraFields conf)) (getPromise promise)
      return $ yieldRuntime $
        do mperma <- (parsePermalink . T.decodeUtf8 . rqURI) <$> lift getRequest
           case mperma of
@@ -311,6 +315,13 @@ data Field m = F Text -- A single flat field
              | P Text (RuntimeSplice m Text -> Splice m) -- A customly parsed flat field
              | N Text [Field m] -- A nested object field
              | M Text [Field m] -- A list field, where each element is an object
+
+instance (Functor m, Monad m) =>  Show (Field m) where
+  show (F t) = "F(" ++ T.unpack t ++ ")"
+  show (P t _) = "P(" ++ T.unpack t ++ ",{code})"
+  show (N t n) = "N(" ++ T.unpack t ++ "," ++ show n ++ ")"
+  show (M t m) = "M(" ++ T.unpack t ++ "," ++ show m ++ ")"
+
 postFields :: (Functor m, Monad m) => [Field m]
 postFields = [F "ID"
              ,F "title"
@@ -329,15 +340,30 @@ postFields = [F "ID"
                                                       ,N "sizes" [N "thumbnail" [F "width"
                                                                                 ,F "height"
                                                                                 ,F "url"]
-                                                                 ,N "mag-featured" [F "width"
-                                                                                   ,F "height"
-                                                                                   ,F "url"]
-                                                                 ,N "single-featured" [F "width"
-                                                                                      ,F "height"
-                                                                                      ,F "url"]]]]
+                                                                 ]]]
              ,N "terms" [M "category" [F "ID", F "name", F "slug", F "count"]
                         ,M "post_tag" [F "ID", F "name", F "slug", F "count"]]
              ]
+
+mergeFields :: (Functor m, Monad m) => [Field m] -> [Field m] -> [Field m]
+mergeFields fo [] = fo
+mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
+  where overrideInList :: (Functor m, Monad m) => Bool -> Field m -> [Field m] -> [Field m]
+        overrideInList False fl [] = [fl]
+        overrideInList True _ [] = []
+        overrideInList v fl (m:ms) = (if matchesName m fl
+                                        then mergeField m fl : (overrideInList True fl ms)
+                                        else m : (overrideInList v fl ms))
+        matchesName a b = getName a == getName b
+        getName (F t) = t
+        getName (P t _) = t
+        getName (N t _) = t
+        getName (M t _) = t
+        mergeField (N _ left) (N nm right) = N nm (mergeFields left right)
+        mergeField (M _ left) (N nm right) = N nm (mergeFields left right)
+        mergeField (N _ left) (M nm right) = M nm (mergeFields left right)
+        mergeField (M _ left) (M nm right) = M nm (mergeFields left right)
+        mergeField _ right = right
 
 dateSplice :: (Functor m, Monad m) => RuntimeSplice m Text -> Splice m
 dateSplice d = withSplices runChildren splices (parseDate <$> d)
@@ -351,8 +377,8 @@ dateSplice d = withSplices runChildren splices (parseDate <$> d)
         snd3 (_,a,_) = a
         trd3 (_,_,a) = a
 
-postSplices :: (Functor m, Monad m) => Splices (RuntimeSplice m Object -> Splice m)
-postSplices = mconcat (map buildSplice postFields)
+postSplices :: (Functor m, Monad m) => [Field m] -> Splices (RuntimeSplice m Object -> Splice m)
+postSplices extra = mconcat (map buildSplice (mergeFields postFields extra))
   where buildSplice (F n) =
           transformName n ## pureSplice . textSplice $ getText n
         buildSplice (P n splice) =
@@ -378,6 +404,7 @@ transformName :: Text -> Text
 transformName = T.append "wp" . snd . T.foldl f (True, "")
   where f (True, rest) next = (False, T.snoc rest (toUpper next))
         f (False, rest) '_' = (True, rest)
+        f (False, rest) '-' = (True, rest)
         f (False, rest) next = (False, T.snoc rest next)
 
 
