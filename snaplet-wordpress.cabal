@@ -33,6 +33,7 @@ library
                      , bytestring
                      , wreq < 0.2
                      , configurator
+                     , time >= 1.4 && < 1.6
                      , xmlhtml >= 0.2.3.2
                      -- NOTE(dbp 2014-09-10): network is a transitive dependency,
                      -- because cabal couldn't figure it out.
