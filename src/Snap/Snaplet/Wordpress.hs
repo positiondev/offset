@@ -24,8 +24,6 @@ module Snap.Snaplet.Wordpress (
  , mergeFields
  ) where
 
-import           Prelude                  hiding ((++))
-
 import           Blaze.ByteString.Builder
 import           Control.Applicative
 import           Control.Lens
@@ -67,8 +65,6 @@ import qualified Text.XmlHtml             as X
 
 import           Debug.Trace
 
-(++) :: Monoid a => a -> a -> a
-(++) = mappend
 
 readSafe :: Read a => Text -> Maybe a
 readSafe = fmap fst . listToMaybe . reads . T.unpack
@@ -198,7 +194,7 @@ wpPostsSplice conf wordpress =
               Just r -> return r
               Nothing ->
                 do h <- liftIO $
-                     req (endpoint conf ++ "/posts") $
+                     req (endpoint conf <> "/posts") $
                          [("filter[posts_per_page]", tshow num)
                          ,("filter[offset]", tshow offset)
                          ] ++ (map (\(TaxPlusId i) -> ("filter[tag__in]", tshow i)) tagsPlus)
@@ -278,7 +274,7 @@ getPost conf wordpress cacheKey@(PostByPermalinkKey year month slug) =
        Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
        Nothing ->
          do (Wordpress _ req posts) <- use (wordpress . snapletValue)
-            h <- liftIO $ req (endpoint conf ++ "/posts")
+            h <- liftIO $ req (endpoint conf <> "/posts")
                               [("filter[year]",year)
                               ,("filter[monthnum]", month)
                               ,("filter[name]", slug)]
@@ -450,10 +446,10 @@ data CacheKey = PostKey Int
 
 instance FormatKey CacheKey where
   formatKey (PostByPermalinkKey y m s) =
-    T.encodeUtf8 $ "wordpress:post_perma:" ++ y ++ "_" ++ m ++ "_" ++ s
+    T.encodeUtf8 $ "wordpress:post_perma:" <> y <> "_" <> m <> "_" <> s
   formatKey (PostsKey filters) =
-    T.encodeUtf8 $ "wordpress:posts:" ++ T.intercalate "_" (map tshow $ Set.toAscList filters)
-  formatKey (PostKey n) = T.encodeUtf8 $ "wordpress:post:" ++ tshow n
+    T.encodeUtf8 $ "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
+  formatKey (PostKey n) = T.encodeUtf8 $ "wordpress:post:" <> tshow n
 
 cacheLookup :: CacheKey -> Handler b (Wordpress b) (Maybe Text)
 cacheLookup key = do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
