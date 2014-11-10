@@ -264,6 +264,33 @@ addPostIds wordpress ids =
             (Wordpress red req ((`IntSet.union` (IntSet.fromList ids)) <$> postSet))
 
 
+getPost :: WordpressConfig (Handler b b)
+        -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+        -> CacheKey
+        -> Handler b b (Maybe Object)
+getPost conf wordpress cacheKey@(PostByPermalinkKey year month slug) =
+  do mres <- case cachePeriod conf of
+               NoCache -> return Nothing
+               _ -> with wordpress $ cacheLookup cacheKey
+     case mres of
+       Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
+       Nothing ->
+         do (Wordpress _ req posts) <- use (wordpress . snapletValue)
+            h <- liftIO $ req (endpoint conf ++ "/posts")
+                              [("filter[year]",year)
+                              ,("filter[monthnum]", month)
+                              ,("filter[name]", slug)]
+            let post' = decodeStrict . T.encodeUtf8 $ h
+            case post' of
+              Just (post:_) ->
+                do case cachePeriod conf of
+                     NoCache -> return ()
+                     CacheSeconds n ->
+                       void $ with wordpress $ cacheSet n cacheKey
+                                                        (TL.toStrict . TL.decodeUtf8 . encode $ post)
+                   return $ Just post
+              _ -> return Nothing
+
 wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
                         -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                         -> Splice (Handler b b)
@@ -275,27 +302,10 @@ wpPostByPermalinkSplice conf wordpress =
           case mperma of
             Nothing -> codeGen (yieldPureText "")
             Just (year, month, slug) ->
-              do let cacheKey = PostByPermalinkKey year month slug
-                 mres <- case cachePeriod conf of
-                           NoCache -> return Nothing
-                           _ -> lift $ with wordpress $ cacheLookup cacheKey
-                 res <- case mres of
-                          Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
-                          Nothing ->
-                            do (Wordpress _ req posts) <- lift $ use (wordpress . snapletValue)
-                               h <- liftIO $ req (endpoint conf ++ "/posts")
-                                                 [("filter[year]",year)
-                                                 ,("filter[monthnum]", month)
-                                                 ,("filter[name]", slug)]
-                               case cachePeriod conf of
-                                 NoCache -> return ()
-                                 CacheSeconds n ->
-                                   void $ lift $ with wordpress $ cacheSet n cacheKey h
-                               return $ (decodeStrict . T.encodeUtf8 $ h)
-
+              do res <- lift $ getPost conf wordpress (PostByPermalinkKey year month slug)
                  case res of
-                   Just (post:_) -> do putPromise promise post
-                                       codeGen outputChildren
+                   Just post -> do putPromise promise post
+                                   codeGen outputChildren
                    _ -> codeGen (yieldPureText "")
 
 parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
@@ -460,7 +470,7 @@ cacheSet seconds key o =
   do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
      res <- case key of
               PostByPermalinkKey{} ->
-                do let (Just (p:_)) = decodeStrict . T.encodeUtf8 $ o
+                do let (Just p) = decodeStrict . T.encodeUtf8 $ o
                        (i,_) = extractPostId p
                    r <- run $ R.setex (formatKey $ PostKey i)
                                       (toInteger seconds)
