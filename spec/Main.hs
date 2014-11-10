@@ -242,6 +242,12 @@ main = hspec $ do
          eval (with wordpress $ expirePost 1)
          eval (with wordpress $ cacheLookup key)
            >>= shouldEqual Nothing
+    it "should find single post after expiring aggregates" $
+      do eval (with wordpress $ cacheSet 10 (PostByPermalinkKey "2000" "1" "the-article")
+                                            (enc article1))
+         eval (with wordpress expireAggregates)
+         eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
+           >>= shouldNotEqual Nothing
     it "should find a different single post after expiring another" $
       do let key1 = (PostByPermalinkKey "2000" "1" "the-article")
              key2 = (PostByPermalinkKey "2001" "2" "another-article")

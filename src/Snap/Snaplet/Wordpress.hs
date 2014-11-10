@@ -9,11 +9,13 @@ module Snap.Snaplet.Wordpress (
  , CachePeriod(..)
  , initWordpress
  , initWordpress'
+ , getPost
  , CacheKey(..)
  , Filter(..)
  , cacheLookup
  , cacheSet
  , expirePost
+ , expireAggregates
 
  , transformName
  , TaxSpec(..)
@@ -290,6 +292,7 @@ getPost conf wordpress cacheKey@(PostByPermalinkKey year month slug) =
                                                         (TL.toStrict . TL.decodeUtf8 . encode $ post)
                    return $ Just post
               _ -> return Nothing
+getPost _ _ key = error $ "getPost: Don't know how to get a post from key: " ++ show key
 
 wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
                         -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
@@ -488,16 +491,21 @@ cacheSet seconds key o =
        Left err -> return False
        Right val -> return True
 
+expireAggregates :: Handler b (Wordpress b) Bool
+expireAggregates =
+  do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
+     do r <- run $ R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:posts:*"]
+        case r of
+          Left _ -> return False
+          Right (_ :: Integer) -> return True
+
 expirePost :: Int -> Handler b (Wordpress b) Bool
 expirePost n =
   do (Wordpress run _ _) <- view snapletValue <$> getSnapletState
      r1 <- run $ R.del [formatKey $ PostKey n]
      case r1 of
        Left _ -> return False
-       _ -> do r2 <- run $ R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:posts:*"]
-               case r2 of
-                 Left _ -> return False
-                 Right (n :: Integer) -> return True
+       _ -> expireAggregates
 
 wreqRequester :: Text -> Text -> Text -> [(Text, Text)] -> IO Text
 wreqRequester user pass u ps =
