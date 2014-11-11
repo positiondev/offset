@@ -169,11 +169,10 @@ instance Read TaxSpecList where
                         else []
 
 
-runningQueryFor :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
-                -> CacheKey
-                -> Handler b b Bool
-runningQueryFor wordpress cacheKey =
-  do (Wordpress _ _ act _ _) <- use (wordpress . snapletValue)
+runningQueryFor :: CacheKey
+                -> Handler b (Wordpress b) Bool
+runningQueryFor cacheKey =
+  do (Wordpress _ _ act _ _) <- view snapletValue <$> getSnapletState
      now <- liftIO $ getCurrentTime
      liftIO $ modifyMVar act $ \a ->
       let active = filterCurrent now a
@@ -182,11 +181,10 @@ runningQueryFor wordpress cacheKey =
           else return (Map.insert cacheKey now active, False)
   where filterCurrent now = Map.filter (\v -> diffUTCTime now v < 1)
 
-markDoneRunning :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
-                -> CacheKey
-                -> Handler b b ()
-markDoneRunning wordpress cacheKey =
-  do (Wordpress _ _ act _ _) <- use (wordpress . snapletValue)
+markDoneRunning :: CacheKey
+                -> Handler b (Wordpress b) ()
+markDoneRunning cacheKey =
+  do (Wordpress _ _ act _ _) <- view snapletValue <$> getSnapletState
      liftIO $ modifyMVar_ act $ return .    Map.delete cacheKey
 
 wpPostsSplice :: WordpressConfig (Handler b b)
@@ -228,7 +226,7 @@ wpPostsSplice wpconf wordpress =
              case cached of
                Just r -> return r
                Nothing ->
-                 do running <- lift $ runningQueryFor wordpress cacheKey
+                 do running <- lift $ with wordpress $ runningQueryFor cacheKey
                     if running
                        then do liftIO $ threadDelay 100000
                                getPosts
@@ -255,7 +253,7 @@ wpPostsSplice wpconf wordpress =
                                 void $ lift $ with wordpress $ cacheSet (Just n) cacheKey h
                               CacheForever ->
                                 void $ lift $ with wordpress $ cacheSet Nothing cacheKey h
-                            lift $ markDoneRunning wordpress cacheKey
+                            lift $ with wordpress $ markDoneRunning cacheKey
                             return h
      return $ yieldRuntime $
        do res <- getPosts
@@ -317,21 +315,20 @@ addPostIds wordpress ids =
             (Wordpress red req act ((`IntSet.union` (IntSet.fromList ids)) <$> postSet) conf)
 
 
-getPost :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
-        -> CacheKey
-        -> Handler b b (Maybe Object)
-getPost wordpress cacheKey@(PostByPermalinkKey year month slug) =
-  do (Wordpress _ req _ posts conf) <- use (wordpress . snapletValue)
+getPost :: CacheKey
+        -> Handler b (Wordpress b) (Maybe Object)
+getPost cacheKey@(PostByPermalinkKey year month slug) =
+  do (Wordpress _ req _ posts conf) <- view snapletValue <$> getSnapletState
      mres <- case cachePeriod conf of
                NoCache -> return Nothing
-               _ -> with wordpress $ cacheLookup cacheKey
+               _ -> cacheLookup cacheKey
      case mres of
        Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
        Nothing ->
-         do running <- runningQueryFor wordpress cacheKey
+         do running <- runningQueryFor cacheKey
             if running
                then do liftIO $ threadDelay 100000
-                       getPost wordpress cacheKey
+                       getPost cacheKey
                else do h <- liftIO $ req (endpoint conf <> "/posts")
                               [("filter[year]",year)
                               ,("filter[monthnum]", month)
@@ -342,16 +339,16 @@ getPost wordpress cacheKey@(PostByPermalinkKey year month slug) =
                            do case cachePeriod conf of
                                 NoCache -> return ()
                                 CacheSeconds n ->
-                                  void $ with wordpress $ cacheSet (Just n) cacheKey
-                                                                   (TL.toStrict . TL.decodeUtf8 . encode $ post)
+                                  void $ cacheSet (Just n) cacheKey
+                                                  (TL.toStrict . TL.decodeUtf8 . encode $ post)
                                 CacheForever ->
-                                  void $ with wordpress $ cacheSet Nothing cacheKey
-                                                                   (TL.toStrict . TL.decodeUtf8 . encode $ post)
-                              markDoneRunning wordpress cacheKey
+                                  void $ cacheSet Nothing cacheKey
+                                                  (TL.toStrict . TL.decodeUtf8 . encode $ post)
+                              markDoneRunning cacheKey
                               return $ Just post
-                         _ -> do markDoneRunning wordpress cacheKey
+                         _ -> do markDoneRunning cacheKey
                                  return Nothing
-getPost _ key = error $ "getPost: Don't know how to get a post from key: " ++ show key
+getPost key = error $ "getPost: Don't know how to get a post from key: " ++ show key
 
 wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
                         -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
@@ -364,7 +361,7 @@ wpPostByPermalinkSplice conf wordpress =
           case mperma of
             Nothing -> codeGen (yieldPureText "")
             Just (year, month, slug) ->
-              do res <- lift $ getPost wordpress (PostByPermalinkKey year month slug)
+              do res <- lift $ with wordpress $ getPost (PostByPermalinkKey year month slug)
                  case res of
                    Just post -> do putPromise promise post
                                    codeGen outputChildren
