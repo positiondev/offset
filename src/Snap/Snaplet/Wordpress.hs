@@ -94,6 +94,7 @@ data Wordpress b = Wordpress { runRedis       :: forall a. Redis a -> Handler b 
                              , runHTTP        :: Text -> [(Text, Text)] -> IO Text
                              , activeMV       :: MVar (Map CacheKey UTCTime)
                              , requestPostSet :: Maybe IntSet
+                             , conf           :: WordpressConfig (Handler b b)
                              }
 
 
@@ -118,7 +119,7 @@ initWordpress' wpconf heist redis wordpress =
                               return $ wreqRequester wpconf u p
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
-       return $ Wordpress (withTop' id . R.runRedisDB redis) req active Nothing
+       return $ Wordpress (withTop' id . R.runRedisDB redis) req active Nothing wpconf
 
 wordpressSplices :: WordpressConfig (Handler b b)
                  -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
@@ -133,10 +134,10 @@ wpNoPostDuplicatesSplice :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress
                          -> Splice (Handler b b)
 wpNoPostDuplicatesSplice wordpress =
   return $ yieldRuntime $
-    do (Wordpress red ht act ps) <- lift $ use (wordpress . snapletValue)
+    do (Wordpress red ht act ps wpconf) <- lift $ use (wordpress . snapletValue)
        case ps of
          Nothing -> lift $ assign (wordpress . snapletValue)
-                                  (Wordpress red ht act (Just IntSet.empty))
+                                  (Wordpress red ht act (Just IntSet.empty) wpconf)
          Just _ -> return ()
        codeGen $ yieldPureText ""
 
@@ -172,7 +173,7 @@ runningQueryFor :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                 -> CacheKey
                 -> Handler b b Bool
 runningQueryFor wordpress cacheKey =
-  do (Wordpress _ _ act _) <- use (wordpress . snapletValue)
+  do (Wordpress _ _ act _ _) <- use (wordpress . snapletValue)
      now <- liftIO $ getCurrentTime
      liftIO $ modifyMVar act $ \a ->
       let active = filterCurrent now a
@@ -185,15 +186,15 @@ markDoneRunning :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                 -> CacheKey
                 -> Handler b b ()
 markDoneRunning wordpress cacheKey =
-  do (Wordpress _ _ act _) <- use (wordpress . snapletValue)
+  do (Wordpress _ _ act _ _) <- use (wordpress . snapletValue)
      liftIO $ modifyMVar_ act $ return .    Map.delete cacheKey
 
 wpPostsSplice :: WordpressConfig (Handler b b)
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
               -> Splice (Handler b b)
-wpPostsSplice conf wordpress =
+wpPostsSplice wpconf wordpress =
   do promise <- newEmptyPromise
-     outputChildren <- manyWithSplices runChildren (postSplices (extraFields conf))
+     outputChildren <- manyWithSplices runChildren (postSplices (extraFields wpconf))
                                                    (getPromise promise)
      n <- getParamNode
      let limit = (fromMaybe 20 $ readSafe =<< X.getAttribute "limit" n) :: Int
@@ -209,58 +210,58 @@ wpPostsSplice conf wordpress =
      (tagsPlus, tagsMinus) <- partition (\t -> case t of
                                                  (TaxPlusId _) -> True
                                                  (TaxMinusId _) -> False) <$>
-                                (lift $ lookupTagIds conf tags')
+                                (lift $ lookupTagIds (endpoint wpconf) tags')
      (catsPlus, catsMinus) <- partition (\t -> case t of
                                                   (TaxPlusId _) -> True
                                                   (TaxMinusId _) -> False) <$>
-                                      (lift $ lookupCategoryIds conf cats')
+                                      (lift $ lookupCategoryIds (endpoint wpconf) cats')
      let cacheKey = PostsKey (Set.fromList $ [ LimitFilter limit
                                              , NumFilter num
                                              , OffsetFilter offset
                                              , PageFilter page
                                              ] ++ map TagFilter tags' ++ map CatFilter cats')
      let getPosts =
-          do (Wordpress _ req _ _) <- lift (use (wordpress . snapletValue))
-             do cached <- case cachePeriod conf of
-                            NoCache -> return Nothing
-                            _ -> lift $ with wordpress $ cacheLookup cacheKey
-                case cached of
-                  Just r -> return r
-                  Nothing ->
-                    do running <- lift $ runningQueryFor wordpress cacheKey
-                       if running
-                          then do liftIO $ threadDelay 100000
-                                  getPosts
-                          else
-                            do h <- liftIO $
-                                 req (endpoint conf <> "/posts") $
-                                     [("filter[posts_per_page]", tshow num)
-                                     ,("filter[offset]", tshow offset)
-                                     ] ++ (map (\(TaxPlusId i) ->
-                                                 ("filter[tag__in]", tshow i))
-                                               tagsPlus)
-                                       ++ (map (\(TaxMinusId i) ->
-                                                  ("filter[tag__not_in]", tshow i))
-                                               tagsMinus)
-                                       ++ (map (\(TaxPlusId i) ->
-                                                  ("filter[category__in]", tshow i))
-                                               catsPlus)
-                                       ++ (map (\(TaxMinusId i) ->
-                                                  ("filter[category__not_in]", tshow i))
-                                               catsMinus)
-                               case cachePeriod conf of
-                                 NoCache -> return ()
-                                 CacheSeconds n ->
-                                   void $ lift $ with wordpress $ cacheSet (Just n) cacheKey h
-                                 CacheForever ->
-                                   void $ lift $ with wordpress $ cacheSet Nothing cacheKey h
-                               lift $ markDoneRunning wordpress cacheKey
-                               return h
+          do (Wordpress _ req _ _ _) <- lift $ use (wordpress . snapletValue)
+             cached <- case cachePeriod wpconf of
+                         NoCache -> return Nothing
+                         _ -> lift $ with wordpress $ cacheLookup cacheKey
+             case cached of
+               Just r -> return r
+               Nothing ->
+                 do running <- lift $ runningQueryFor wordpress cacheKey
+                    if running
+                       then do liftIO $ threadDelay 100000
+                               getPosts
+                       else
+                         do h <- liftIO $
+                              req (endpoint wpconf <> "/posts") $
+                                  [("filter[posts_per_page]", tshow num)
+                                  ,("filter[offset]", tshow offset)
+                                  ] ++ (map (\(TaxPlusId i) ->
+                                              ("filter[tag__in]", tshow i))
+                                            tagsPlus)
+                                    ++ (map (\(TaxMinusId i) ->
+                                               ("filter[tag__not_in]", tshow i))
+                                            tagsMinus)
+                                    ++ (map (\(TaxPlusId i) ->
+                                               ("filter[category__in]", tshow i))
+                                            catsPlus)
+                                    ++ (map (\(TaxMinusId i) ->
+                                               ("filter[category__not_in]", tshow i))
+                                            catsMinus)
+                            case cachePeriod wpconf of
+                              NoCache -> return ()
+                              CacheSeconds n ->
+                                void $ lift $ with wordpress $ cacheSet (Just n) cacheKey h
+                              CacheForever ->
+                                void $ lift $ with wordpress $ cacheSet Nothing cacheKey h
+                            lift $ markDoneRunning wordpress cacheKey
+                            return h
      return $ yieldRuntime $
        do res <- getPosts
           case (decodeStrict . T.encodeUtf8 $ res) of
             Just posts -> do let postsW = extractPostIds posts
-                             (Wordpress _ _ _ postSet) <- lift (use (wordpress . snapletValue))
+                             (Wordpress _ _ _ postSet _) <- lift (use (wordpress . snapletValue))
                              let postsND = noDuplicates postSet . take limit $ postsW
                              lift $ addPostIds wordpress (map fst postsND)
                              putPromise promise (map snd postsND)
@@ -280,10 +281,10 @@ instance FromJSON TaxRes where
 lookupTagIds = lookupTaxIds "/taxonomies/post_tag/terms" "tag"
 lookupCategoryIds = lookupTaxIds "/taxonomies/category/terms" "category"
 
-lookupTaxIds :: Text -> Text -> WordpressConfig (Handler b b) -> [TaxSpec] -> IO [TaxSpecId]
+lookupTaxIds :: Text -> Text -> Text -> [TaxSpec] -> IO [TaxSpecId]
 lookupTaxIds _ _ _ [] = return []
-lookupTaxIds url desc conf specs =
-  do res <- W.get $ (T.unpack $ endpoint conf) ++ (T.unpack url)
+lookupTaxIds url desc end specs =
+  do res <- W.get $ (T.unpack end) ++ (T.unpack url)
      let (Just tags) = decode $ res ^. W.responseBody :: Maybe [TaxRes]
      return $ map (getSpecId tags) specs
  where getSpecId tags (TaxPlus slug) = matchWith tags slug TaxPlusId
@@ -311,27 +312,26 @@ extractPostId p = let i = M.lookup "ID" p
 
 addPostIds :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b)) -> [Int] -> Handler b b ()
 addPostIds wordpress ids =
-  do (Wordpress red req act postSet) <- use (wordpress . snapletValue)
+  do (Wordpress red req act postSet conf) <- use (wordpress . snapletValue)
      assign (wordpress . snapletValue)
-            (Wordpress red req act ((`IntSet.union` (IntSet.fromList ids)) <$> postSet))
+            (Wordpress red req act ((`IntSet.union` (IntSet.fromList ids)) <$> postSet) conf)
 
 
-getPost :: WordpressConfig (Handler b b)
-        -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+getPost :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
         -> CacheKey
         -> Handler b b (Maybe Object)
-getPost conf wordpress cacheKey@(PostByPermalinkKey year month slug) =
-  do mres <- case cachePeriod conf of
+getPost wordpress cacheKey@(PostByPermalinkKey year month slug) =
+  do (Wordpress _ req _ posts conf) <- use (wordpress . snapletValue)
+     mres <- case cachePeriod conf of
                NoCache -> return Nothing
                _ -> with wordpress $ cacheLookup cacheKey
      case mres of
        Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
        Nothing ->
-         do (Wordpress _ req _ posts) <- use (wordpress . snapletValue)
-            running <- runningQueryFor wordpress cacheKey
+         do running <- runningQueryFor wordpress cacheKey
             if running
                then do liftIO $ threadDelay 100000
-                       getPost conf wordpress cacheKey
+                       getPost wordpress cacheKey
                else do h <- liftIO $ req (endpoint conf <> "/posts")
                               [("filter[year]",year)
                               ,("filter[monthnum]", month)
@@ -351,7 +351,7 @@ getPost conf wordpress cacheKey@(PostByPermalinkKey year month slug) =
                               return $ Just post
                          _ -> do markDoneRunning wordpress cacheKey
                                  return Nothing
-getPost _ _ key = error $ "getPost: Don't know how to get a post from key: " ++ show key
+getPost _ key = error $ "getPost: Don't know how to get a post from key: " ++ show key
 
 wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
                         -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
@@ -364,7 +364,7 @@ wpPostByPermalinkSplice conf wordpress =
           case mperma of
             Nothing -> codeGen (yieldPureText "")
             Just (year, month, slug) ->
-              do res <- lift $ getPost conf wordpress (PostByPermalinkKey year month slug)
+              do res <- lift $ getPost wordpress (PostByPermalinkKey year month slug)
                  case res of
                    Just post -> do putPromise promise post
                                    codeGen outputChildren
@@ -516,7 +516,7 @@ instance FormatKey CacheKey where
   formatKey (PostKey n) = T.encodeUtf8 $ "wordpress:post:" <> tshow n
 
 cacheLookup :: CacheKey -> Handler b (Wordpress b) (Maybe Text)
-cacheLookup key = do (Wordpress run _ _ _) <- view snapletValue <$> getSnapletState
+cacheLookup key = do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
                      res <- run $ R.get (formatKey key)
                      case res of
                        Right (Just val) ->
@@ -531,7 +531,7 @@ cacheLookup key = do (Wordpress run _ _ _) <- view snapletValue <$> getSnapletSt
 
 cacheSet :: Maybe Int -> CacheKey -> Text -> Handler b (Wordpress b) Bool
 cacheSet cachetime key o =
-  do (Wordpress run _ _ _) <- view snapletValue <$> getSnapletState
+  do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
      res <- case key of
               PostByPermalinkKey{} ->
                 do let (Just p) = decodeStrict . T.encodeUtf8 $ o
@@ -550,7 +550,7 @@ cacheSet cachetime key o =
 
 expireAggregates :: Handler b (Wordpress b) Bool
 expireAggregates =
-  do (Wordpress run _ _ _) <- view snapletValue <$> getSnapletState
+  do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
      do r <- run $ R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:posts:*"]
         case r of
           Left _ -> return False
@@ -558,7 +558,7 @@ expireAggregates =
 
 expirePost :: Int -> Handler b (Wordpress b) Bool
 expirePost n =
-  do (Wordpress run _ _ _) <- view snapletValue <$> getSnapletState
+  do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
      r1 <- run $ R.del [formatKey $ PostKey n]
      case r1 of
        Left _ -> return False
