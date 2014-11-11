@@ -84,10 +84,11 @@ data WordpressConfig m = WordpressConfig { endpoint    :: Text
                                          , requester   :: Maybe (Text -> [(Text, Text)] -> IO Text)
                                          , cachePeriod :: CachePeriod
                                          , extraFields :: [Field m]
+                                         , logger      :: Maybe (Text -> IO ())
                                          }
 
 instance Default (WordpressConfig m) where
-  def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) []
+  def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) [] Nothing
 
 data Wordpress b = Wordpress { runRedis       :: forall a. Redis a -> Handler b (Wordpress b) a
                              , runHTTP        :: Text -> [(Text, Text)] -> IO Text
@@ -114,7 +115,7 @@ initWordpress' wpconf heist redis wordpress =
        req <- case requester wpconf of
                 Nothing -> do u <- liftIO $ C.require conf "username"
                               p <- liftIO $ C.require conf "password"
-                              return $ wreqRequester u p
+                              return $ wreqRequester wpconf u p
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
        return $ Wordpress (withTop' id . R.runRedisDB redis) req active Nothing
@@ -561,13 +562,20 @@ expirePost n =
        Left _ -> return False
        _ -> expireAggregates
 
-wreqRequester :: Text -> Text -> Text -> [(Text, Text)] -> IO Text
-wreqRequester user pass u ps =
+wreqRequester :: WordpressConfig (Handler b b) -> Text -> Text -> Text -> [(Text, Text)] -> IO Text
+wreqRequester conf user pass u ps =
   do let opts = (W.defaults & W.params .~ ps
                             & W.auth .~ W.basicAuth user' pass'
                             )
      -- print (u, ps, view W.headers opts, view W.auth opts)
+     wplog conf $ "wreq: " <> u <> " with params: " <>
+                  (T.intercalate "&" . map (\(a,b) -> a <> "=" <> b) $ ps)
      r <- W.getWith opts (T.unpack u)
      return $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
   where user' = T.encodeUtf8 user
         pass' = T.encodeUtf8 pass
+
+wplog :: WordpressConfig (Handler b b) -> Text -> IO ()
+wplog conf msg = case logger conf of
+                   Nothing -> return ()
+                   Just f -> f msg
