@@ -78,7 +78,7 @@ readSafe = fmap fst . listToMaybe . reads . T.unpack
 tshow :: Show a => a -> Text
 tshow = T.pack . show
 
-data CachePeriod = NoCache | CacheSeconds Int deriving (Show, Eq)
+data CachePeriod = NoCache | CacheSeconds Int | CacheForever deriving (Show, Eq)
 
 data WordpressConfig m = WordpressConfig { endpoint    :: Text
                                          , requester   :: Maybe (Text -> [(Text, Text)] -> IO Text)
@@ -251,7 +251,9 @@ wpPostsSplice conf wordpress =
                                case cachePeriod conf of
                                  NoCache -> return ()
                                  CacheSeconds n ->
-                                   void $ lift $ with wordpress $ cacheSet n cacheKey h
+                                   void $ lift $ with wordpress $ cacheSet (Just n) cacheKey h
+                                 CacheForever ->
+                                   void $ lift $ with wordpress $ cacheSet Nothing cacheKey h
                                lift $ markDoneRunning wordpress cacheKey
                                return h
      return $ yieldRuntime $
@@ -340,7 +342,10 @@ getPost conf wordpress cacheKey@(PostByPermalinkKey year month slug) =
                            do case cachePeriod conf of
                                 NoCache -> return ()
                                 CacheSeconds n ->
-                                  void $ with wordpress $ cacheSet n cacheKey
+                                  void $ with wordpress $ cacheSet (Just n) cacheKey
+                                                                   (TL.toStrict . TL.decodeUtf8 . encode $ post)
+                                CacheForever ->
+                                  void $ with wordpress $ cacheSet Nothing cacheKey
                                                                    (TL.toStrict . TL.decodeUtf8 . encode $ post)
                               markDoneRunning wordpress cacheKey
                               return $ Just post
@@ -523,28 +528,25 @@ cacheLookup key = do (Wordpress run _ _ _) <- view snapletValue <$> getSnapletSt
                                   Right val -> return (T.decodeUtf8 <$> val)
                            _ -> return (Just $ T.decodeUtf8 val)
                        _ -> return Nothing
-cacheSet :: Int -> CacheKey -> Text -> Handler b (Wordpress b) Bool
-cacheSet seconds key o =
+
+cacheSet :: Maybe Int -> CacheKey -> Text -> Handler b (Wordpress b) Bool
+cacheSet cachetime key o =
   do (Wordpress run _ _ _) <- view snapletValue <$> getSnapletState
      res <- case key of
               PostByPermalinkKey{} ->
                 do let (Just p) = decodeStrict . T.encodeUtf8 $ o
                        (i,_) = extractPostId p
-                   r <- run $ R.setex (formatKey $ PostKey i)
-                                      (toInteger seconds)
-                                      (T.encodeUtf8 o)
+                   r <- run $ set cachetime (formatKey $ PostKey i) (T.encodeUtf8 o)
                    case r of
                      Left err -> return r
                      Right _ ->
-                       run $ R.setex (formatKey key)
-                                     (toInteger seconds)
-                                     (formatKey $ PostKey i)
-              _ -> run $ R.setex (formatKey key)
-                                 (toInteger seconds)
-                                 (T.encodeUtf8 o)
+                       run $ set cachetime (formatKey key) (formatKey $ PostKey i)
+              _ -> run $ set cachetime (formatKey key) (T.encodeUtf8 o)
      case res of
        Left err -> return False
        Right val -> return True
+  where set (Just n) k v = R.setex k (toInteger n) v
+        set Nothing k v = R.set k v
 
 expireAggregates :: Handler b (Wordpress b) Bool
 expireAggregates =

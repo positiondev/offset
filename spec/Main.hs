@@ -216,8 +216,8 @@ main = hspec $ do
     describe "should grab post from cache if it's there" $
       let (Object a2) = article2 in
       shouldRenderAtUrlPreCache
-        (void $ with wordpress $ cacheSet 10 (PostByPermalinkKey "2001" "10" "the-post")
-                                             (enc a2))
+        (void $ with wordpress $ cacheSet (Just 10) (PostByPermalinkKey "2001" "10" "the-post")
+                                            (enc a2))
         "/2001/10/the-post/"
         "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
         "The post"
@@ -226,33 +226,33 @@ main = hspec $ do
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` Nothing
     it "should find something if there is a post in cache" $ do
-      eval (with wordpress $ cacheSet 10 (PostByPermalinkKey "2000" "1" "the-article")
+      eval (with wordpress $ cacheSet (Just 10) (PostByPermalinkKey "2000" "1" "the-article")
                                          (enc article1))
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` (Just $ enc article1)
     it "should not find single post after expire handler is called" $
-      do eval (with wordpress $ cacheSet 10 (PostByPermalinkKey "2000" "1" "the-article")
+      do eval (with wordpress $ cacheSet (Just 10) (PostByPermalinkKey "2000" "1" "the-article")
                                             (enc article1))
          eval (with wordpress $ expirePost 1)
          eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
            >>= shouldEqual Nothing
     it "should not find post aggregates after expire handler is called" $
       do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0, PageFilter 1, LimitFilter 20])
-         eval (with wordpress $ cacheSet 10 key ("[" ++ enc article1 ++ "]"))
+         eval (with wordpress $ cacheSet (Just 10) key ("[" ++ enc article1 ++ "]"))
          eval (with wordpress $ expirePost 1)
          eval (with wordpress $ cacheLookup key)
            >>= shouldEqual Nothing
     it "should find single post after expiring aggregates" $
-      do eval (with wordpress $ cacheSet 10 (PostByPermalinkKey "2000" "1" "the-article")
-                                            (enc article1))
+      do eval (with wordpress $ cacheSet (Just 10) (PostByPermalinkKey "2000" "1" "the-article")
+                                           (enc article1))
          eval (with wordpress expireAggregates)
          eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
            >>= shouldNotEqual Nothing
     it "should find a different single post after expiring another" $
       do let key1 = (PostByPermalinkKey "2000" "1" "the-article")
              key2 = (PostByPermalinkKey "2001" "2" "another-article")
-         eval (with wordpress $ cacheSet 10 key1 (enc article1))
-         eval (with wordpress $ cacheSet 10 key2 (enc article2))
+         eval (with wordpress $ cacheSet (Just 10) key1 (enc article1))
+         eval (with wordpress $ cacheSet (Just 10) key2 (enc article2))
          eval (with wordpress $ expirePost 1)
          eval (with wordpress $ cacheLookup key2) >>= shouldEqual (Just (enc article2))
   describe "transformName" $ do
