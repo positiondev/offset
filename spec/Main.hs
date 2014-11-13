@@ -10,6 +10,7 @@ import           Control.Lens                hiding ((.=))
 import           Control.Monad               (join)
 import           Control.Monad.Trans         (liftIO)
 import           Control.Monad.Trans.Either
+import           Control.Concurrent.MVar
 import           Data.Aeson                  hiding (Success)
 import           Data.Default
 import qualified Data.HashMap.Strict         as M
@@ -25,6 +26,7 @@ import qualified Data.Text.Lazy.Encoding     as TL
 import qualified Database.Redis              as R
 import           Heist
 import           Heist.Compiled
+import qualified Misc
 import           Snap                        hiding (get)
 import           Snap.Snaplet.Heist.Compiled
 import           Snap.Snaplet.RedisDB
@@ -52,11 +54,6 @@ instance HasHeist App where
 
 enc a = TL.toStrict . TL.decodeUtf8 . encode $ a
 
-article1 = object [ "ID" .= (1 :: Int)
-                  , "title" .= ("Foo bar" :: Text)
-                  , "excerpt" .= ("summary" :: Text)
-                  ]
-
 article2 = object [ "ID" .= (2 :: Int)
                   , "title" .= ("The post" :: Text)
                   , "excerpt" .= ("summary" :: Text)
@@ -76,131 +73,91 @@ jacobinFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-feat
                                                                                          ,F "height"
                                                                                          ,F "url"]]]]]
 
-app :: [(Text, Text)] -> Maybe (WordpressConfig (Handler App App)) -> SnapletInit App App
-app tmpls mconf = makeSnaplet "app" "An snaplet example application." Nothing $ do
-                     h <- nestSnaplet "" heist $ heistInit "templates"
+renderingApp :: [(Text, Text)] -> Text -> SnapletInit App App
+renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
+                     h <- nestSnaplet "" heist $ heistInit ""
                      addConfig h $ set scTemplateLocations (return templates) mempty
                      r <- nestSnaplet "" redis redisDBInitConf
-                     let conf = fromMaybe (def { endpoint = ""
-                                               , requester = Just fakeRequester
-                                               , cachePeriod = NoCache
-                                               , extraFields = jacobinFields
-                                               })
-                                          mconf
-                     w <- nestSnaplet "" wordpress $ initWordpress' conf
-                                                                    h
-                                                                    redis
-                                                                    wordpress
+                     w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
                      return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
         templates = return $ M.fromList (map mkTmpl tmpls)
+        config = (def { endpoint = ""
+                      , requester = Just (\_ _-> return response)
+                      , cachePeriod = NoCache
+                      , extraFields = jacobinFields})
 
+queryingApp :: [(Text, Text)] -> MVar Text -> SnapletInit App App
+queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." Nothing $ do
+                     h <- nestSnaplet "" heist $ heistInit "templates"
+                     addConfig h $ set scTemplateLocations (return templates) mempty
+                     r <- nestSnaplet "" redis redisDBInitConf
+                     w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
+                     return $ App h r w
+  where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
+                               in ([T.encodeUtf8 name], DocumentFile doc Nothing)
+        templates = return $ M.fromList (map mkTmpl tmpls)
+        config = (def { endpoint = ""
+                      , requester = Just recordingRequester
+                      , cachePeriod = NoCache})
+        recordingRequester url params = do
+          tryPutMVar record $ mkUrlUnescape url params
+          return ""
+        mkUrlUnescape url params = (url <> "?" <> (T.intercalate "&" $ map (\(k, v) -> k <> "=" <> v) params))
+
+cachingApp :: SnapletInit App App
+cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
+                     h <- nestSnaplet "" heist $ heistInit "templates"
+                     r <- nestSnaplet "" redis redisDBInitConf
+                     w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
+                     return $ App h r w
+  where config = (def { endpoint = ""
+                    , requester = Just (\_ _-> return "")
+                    , cachePeriod = CacheSeconds 1})
 
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
 ----------------------------------------------------------
 
-shouldRenderTo :: Text -> Text -> Spec
-shouldRenderTo = shouldRenderToPred T.isInfixOf
-
-shouldRenderToExact :: Text -> Text -> Spec
-shouldRenderToExact = shouldRenderToPred (==)
-
-shouldRenderToPred :: (Text -> Text -> Bool) -> Text -> Text -> Spec
-shouldRenderToPred pred tags match =
-  snap (route []) (app [("test", tags)] Nothing) $
-    it (T.unpack $ tags ++ " should render to contain " ++ match) $
+shouldRenderTo :: (Text, Text) -> Text -> Spec
+shouldRenderTo (tags, response) match =
+  snap (route []) (renderingApp [("test", tags)] response) $
+    it (T.unpack $ tags ++ " should render to match " ++ match) $
       do t <- eval (do st <- getHeistState
                        builder <- (fst.fromJust) $ renderTemplate st "test"
                        return $ T.decodeUtf8 $ toByteString builder)
-         if pred match t
-           then setResult Success
-            else setResult (Fail "Didn't contain.")
-
-shouldRenderAtUrl :: Text -> Text -> Text -> Spec
-shouldRenderAtUrl = shouldRenderAtUrlPre (return ())
-
-shouldRenderAtUrlPre :: Handler App App () -> Text -> Text -> Text -> Spec
-shouldRenderAtUrlPre act url tags match =
-  snap (route [(T.encodeUtf8 url, h)]) (app [("test", tags)]
-                                            (Just def { requester = Just fakeRequester
-                                                      , endpoint = ""
-                                                      , cachePeriod = NoCache
-                                                      })) $
-    it (T.unpack $ "rendered with url " ++ url ++  ", should contain " ++ match) $
-      do eval act
-         get url >>= shouldHaveText match
-  where h = do st <- getHeistState
-               render "test"
-
-shouldRenderAtUrlPreCache :: Handler App App () -> Text -> Text -> Text -> Spec
-shouldRenderAtUrlPreCache act url tags match =
-  snap (route [(T.encodeUtf8 url, h)]) (app [("test", tags)]
-                                            (Just def { requester = Just fakeRequester
-                                                      , endpoint = ""
-                                                      })) $
-    it (T.unpack $ "rendered with url " ++ url ++  ", should contain " ++ match) $
-      do eval act
-         get url >>= shouldHaveText match
-  where h = do st <- getHeistState
-               render "test"
+         setResult $
+           if match == t
+             then Success
+             else Fail (show t <> " didn't match " <> show match)
 
 clearRedisCache :: Handler App App (Either R.Reply Integer)
 clearRedisCache = runRedisDB redis (R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:*"])
 
-shouldTransformTo :: Text -> Text -> Spec
-shouldTransformTo from to =
-  it (T.unpack ("should convert " ++ from ++ " to " ++ to)) $ transformName from `shouldBe` to
-
--- NOTE(dbp 2014-11-07): We define equality that is 'good enough' for testing.
--- In truth, our definition is wrong because of the functions inside of 'P' variants.
-instance (Functor m, Monad m) =>  Eq (Field m) where
-  F t1 == F t2 = t1 == t2
-  P t1 _ == P t2 _ = t1 == t2
-  N t1 n1 == N t2 n2 = t1 == t2 && n1 == n2
-  M t1 m1 == M t2 m2 = t1 == t2 && m1 == m2
+article1 :: Value
+article1 = object [ "ID" .= ("1" :: Text)
+                  , "title" .= ("Foo bar" :: Text)
+                  , "excerpt" .= ("summary" :: Text)
+                  ]
 
 main :: IO ()
 main = hspec $ do
-  describe "mergeFields" $ do
-    it "should be able to right-bias merge two Field trees" $
-      mergeFields [F "ID", F "status"] ([P "status" undefined] :: [Field IO])
-        `shouldBe` [F "ID", P "status" undefined]
-    it "should be able to override nested fields" $
-      mergeFields [N "status" [F "foo"]] ([N "status" [P "foo" undefined]] :: [Field IO])
-        `shouldBe` [N "status" [P "foo" undefined]]
-    it "should be able to override nested fields, but not lose unaffected ones" $
-      mergeFields [N "status" [F "foo", F "bar"]] ([N "status" [M "foo" []]] :: [Field IO])
-        `shouldBe` [N "status" [M "foo" [], F "bar"]]
-    it "should not change order of fields in left" $
-      mergeFields [F "ID", F "status"] ([F "status", F "ID"] :: [Field IO])
-        `shouldBe` [F "ID", F "status"]
-    it "should be able to override nested with flat" $
-      mergeFields [N "status" [F "foo", F "bar"]] ([F "status"] :: [Field IO])
-        `shouldBe` [F "status"]
-    it "should be able to override flat with nested" $
-      mergeFields ([F "status"] :: [Field IO]) [N "status" [F "foo", F "bar"]]
-        `shouldBe` [N "status" [F "foo", F "bar"]]
-    it "should be able to add to elements nested" $
-      mergeFields ([N "featured_image" [N "attachment_meta" [F "standard"]]] :: [Field IO])
-                  [N "featured_image" [N "attachment_meta" [F "mag-featured"]]]
-        `shouldBe` [N "featured_image" [N "attachment_meta" [F "standard"
-                                                            ,F "mag-featured"]]]
+  Misc.tests
   describe "<wpPosts>" $ do
-    "<wpPosts><wpTitle/></wpPosts>" `shouldRenderTo` "Foo bar"
-    "<wpPosts><wpID/></wpPosts>" `shouldRenderTo` "1"
-    "<wpPosts><wpExcerpt/></wpPosts>" `shouldRenderTo` "summary"
+    ("<wpPosts><wpTitle/></wpPosts>", enc [article1]) `shouldRenderTo` "Foo bar"
+    ("<wpPosts><wpID/></wpPosts>", enc [article1]) `shouldRenderTo` "1"
+    ("<wpPosts><wpExcerpt/></wpPosts>", enc [article1]) `shouldRenderTo` "summary"
   describe "<wpNoPostDuplicates/>" $ do
-    "<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>"
-      `shouldRenderToExact` "Foo bar"
-    "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts>"
-      `shouldRenderToExact` "Foo barFoo bar"
-    "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>"
-      `shouldRenderToExact` "Foo barFoo bar"
-    "<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>"
-      `shouldRenderToExact` "Foo barFoo bar"
-  describe "<wpPostByPermalink>" $ do
+    ("<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>", enc [article1])
+      `shouldRenderTo` "Foo bar"
+    ("<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts>", enc [article1])
+      `shouldRenderTo` "Foo barFoo bar"
+    ("<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>", enc [article1])
+      `shouldRenderTo` "Foo barFoo bar"
+    ("<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>", enc [article1])
+      `shouldRenderTo` "Foo barFoo bar"
+{-  describe "<wpPostByPermalink>" $ do
     shouldRenderAtUrl "/2009/10/the-post/"
                       "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
                       "The post"
@@ -212,16 +169,16 @@ main = hspec $ do
                       "The post"
     shouldRenderAtUrl "/2009/10/the-post/"
                       "<wpPostByPermalink><wpTitle/>: <wpExcerpt/></wpPostByPermalink>"
-                      "The post: summary"
-    describe "should grab post from cache if it's there" $
+                      "The post: summary" -}
+{-    describe "should grab post from cache if it's there" $
       let (Object a2) = article2 in
       shouldRenderAtUrlPreCache
         (void $ with wordpress $ cacheSet (Just 10) (PostByPermalinkKey "2001" "10" "the-post")
                                             (enc a2))
         "/2001/10/the-post/"
         "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
-        "The post"
-  describe "caching" $ snap (route []) (app [] Nothing) $ afterEval (void clearRedisCache) $ do
+        "The post" -}
+  describe "caching" $ snap (route []) cachingApp $ afterEval (void clearRedisCache) $ do
     it "should find nothing for a non-existent post" $ do
       p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` Nothing
@@ -255,59 +212,67 @@ main = hspec $ do
          eval (with wordpress $ cacheSet (Just 10) key2 (enc article2))
          eval (with wordpress $ expirePost 1)
          eval (with wordpress $ cacheLookup key2) >>= shouldEqual (Just (enc article2))
-  describe "transformName" $ do
-    "ID" `shouldTransformTo` "wpID"
-    "title" `shouldTransformTo` "wpTitle"
-    "post_tag" `shouldTransformTo` "wpPostTag"
-    "mag-featured" `shouldTransformTo` "wpMagFeatured"
-  describe "tag-specs" $ do
-    it "should parse bare tag plus" $
-      read "foo-bar" `shouldBe` (TaxPlus "foo-bar")
-    it "should parse tag plus" $
-      read "+foo-bar" `shouldBe` (TaxPlus "foo-bar")
-    it "should parse tag minus" $
-      read "-foo-bar" `shouldBe` (TaxMinus "foo-bar")
-    it "should parse a list" $
-      read "foo-bar,baz" `shouldBe` (TaxSpecList [TaxPlus "foo-bar", TaxPlus "baz"])
-    it "should parse a list with mixed pluses and minuses" $
-      read "+foo-bar,-baz,-qux" `shouldBe`
-        (TaxSpecList [TaxPlus "foo-bar", TaxMinus "baz", TaxMinus "qux"])
-    it "should round trip tag plus" $
-      show (read "+foo-bar" :: TaxSpec) `shouldBe` "+foo-bar"
-    it "should round trip tag minus" $
-      show (read "-foo-bar" :: TaxSpec) `shouldBe` "-foo-bar"
-    it "should add plus to bare tag plus when round tripping" $
-      show (read "foo-bar" :: TaxSpec) `shouldBe` "+foo-bar"
-    it "should round trip list" $
-      show (read "+foo-bar,-baz,-qux" :: TaxSpecList) `shouldBe` "+foo-bar,-baz,-qux"
-    it "should add plus to bare tag pluses in list roundtrip" $
-      show (read "foo-bar,-baz,-qux" :: TaxSpecList) `shouldBe` "+foo-bar,-baz,-qux"
+
+  describe "generate queries from <wpPosts>" $ do
+    shouldQueryTo
+      "<wpPosts></wpPosts>"
+      "/posts?filter[posts_per_page]=20&filter[offset]=0"
+    shouldQueryTo
+      "<wpPosts limit=2></wpPosts>"
+      "/posts?filter[posts_per_page]=20&filter[offset]=0"
+    shouldQueryTo
+      "<wpPosts offset=1 limit=1></wpPosts>"
+      "/posts?filter[posts_per_page]=20&filter[offset]=1"
+    shouldQueryTo
+      "<wpPosts offset=0 limit=1></wpPosts>"
+      "/posts?filter[posts_per_page]=20&filter[offset]=0"
+    shouldQueryTo
+      "<wpPosts limit=10 page=1></wpPosts>"
+      "/posts?filter[posts_per_page]=20&filter[offset]=0"
+    shouldQueryTo
+      "<wpPosts limit=10 page=2></wpPosts>"
+      "/posts?filter[posts_per_page]=20&filter[offset]=20"
+    shouldQueryTo
+      "<wpPosts num=2></wpPosts>"
+      "/posts?filter[posts_per_page]=2&filter[offset]=0"
+    shouldQueryTo
+      "<wpPosts num=2 page=2 limit=1></wpPosts>"
+      "/posts?filter[posts_per_page]=2&filter[offset]=2"
+    shouldQueryTo
+      "<wpPosts num=1 page=3></wpPosts>"
+      "/posts?filter[posts_per_page]=1&filter[offset]=2"
+
+shouldQueryTo :: Text -> Text -> Spec
+shouldQueryTo hQuery wpQuery = do
+  record <- runIO newEmptyMVar
+  snap (route []) (queryingApp [("x", hQuery)] record) $
+    it ("query from " <> T.unpack hQuery) $ do
+      eval $ render "x"
+      x <- liftIO $ tryTakeMVar record
+      x `shouldEqual` Just wpQuery
+
+
+
+
+{-     ,("tag1", "<wpPosts tags=\"home-featured\" limit=10><wpTitle/></wpPosts>")
+              ,("tag2", "<wpPosts limit=10><wpTitle/></wpPosts>")
+              ,("tag3", "<wpPosts tags=\"+home-featured\" limit=10><wpTitle/></wpPosts>")
+              ,("tag4", "<wpPosts tags=\"-home-featured\" limit=1><wpTitle/></wpPosts>")
+              ,("tag5", "<wpPosts tags=\"+home-featured\" limit=1><wpTitle/></wpPosts>")
+              ,("tag6", "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>")
+              ,("tag7", "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>")
+              ,("cat1", "<wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts>")
+              ,("cat2", "<wpPosts limit=10><wpTitle/></wpPosts>")
+              ,("cat3", "<wpPosts categories=\"-bookmarx\" limit=10><wpTitle/></wpPosts>")
+              ,("author-date", "<wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink>")
+              ,("fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
+              ,("extra-fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
 
   describe "live tests (which require config file w/ user and pass to sandbox.jacobinmag.com)" $
     snap (route [("/2014/10/a-war-for-power", render "single")
-                ,("/many", render "many")
-                ,("/many2", render "many2")
-                ,("/many3", render "many3")
-                ,("/page1", render "page1")
-                ,("/page2", render "page2")
-                ,("/num1", render "num1")
-                ,("/num2", render "num2")
-                ,("/num3", render "num3")
-                ,("/tag1", render "tag1")
-                ,("/tag2", render "tag2")
-                ,("/tag3", render "tag3")
-                ,("/tag4", render "tag4")
-                ,("/tag5", render "tag5")
-                ,("/tag6", render "tag6")
-                ,("/tag7", render "tag7")
-                ,("/cat1", render "cat1")
-                ,("/cat2", render "cat2")
-                ,("/cat3", render "cat3")
                 ,("/2014/10/the-assassination-of-detroit/", render "author-date")
-                ,("/fields", render "fields")
-                ,("/extra-fields", render "extra-fields")
                 ])
-         (app [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
+         (queryingApp [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
               ,("many", "<wpPosts limit=2><wpTitle/></wpPosts>")
               ,("many1", "<wpPosts><wpTitle/></wpPosts>")
               ,("many2", "<wpPosts offset=1 limit=1><wpTitle/></wpPosts>")
@@ -331,9 +296,9 @@ main = hspec $ do
               ,("fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
               ,("extra-fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
               ]
-              (Just $ def { cachePeriod = NoCache
+              def { cachePeriod = NoCache
                           , endpoint = "https://sandbox.jacobinmag.com/wp-json"
-                          , extraFields = jacobinFields })) $
+                          , extraFields = jacobinFields }) $
       do it "should have title on page" $
            get "/2014/10/a-war-for-power" >>= shouldHaveText "A War for Power"
          it "should not have most recent post's title" $
@@ -379,3 +344,4 @@ main = hspec $ do
          it "should be able to use extra fields set in application" $
            do get "/fields" >>= shouldHaveText "https://"
               get "/extra-fields" >>= shouldHaveText "https://"
+-}
