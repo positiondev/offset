@@ -39,7 +39,7 @@ import           Data.Default
 import qualified Data.HashMap.Strict      as M
 import           Data.IntSet              (IntSet)
 import qualified Data.IntSet              as IntSet
-import           Data.List                (intercalate, partition)
+import           Data.List                (intercalate)
 import           Data.Map                 (Map)
 import qualified Data.Map                 as Map
 import           Data.Map.Syntax
@@ -469,21 +469,17 @@ instance Show Filter where
   show (NumFilter n) = "num_" ++ show n
   show (OffsetFilter n) = "offset_" ++ show n
 
-class FormatKey a where
-  formatKey :: a -> ByteString
-
 data CacheKey = PostKey Int
               | PostByPermalinkKey Year Month Slug
               | PostsKey (Set Filter)
               deriving (Eq, Show, Ord)
 
-
-instance FormatKey CacheKey where
-  formatKey (PostByPermalinkKey y m s) =
+formatKey :: CacheKey -> ByteString
+formatKey (PostByPermalinkKey y m s) =
     T.encodeUtf8 $ "wordpress:post_perma:" <> y <> "_" <> m <> "_" <> s
-  formatKey (PostsKey filters) =
+formatKey (PostsKey filters) =
     T.encodeUtf8 $ "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
-  formatKey (PostKey n) = T.encodeUtf8 $ "wordpress:post:" <> tshow n
+formatKey (PostKey n) = T.encodeUtf8 $ "wordpress:post:" <> tshow n
 
 cacheLookup :: CacheKey -> Handler b (Wordpress b) (Maybe Text)
 cacheLookup key = do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
