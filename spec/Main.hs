@@ -194,7 +194,7 @@ main = hspec $ do
          eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
            >>= shouldEqual Nothing
     it "should not find post aggregates after expire handler is called" $
-      do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0, PageFilter 1, LimitFilter 20])
+      do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
          eval (with wordpress $ cacheSet (Just 10) key ("[" ++ enc article1 ++ "]"))
          eval (with wordpress $ expirePost 1)
          eval (with wordpress $ cacheLookup key)

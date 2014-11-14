@@ -187,6 +187,8 @@ markDoneRunning cacheKey =
   do (Wordpress _ _ act _ _) <- view snapletValue <$> getSnapletState
      liftIO $ modifyMVar_ act $ return .    Map.delete cacheKey
 
+--constructPostCacheKey :: Maybe Int -> Maybe Int -> Maybe Int -> Maybe Int -> Maybe TaxSpecList -> [(Int, Text)] -> Maybe TaxSpecList -> [(Int, Text)] -> CacheKey
+
 wpPostsSplice :: WordpressConfig (Handler b b)
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
               -> Splice (Handler b b)
@@ -201,23 +203,12 @@ wpPostsSplice wpconf wordpress =
          page' = (fromMaybe 1 $ readSafe =<< X.getAttribute "page" n) :: Int
          page = if page' < 1 then 1 else page'
          offset = num * (page - 1) + offset'
-         tags' = unTaxSpecList (fromMaybe (TaxSpecList []) $
-                                readSafe =<< X.getAttribute "tags" n)
-         cats' = unTaxSpecList (fromMaybe (TaxSpecList []) $
-                                readSafe =<< X.getAttribute "categories" n)
-     (tagsPlus, tagsMinus) <- partition (\t -> case t of
-                                                 (TaxPlusId _) -> True
-                                                 (TaxMinusId _) -> False) <$>
-                                (lift $ lookupTagIds (endpoint wpconf) tags')
-     (catsPlus, catsMinus) <- partition (\t -> case t of
-                                                  (TaxPlusId _) -> True
-                                                  (TaxMinusId _) -> False) <$>
-                                      (lift $ lookupCategoryIds (endpoint wpconf) cats')
-     let cacheKey = PostsKey (Set.fromList $ [ LimitFilter limit
-                                             , NumFilter num
-                                             , OffsetFilter offset
-                                             , PageFilter page
-                                             ] ++ map TagFilter tags' ++ map CatFilter cats')
+         tags' = unTaxSpecList (fromMaybe (TaxSpecList []) $ readSafe =<< X.getAttribute "tags" n)
+         cats' = unTaxSpecList (fromMaybe (TaxSpecList []) $ readSafe =<< X.getAttribute "categories" n)
+     tags <- lift $ lookupTagIds (endpoint wpconf) tags'
+     cats <- lift $ lookupCategoryIds (endpoint wpconf) cats'
+     let cacheKey = PostsKey (Set.fromList $ [ NumFilter num , OffsetFilter offset]
+                              ++ map TagFilter tags ++ map CatFilter cats)
      let getPosts =
           do (Wordpress _ req _ _ _) <- lift $ use (wordpress . snapletValue)
              cached <- case cachePeriod wpconf of
@@ -231,22 +222,10 @@ wpPostsSplice wpconf wordpress =
                        then do liftIO $ threadDelay 100000
                                getPosts
                        else
-                         do h <- liftIO $
-                              req (endpoint wpconf <> "/posts") $
-                                  [("filter[posts_per_page]", tshow num)
-                                  ,("filter[offset]", tshow offset)
-                                  ] ++ (map (\(TaxPlusId i) ->
-                                              ("filter[tag__in]", tshow i))
-                                            tagsPlus)
-                                    ++ (map (\(TaxMinusId i) ->
-                                               ("filter[tag__not_in]", tshow i))
-                                            tagsMinus)
-                                    ++ (map (\(TaxPlusId i) ->
-                                               ("filter[category__in]", tshow i))
-                                            catsPlus)
-                                    ++ (map (\(TaxMinusId i) ->
-                                               ("filter[category__not_in]", tshow i))
-                                            catsMinus)
+                         do let endpt = endpoint wpconf
+                                (url, params) = buildUrl endpt cacheKey
+                            h <- liftIO $
+                              req url params
                             case cachePeriod wpconf of
                               NoCache -> return ()
                               CacheSeconds n ->
@@ -269,6 +248,15 @@ wpPostsSplice wpconf wordpress =
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
 
+buildUrl :: Text -> CacheKey -> (Text, [(Text, Text)])
+buildUrl endpt (PostsKey filters) = ((endpt <> "/posts"), params)
+  where params = Set.toList $ Set.map mkFilter filters
+        mkFilter (TagFilter (TaxPlusId i)) = ("filter[tag__in]", tshow i)
+        mkFilter (TagFilter (TaxMinusId i)) = ("filter[tag__not_in]", tshow i)
+        mkFilter (CatFilter (TaxPlusId i)) = ("filter[category__in]", tshow i)
+        mkFilter (CatFilter (TaxMinusId i)) = ("filter[category__not_in]", tshow i)
+        mkFilter (NumFilter num) = ("filter[posts_per_page]", tshow num)
+        mkFilter (OffsetFilter offset) = ("filter[offset]", tshow offset)
 
 newtype TaxRes = TaxRes (Int, Text)
 
@@ -480,12 +468,10 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
 type Year = Text
 type Month = Text
 type Slug = Text
-data Filter = TagFilter TaxSpec
-            | CatFilter TaxSpec
+data Filter = TagFilter TaxSpecId
+            | CatFilter TaxSpecId
             | NumFilter Int
             | OffsetFilter Int
-            | PageFilter Int
-            | LimitFilter Int
             deriving (Eq, Ord)
 
 instance Show Filter where
@@ -493,8 +479,6 @@ instance Show Filter where
   show (CatFilter t) = "cat_" ++ show t
   show (NumFilter n) = "num_" ++ show n
   show (OffsetFilter n) = "offset_" ++ show n
-  show (PageFilter n) = "page_" ++ show n
-  show (LimitFilter n) = "limit_" ++ show n
 
 class FormatKey a where
   formatKey :: a -> ByteString
