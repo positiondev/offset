@@ -6,7 +6,7 @@
 module Snap.Snaplet.Wordpress (
    Wordpress(..)
  , WordpressConfig(..)
- , CachePeriod(..)
+ , CacheBehavior(..)
  , initWordpress
  , initWordpress'
  , getPost
@@ -78,11 +78,11 @@ readSafe = fmap fst . listToMaybe . reads . T.unpack
 tshow :: Show a => a -> Text
 tshow = T.pack . show
 
-data CachePeriod = NoCache | CacheSeconds Int | CacheForever deriving (Show, Eq)
+data CacheBehavior = NoCache | CacheSeconds Int | CacheForever deriving (Show, Eq)
 
 data WordpressConfig m = WordpressConfig { endpoint    :: Text
                                          , requester   :: Maybe (Text -> [(Text, Text)] -> IO Text)
-                                         , cachePeriod :: CachePeriod
+                                         , cachePeriod :: CacheBehavior
                                          , extraFields :: [Field m]
                                          , logger      :: Maybe (Text -> IO ())
                                          }
@@ -224,14 +224,9 @@ wpPostsSplice wpconf wordpress =
                        else
                          do let endpt = endpoint wpconf
                                 (url, params) = buildUrl endpt cacheKey
-                            h <- liftIO $
-                              req url params
-                            case cachePeriod wpconf of
-                              NoCache -> return ()
-                              CacheSeconds n ->
-                                void $ lift $ with wordpress $ cacheSet (Just n) cacheKey h
-                              CacheForever ->
-                                void $ lift $ with wordpress $ cacheSet Nothing cacheKey h
+                                cp = cachePeriod wpconf
+                            h <- liftIO $ req url params
+                            lift $ with wordpress $ cacheSet' cp cacheKey h
                             lift $ with wordpress $ markDoneRunning cacheKey
                             return h
      return $ yieldRuntime $
@@ -324,14 +319,8 @@ getPost cacheKey@(PostByPermalinkKey year month slug) =
                        let post' = decodeStrict . T.encodeUtf8 $ h
                        case post' of
                          Just (post:_) ->
-                           do case cachePeriod conf of
-                                NoCache -> return ()
-                                CacheSeconds n ->
-                                  void $ cacheSet (Just n) cacheKey
-                                                  (TL.toStrict . TL.decodeUtf8 . encode $ post)
-                                CacheForever ->
-                                  void $ cacheSet Nothing cacheKey
-                                                  (TL.toStrict . TL.decodeUtf8 . encode $ post)
+                           do cacheSet' (cachePeriod conf) cacheKey
+                                (TL.toStrict . TL.decodeUtf8 . encode $ post)
                               markDoneRunning cacheKey
                               return $ Just post
                          _ -> do markDoneRunning cacheKey
@@ -509,6 +498,11 @@ cacheLookup key = do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnaplet
                                   Right val -> return (T.decodeUtf8 <$> val)
                            _ -> return (Just $ T.decodeUtf8 val)
                        _ -> return Nothing
+
+cacheSet' :: CacheBehavior -> CacheKey -> Text -> Handler b (Wordpress b) ()
+cacheSet' NoCache _ _ = return ()
+cacheSet' (CacheSeconds n) b c = void $ cacheSet (Just n) b c
+cacheSet' (CacheForever) b c = void $ cacheSet Nothing b c
 
 cacheSet :: Maybe Int -> CacheKey -> Text -> Handler b (Wordpress b) Bool
 cacheSet cachetime key o =
