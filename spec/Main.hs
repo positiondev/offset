@@ -50,7 +50,7 @@ data App = App { _heist     :: Snaplet (Heist App)
 makeLenses ''App
 
 instance HasHeist App where
-    heistLens = subSnaplet heist
+  heistLens = subSnaplet heist
 
 enc a = TL.toStrict . TL.decodeUtf8 . encode $ a
 
@@ -58,13 +58,6 @@ article2 = object [ "ID" .= (2 :: Int)
                   , "title" .= ("The post" :: Text)
                   , "excerpt" .= ("summary" :: Text)
                   ]
-
-fakeRequester "/posts" ps | length (ps `intersect` [ ("filter[year]", "2009")
-                                                   , ("filter[monthnum]", "10")
-                                                   , ("filter[name]", "the-post")]) == 3 =
-  return $ enc [article2]
-fakeRequester "/posts" _ = return $ enc [article1]
-fakeRequester a b = error $ show a ++ show b
 
 jacobinFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-featured" [F "width"
                                                                                       ,F "height"
@@ -75,32 +68,32 @@ jacobinFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-feat
 
 renderingApp :: [(Text, Text)] -> Text -> SnapletInit App App
 renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
-                     h <- nestSnaplet "" heist $ heistInit ""
-                     addConfig h $ set scTemplateLocations (return templates) mempty
-                     r <- nestSnaplet "" redis redisDBInitConf
-                     w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
-                     return $ App h r w
+  h <- nestSnaplet "" heist $ heistInit ""
+  addConfig h $ set scTemplateLocations (return templates) mempty
+  r <- nestSnaplet "" redis redisDBInitConf
+  w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
+  return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
         templates = return $ M.fromList (map mkTmpl tmpls)
         config = (def { endpoint = ""
                       , requester = Just (\_ _-> return response)
-                      , cachePeriod = NoCache
+                      , cacheBehavior = NoCache
                       , extraFields = jacobinFields})
 
 queryingApp :: [(Text, Text)] -> MVar Text -> SnapletInit App App
 queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." Nothing $ do
-                     h <- nestSnaplet "" heist $ heistInit "templates"
-                     addConfig h $ set scTemplateLocations (return templates) mempty
-                     r <- nestSnaplet "" redis redisDBInitConf
-                     w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
-                     return $ App h r w
+  h <- nestSnaplet "" heist $ heistInit "templates"
+  addConfig h $ set scTemplateLocations (return templates) mempty
+  r <- nestSnaplet "" redis redisDBInitConf
+  w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
+  return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
         templates = return $ M.fromList (map mkTmpl tmpls)
         config = (def { endpoint = ""
                       , requester = Just recordingRequester
-                      , cachePeriod = NoCache})
+                      , cacheBehavior = NoCache})
         recordingRequester url params = do
           tryPutMVar record $ mkUrlUnescape url params
           return ""
@@ -108,13 +101,13 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
 
 cachingApp :: SnapletInit App App
 cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
-                     h <- nestSnaplet "" heist $ heistInit "templates"
-                     r <- nestSnaplet "" redis redisDBInitConf
-                     w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
-                     return $ App h r w
+  h <- nestSnaplet "" heist $ heistInit "templates"
+  r <- nestSnaplet "" redis redisDBInitConf
+  w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
+  return $ App h r w
   where config = (def { endpoint = ""
-                    , requester = Just (\_ _-> return "")
-                    , cachePeriod = CacheSeconds 1})
+                      , requester = Just (\_ _-> return "")
+                      , cacheBehavior = CacheSeconds 1})
 
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
@@ -180,30 +173,30 @@ main = hspec $ do
         "The post" -}
   describe "caching" $ snap (route []) cachingApp $ afterEval (void clearRedisCache) $ do
     it "should find nothing for a non-existent post" $ do
-      p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
+      p <- eval (with wordpress $ cacheGet (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` Nothing
     it "should find something if there is a post in cache" $ do
       eval (with wordpress $ cacheSet (Just 10) (PostByPermalinkKey "2000" "1" "the-article")
                                          (enc article1))
-      p <- eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
+      p <- eval (with wordpress $ cacheGet (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` (Just $ enc article1)
     it "should not find single post after expire handler is called" $
       do eval (with wordpress $ cacheSet (Just 10) (PostByPermalinkKey "2000" "1" "the-article")
                                             (enc article1))
          eval (with wordpress $ expirePost 1)
-         eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
+         eval (with wordpress $ cacheGet (PostByPermalinkKey "2000" "1" "the-article"))
            >>= shouldEqual Nothing
     it "should not find post aggregates after expire handler is called" $
       do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
          eval (with wordpress $ cacheSet (Just 10) key ("[" ++ enc article1 ++ "]"))
          eval (with wordpress $ expirePost 1)
-         eval (with wordpress $ cacheLookup key)
+         eval (with wordpress $ cacheGet key)
            >>= shouldEqual Nothing
     it "should find single post after expiring aggregates" $
       do eval (with wordpress $ cacheSet (Just 10) (PostByPermalinkKey "2000" "1" "the-article")
                                            (enc article1))
          eval (with wordpress expireAggregates)
-         eval (with wordpress $ cacheLookup (PostByPermalinkKey "2000" "1" "the-article"))
+         eval (with wordpress $ cacheGet (PostByPermalinkKey "2000" "1" "the-article"))
            >>= shouldNotEqual Nothing
     it "should find a different single post after expiring another" $
       do let key1 = (PostByPermalinkKey "2000" "1" "the-article")
@@ -211,36 +204,36 @@ main = hspec $ do
          eval (with wordpress $ cacheSet (Just 10) key1 (enc article1))
          eval (with wordpress $ cacheSet (Just 10) key2 (enc article2))
          eval (with wordpress $ expirePost 1)
-         eval (with wordpress $ cacheLookup key2) >>= shouldEqual (Just (enc article2))
+         eval (with wordpress $ cacheGet key2) >>= shouldEqual (Just (enc article2))
 
   describe "generate queries from <wpPosts>" $ do
     shouldQueryTo
       "<wpPosts></wpPosts>"
-      "/posts?filter[posts_per_page]=20&filter[offset]=0"
+      "/posts?filter[offset]=0&filter[posts_per_page]=20"
     shouldQueryTo
       "<wpPosts limit=2></wpPosts>"
-      "/posts?filter[posts_per_page]=20&filter[offset]=0"
+      "/posts?filter[offset]=0&filter[posts_per_page]=20"
     shouldQueryTo
       "<wpPosts offset=1 limit=1></wpPosts>"
-      "/posts?filter[posts_per_page]=20&filter[offset]=1"
+      "/posts?filter[offset]=1&filter[posts_per_page]=20"
     shouldQueryTo
       "<wpPosts offset=0 limit=1></wpPosts>"
-      "/posts?filter[posts_per_page]=20&filter[offset]=0"
+      "/posts?filter[offset]=0&filter[posts_per_page]=20"
     shouldQueryTo
       "<wpPosts limit=10 page=1></wpPosts>"
-      "/posts?filter[posts_per_page]=20&filter[offset]=0"
+      "/posts?filter[offset]=0&filter[posts_per_page]=20"
     shouldQueryTo
       "<wpPosts limit=10 page=2></wpPosts>"
-      "/posts?filter[posts_per_page]=20&filter[offset]=20"
+      "/posts?filter[offset]=20&filter[posts_per_page]=20"
     shouldQueryTo
       "<wpPosts num=2></wpPosts>"
-      "/posts?filter[posts_per_page]=2&filter[offset]=0"
+      "/posts?filter[offset]=0&filter[posts_per_page]=2"
     shouldQueryTo
       "<wpPosts num=2 page=2 limit=1></wpPosts>"
-      "/posts?filter[posts_per_page]=2&filter[offset]=2"
+      "/posts?filter[offset]=2&filter[posts_per_page]=2"
     shouldQueryTo
       "<wpPosts num=1 page=3></wpPosts>"
-      "/posts?filter[posts_per_page]=1&filter[offset]=2"
+      "/posts?filter[offset]=2&filter[posts_per_page]=1"
 
 shouldQueryTo :: Text -> Text -> Spec
 shouldQueryTo hQuery wpQuery = do
@@ -250,9 +243,6 @@ shouldQueryTo hQuery wpQuery = do
       eval $ render "x"
       x <- liftIO $ tryTakeMVar record
       x `shouldEqual` Just wpQuery
-
-
-
 
 {-     ,("tag1", "<wpPosts tags=\"home-featured\" limit=10><wpTitle/></wpPosts>")
               ,("tag2", "<wpPosts limit=10><wpTitle/></wpPosts>")
@@ -267,7 +257,7 @@ shouldQueryTo hQuery wpQuery = do
               ,("author-date", "<wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink>")
               ,("fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
               ,("extra-fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
-
+-}
   describe "live tests (which require config file w/ user and pass to sandbox.jacobinmag.com)" $
     snap (route [("/2014/10/a-war-for-power", render "single")
                 ,("/2014/10/the-assassination-of-detroit/", render "author-date")
@@ -296,9 +286,7 @@ shouldQueryTo hQuery wpQuery = do
               ,("fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
               ,("extra-fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
               ]
-              def { cachePeriod = NoCache
-                          , endpoint = "https://sandbox.jacobinmag.com/wp-json"
-                          , extraFields = jacobinFields }) $
+          ) $
       do it "should have title on page" $
            get "/2014/10/a-war-for-power" >>= shouldHaveText "A War for Power"
          it "should not have most recent post's title" $
@@ -344,4 +332,3 @@ shouldQueryTo hQuery wpQuery = do
          it "should be able to use extra fields set in application" $
            do get "/fields" >>= shouldHaveText "https://"
               get "/extra-fields" >>= shouldHaveText "https://"
--}

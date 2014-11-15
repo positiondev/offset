@@ -12,7 +12,7 @@ module Snap.Snaplet.Wordpress (
  , getPost
  , CacheKey(..)
  , Filter(..)
- , cacheLookup
+ , cacheGet
  , cacheSet
  , expirePost
  , expireAggregates
@@ -82,7 +82,7 @@ data CacheBehavior = NoCache | CacheSeconds Int | CacheForever deriving (Show, E
 
 data WordpressConfig m = WordpressConfig { endpoint    :: Text
                                          , requester   :: Maybe (Text -> [(Text, Text)] -> IO Text)
-                                         , cachePeriod :: CacheBehavior
+                                         , cacheBehavior :: CacheBehavior
                                          , extraFields :: [Field m]
                                          , logger      :: Maybe (Text -> IO ())
                                          }
@@ -207,13 +207,10 @@ wpPostsSplice wpconf wordpress =
          cats' = unTaxSpecList (fromMaybe (TaxSpecList []) $ readSafe =<< X.getAttribute "categories" n)
      tags <- lift $ lookupTagIds (endpoint wpconf) tags'
      cats <- lift $ lookupCategoryIds (endpoint wpconf) cats'
-     let cacheKey = PostsKey (Set.fromList $ [ NumFilter num , OffsetFilter offset]
-                              ++ map TagFilter tags ++ map CatFilter cats)
-     let getPosts =
+     let cacheKey = cacheKey' num offset tags cats
+         getPosts =
           do (Wordpress _ req _ _ _) <- lift $ use (wordpress . snapletValue)
-             cached <- case cachePeriod wpconf of
-                         NoCache -> return Nothing
-                         _ -> lift $ with wordpress $ cacheLookup cacheKey
+             cached <- lift $ with wordpress $ cacheGet' (cacheBehavior wpconf) cacheKey
              case cached of
                Just r -> return r
                Nothing ->
@@ -223,11 +220,10 @@ wpPostsSplice wpconf wordpress =
                                getPosts
                        else
                          do let endpt = endpoint wpconf
-                                (url, params) = buildUrl endpt cacheKey
-                                cp = cachePeriod wpconf
-                            h <- liftIO $ req url params
-                            lift $ with wordpress $ cacheSet' cp cacheKey h
-                            lift $ with wordpress $ markDoneRunning cacheKey
+                            h <- liftIO $ req (endpt <> "/posts") $ buildParams cacheKey
+                            lift $ with wordpress $ do
+                              cacheSet' (cacheBehavior wpconf) cacheKey h
+                              markDoneRunning cacheKey
                             return h
      return $ yieldRuntime $
        do res <- getPosts
@@ -243,8 +239,14 @@ wpPostsSplice wpconf wordpress =
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
 
-buildUrl :: Text -> CacheKey -> (Text, [(Text, Text)])
-buildUrl endpt (PostsKey filters) = ((endpt <> "/posts"), params)
+cacheKey' :: Int -> Int -> [TaxSpecId] -> [TaxSpecId] -> CacheKey
+cacheKey' num offset tags cats =
+  PostsKey (Set.fromList $ [ NumFilter num , OffsetFilter offset]
+            ++ map TagFilter tags ++ map CatFilter cats)
+
+
+buildParams :: CacheKey -> [(Text, Text)]
+buildParams (PostsKey filters) = params
   where params = Set.toList $ Set.map mkFilter filters
         mkFilter (TagFilter (TaxPlusId i)) = ("filter[tag__in]", tshow i)
         mkFilter (TagFilter (TaxMinusId i)) = ("filter[tag__not_in]", tshow i)
@@ -259,7 +261,10 @@ instance FromJSON TaxRes where
   parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
   parseJSON _ = mzero
 
+lookupTagIds :: Text -> [TaxSpec] -> IO [TaxSpecId]
 lookupTagIds = lookupTaxIds "/taxonomies/post_tag/terms" "tag"
+
+lookupCategoryIds :: Text -> [TaxSpec] -> IO [TaxSpecId]
 lookupCategoryIds = lookupTaxIds "/taxonomies/category/terms" "category"
 
 lookupTaxIds :: Text -> Text -> Text -> [TaxSpec] -> IO [TaxSpecId]
@@ -297,14 +302,11 @@ addPostIds wordpress ids =
      assign (wordpress . snapletValue)
             (Wordpress red req act ((`IntSet.union` (IntSet.fromList ids)) <$> postSet) conf)
 
-
 getPost :: CacheKey
         -> Handler b (Wordpress b) (Maybe Object)
 getPost cacheKey@(PostByPermalinkKey year month slug) =
   do (Wordpress _ req _ posts conf) <- view snapletValue <$> getSnapletState
-     mres <- case cachePeriod conf of
-               NoCache -> return Nothing
-               _ -> cacheLookup cacheKey
+     mres <- cacheGet' (cacheBehavior conf) cacheKey
      case mres of
        Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
        Nothing ->
@@ -319,7 +321,7 @@ getPost cacheKey@(PostByPermalinkKey year month slug) =
                        let post' = decodeStrict . T.encodeUtf8 $ h
                        case post' of
                          Just (post:_) ->
-                           do cacheSet' (cachePeriod conf) cacheKey
+                           do cacheSet' (cacheBehavior conf) cacheKey
                                 (TL.toStrict . TL.decodeUtf8 . encode $ post)
                               markDoneRunning cacheKey
                               return $ Just post
@@ -445,7 +447,6 @@ postSplices extra = mconcat (map buildSplice (mergeFields postFields extra))
                         _ -> ""
 
 
-
 transformName :: Text -> Text
 transformName = T.append "wp" . snd . T.foldl f (True, "")
   where f (True, rest) next = (False, T.snoc rest (toUpper next))
@@ -475,25 +476,29 @@ data CacheKey = PostKey Int
               deriving (Eq, Show, Ord)
 
 formatKey :: CacheKey -> ByteString
-formatKey (PostByPermalinkKey y m s) =
-    T.encodeUtf8 $ "wordpress:post_perma:" <> y <> "_" <> m <> "_" <> s
-formatKey (PostsKey filters) =
-    T.encodeUtf8 $ "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
-formatKey (PostKey n) = T.encodeUtf8 $ "wordpress:post:" <> tshow n
+formatKey = T.encodeUtf8 . format
+  where format (PostByPermalinkKey y m s) = "wordpress:post_perma:" <> y <> "_" <> m <> "_" <> s
+        format (PostsKey filters) =
+          "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
+        format (PostKey n) = "wordpress:post:" <> tshow n
 
-cacheLookup :: CacheKey -> Handler b (Wordpress b) (Maybe Text)
-cacheLookup key = do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
-                     res <- run $ R.get (formatKey key)
-                     case res of
-                       Right (Just val) ->
-                         case key of
-                           PostByPermalinkKey{} ->
-                             do res' <- run $ R.get val
-                                case res' of
-                                  Left err -> return Nothing
-                                  Right val -> return (T.decodeUtf8 <$> val)
-                           _ -> return (Just $ T.decodeUtf8 val)
-                       _ -> return Nothing
+cacheGet' :: CacheBehavior -> CacheKey -> Handler b (Wordpress b) (Maybe Text)
+cacheGet' NoCache _ = return Nothing
+cacheGet' _ cacheKey = cacheGet cacheKey
+
+cacheGet :: CacheKey -> Handler b (Wordpress b) (Maybe Text)
+cacheGet key = do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
+                  res <- run $ R.get (formatKey key)
+                  case res of
+                   Right (Just val) ->
+                     case key of
+                      PostByPermalinkKey{} ->
+                        do res' <- run $ R.get val
+                           case res' of
+                            Left err -> return Nothing
+                            Right val -> return (T.decodeUtf8 <$> val)
+                      _ -> return (Just $ T.decodeUtf8 val)
+                   _ -> return Nothing
 
 cacheSet' :: CacheBehavior -> CacheKey -> Text -> Handler b (Wordpress b) ()
 cacheSet' NoCache _ _ = return ()
