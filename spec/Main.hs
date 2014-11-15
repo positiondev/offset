@@ -94,6 +94,14 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
         config = (def { endpoint = ""
                       , requester = Just recordingRequester
                       , cacheBehavior = NoCache})
+        recordingRequester "/taxonomies/post_tag/terms" [] =
+          return $ enc $ [object [ "ID" .= ("177" :: Text) ,
+                                   "slug" .= ("home-featured" :: Text)]
+                         ,object [ "ID" .= ("160" :: Text) ,
+                                   "slug" .= ("featured-global" :: Text)]]
+        recordingRequester "/taxonomies/category/terms" [] =
+          return $ enc $ [object [ "ID" .= ("159" :: Text) ,
+                                   "slug" .= ("bookmarx" :: Text)]]
         recordingRequester url params = do
           tryPutMVar record $ mkUrlUnescape url params
           return ""
@@ -234,6 +242,9 @@ main = hspec $ do
     shouldQueryTo
       "<wpPosts num=1 page=3></wpPosts>"
       "/posts?filter[offset]=2&filter[posts_per_page]=1"
+    shouldQueryTo
+      "<wpPosts tags=\"+home-featured\" limit=10></wpPosts>"
+      ""
 
 shouldQueryTo :: Text -> Text -> Spec
 shouldQueryTo hQuery wpQuery = do
@@ -258,7 +269,7 @@ shouldQueryTo hQuery wpQuery = do
               ,("fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
               ,("extra-fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
 -}
-  describe "live tests (which require config file w/ user and pass to sandbox.jacobinmag.com)" $
+{-  describe "live tests (which require config file w/ user and pass to sandbox.jacobinmag.com)" $
     snap (route [("/2014/10/a-war-for-power", render "single")
                 ,("/2014/10/the-assassination-of-detroit/", render "author-date")
                 ])
@@ -332,3 +343,4 @@ shouldQueryTo hQuery wpQuery = do
          it "should be able to use extra fields set in application" $
            do get "/fields" >>= shouldHaveText "https://"
               get "/extra-fields" >>= shouldHaveText "https://"
+-}

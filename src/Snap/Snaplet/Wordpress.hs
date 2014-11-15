@@ -2,6 +2,8 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
+{-# LANGUAGE FlexibleInstances     #-}
 
 module Snap.Snaplet.Wordpress (
    Wordpress(..)
@@ -205,11 +207,11 @@ wpPostsSplice wpconf wordpress =
          offset = num * (page - 1) + offset'
          tags' = unTaxSpecList (fromMaybe (TaxSpecList []) $ readSafe =<< X.getAttribute "tags" n)
          cats' = unTaxSpecList (fromMaybe (TaxSpecList []) $ readSafe =<< X.getAttribute "categories" n)
-     tags <- lift $ lookupTagIds (endpoint wpconf) tags'
-     cats <- lift $ lookupCategoryIds (endpoint wpconf) cats'
-     let cacheKey = cacheKey' num offset tags cats
          getPosts =
           do (Wordpress _ req _ _ _) <- lift $ use (wordpress . snapletValue)
+             tags <- lift $ with wordpress $ lookupTagIds (endpoint wpconf) tags'
+             cats <- lift $ with wordpress $ lookupCategoryIds (endpoint wpconf) cats'
+             let cacheKey = cacheKey' num offset tags cats
              cached <- lift $ with wordpress $ cacheGet' (cacheBehavior wpconf) cacheKey
              case cached of
                Just r -> return r
@@ -255,30 +257,34 @@ buildParams (PostsKey filters) = params
         mkFilter (NumFilter num) = ("filter[posts_per_page]", tshow num)
         mkFilter (OffsetFilter offset) = ("filter[offset]", tshow offset)
 
-newtype TaxRes = TaxRes (Int, Text)
+type TaxRes = (Int, Text)
 
 instance FromJSON TaxRes where
-  parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
+  parseJSON (Object o) = ((,) <$> o .: "ID" <*> o .: "slug")
   parseJSON _ = mzero
 
-lookupTagIds :: Text -> [TaxSpec] -> IO [TaxSpecId]
+filterBySnd :: (b -> Bool) -> [(a, b)] -> [(a, b)]
+filterBySnd pred = filter (\(_, slug) -> pred slug)
+
+lookupTagIds :: Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
 lookupTagIds = lookupTaxIds "/taxonomies/post_tag/terms" "tag"
 
-lookupCategoryIds :: Text -> [TaxSpec] -> IO [TaxSpecId]
+lookupCategoryIds :: Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
 lookupCategoryIds = lookupTaxIds "/taxonomies/category/terms" "category"
 
-lookupTaxIds :: Text -> Text -> Text -> [TaxSpec] -> IO [TaxSpecId]
+lookupTaxIds :: Text -> Text -> Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
 lookupTaxIds _ _ _ [] = return []
 lookupTaxIds url desc end specs =
-  do res <- W.get $ (T.unpack end) ++ (T.unpack url)
-     let (Just tags) = decode $ res ^. W.responseBody :: Maybe [TaxRes]
-     return $ map (getSpecId tags) specs
- where getSpecId tags (TaxPlus slug) = matchWith tags slug TaxPlusId
-       getSpecId tags (TaxMinus slug) = matchWith tags slug TaxMinusId
-       matchWith tags slug constr =
-         case filter (\(TaxRes (_,s)) -> s == slug) tags of
-            [] -> error $ "Couldn't find " ++ T.unpack desc ++ ": " ++ T.unpack slug
-            (TaxRes  (i,_):_) -> constr i
+  do (Wordpress _ req _ _ _) <- view snapletValue <$> getSnapletState
+     res <- liftIO $ req (end <> url) []
+     let (Just taxs) = decodeStrict $ T.encodeUtf8 res :: Maybe [TaxRes]
+     return $ map (getSpecId taxs) specs
+  where getSpecId taxs (TaxPlus slug) = matchWith taxs slug TaxPlusId
+        getSpecId taxs (TaxMinus slug) = matchWith taxs slug TaxMinusId
+        matchWith taxs slug constr =
+          case (filterBySnd (slug ==) taxs) of
+           [] -> error $ "Couldn't find " ++ T.unpack desc ++ ": " ++ T.unpack slug
+           ((i,_):_) -> constr i
 
 extractPostIds :: [Object] -> [(Int, Object)]
 extractPostIds = map extractPostId
