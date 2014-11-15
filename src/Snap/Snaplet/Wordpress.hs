@@ -257,14 +257,11 @@ buildParams (PostsKey filters) = params
         mkFilter (NumFilter num) = ("filter[posts_per_page]", tshow num)
         mkFilter (OffsetFilter offset) = ("filter[offset]", tshow offset)
 
-type TaxRes = (Int, Text)
+newtype TaxRes = TaxRes (Int, Text)
 
 instance FromJSON TaxRes where
-  parseJSON (Object o) = ((,) <$> o .: "ID" <*> o .: "slug")
+  parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
   parseJSON _ = mzero
-
-filterBySnd :: (b -> Bool) -> [(a, b)] -> [(a, b)]
-filterBySnd pred = filter (\(_, slug) -> pred slug)
 
 lookupTagIds :: Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
 lookupTagIds = lookupTaxIds "/taxonomies/post_tag/terms" "tag"
@@ -277,14 +274,17 @@ lookupTaxIds _ _ _ [] = return []
 lookupTaxIds url desc end specs =
   do (Wordpress _ req _ _ _) <- view snapletValue <$> getSnapletState
      res <- liftIO $ req (end <> url) []
-     let (Just taxs) = decodeStrict $ T.encodeUtf8 res :: Maybe [TaxRes]
+     let taxs = dcode res
      return $ map (getSpecId taxs) specs
-  where getSpecId taxs (TaxPlus slug) = matchWith taxs slug TaxPlusId
+  where dcode res = case decodeStrict $ T.encodeUtf8 res of
+                     Nothing -> error $ "Unparsable JSON " <> T.unpack res
+                     Just taxs -> taxs
+        getSpecId taxs (TaxPlus slug) = matchWith taxs slug TaxPlusId
         getSpecId taxs (TaxMinus slug) = matchWith taxs slug TaxMinusId
         matchWith taxs slug constr =
-          case (filterBySnd (slug ==) taxs) of
-           [] -> error $ "Couldn't find " ++ T.unpack desc ++ ": " ++ T.unpack slug
-           ((i,_):_) -> constr i
+          case filter (\(TaxRes (_,s)) -> s == slug) taxs of
+           [] -> error $ T.unpack $ "Couldn't find " <> desc <> ": " <> slug
+           (TaxRes (i,_):_) -> constr i
 
 extractPostIds :: [Object] -> [(Int, Object)]
 extractPostIds = map extractPostId

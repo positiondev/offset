@@ -95,13 +95,13 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
                       , requester = Just recordingRequester
                       , cacheBehavior = NoCache})
         recordingRequester "/taxonomies/post_tag/terms" [] =
-          return $ enc $ [object [ "ID" .= ("177" :: Text) ,
-                                   "slug" .= ("home-featured" :: Text)]
-                         ,object [ "ID" .= ("160" :: Text) ,
-                                   "slug" .= ("featured-global" :: Text)]]
+          return $ enc $ [object [ "ID" .= (177 :: Int)
+                                 , "slug" .= ("home-featured" :: Text)]
+                         ,object [ "ID" .= (160 :: Int)
+                                 , "slug" .= ("featured-global" :: Text)]]
         recordingRequester "/taxonomies/category/terms" [] =
-          return $ enc $ [object [ "ID" .= ("159" :: Text) ,
-                                   "slug" .= ("bookmarx" :: Text)]]
+          return $ enc $ [object [ "ID" .= (159 :: Int)
+                                 , "slug" .= ("bookmarx" :: Text)]]
         recordingRequester url params = do
           tryPutMVar record $ mkUrlUnescape url params
           return ""
@@ -244,7 +244,7 @@ main = hspec $ do
       "/posts?filter[offset]=2&filter[posts_per_page]=1"
     shouldQueryTo
       "<wpPosts tags=\"+home-featured\" limit=10></wpPosts>"
-      ""
+      "/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=177"
 
 shouldQueryTo :: Text -> Text -> Spec
 shouldQueryTo hQuery wpQuery = do
