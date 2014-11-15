@@ -245,6 +245,21 @@ main = hspec $ do
     shouldQueryTo
       "<wpPosts tags=\"+home-featured\" limit=10></wpPosts>"
       "/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=177"
+    shouldQueryTo
+      "<wpPosts tags=\"-home-featured\" limit=1></wpPosts>"
+      "/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__not_in]=177"
+    shouldQueryTo
+      "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>"
+      "/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=177&filter[tag__not_in]=160"
+    shouldQueryTo
+      "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>"
+      "/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=160&filter[tag__in]=177"
+    shouldQueryTo
+      "<wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts>"
+      "/posts?filter[category__in]=159&filter[offset]=0&filter[posts_per_page]=20"
+    shouldQueryTo
+      "<wpPosts categories=\"-bookmarx\" limit=10><wpTitle/></wpPosts>"
+      "/posts?filter[category__not_in]=159&filter[offset]=0&filter[posts_per_page]=20"
 
 shouldQueryTo :: Text -> Text -> Spec
 shouldQueryTo hQuery wpQuery = do
@@ -255,44 +270,11 @@ shouldQueryTo hQuery wpQuery = do
       x <- liftIO $ tryTakeMVar record
       x `shouldEqual` Just wpQuery
 
-{-     ,("tag1", "<wpPosts tags=\"home-featured\" limit=10><wpTitle/></wpPosts>")
-              ,("tag2", "<wpPosts limit=10><wpTitle/></wpPosts>")
-              ,("tag3", "<wpPosts tags=\"+home-featured\" limit=10><wpTitle/></wpPosts>")
-              ,("tag4", "<wpPosts tags=\"-home-featured\" limit=1><wpTitle/></wpPosts>")
-              ,("tag5", "<wpPosts tags=\"+home-featured\" limit=1><wpTitle/></wpPosts>")
-              ,("tag6", "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>")
-              ,("tag7", "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>")
-              ,("cat1", "<wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts>")
-              ,("cat2", "<wpPosts limit=10><wpTitle/></wpPosts>")
-              ,("cat3", "<wpPosts categories=\"-bookmarx\" limit=10><wpTitle/></wpPosts>")
-              ,("author-date", "<wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink>")
-              ,("fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
-              ,("extra-fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
--}
 {-  describe "live tests (which require config file w/ user and pass to sandbox.jacobinmag.com)" $
     snap (route [("/2014/10/a-war-for-power", render "single")
                 ,("/2014/10/the-assassination-of-detroit/", render "author-date")
                 ])
          (queryingApp [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
-              ,("many", "<wpPosts limit=2><wpTitle/></wpPosts>")
-              ,("many1", "<wpPosts><wpTitle/></wpPosts>")
-              ,("many2", "<wpPosts offset=1 limit=1><wpTitle/></wpPosts>")
-              ,("many3", "<wpPosts offset=0 limit=1><wpTitle/></wpPosts>")
-              ,("page1", "<wpPosts limit=10 page=1><wpTitle/></wpPosts>")
-              ,("page2", "<wpPosts limit=10 page=2><wpTitle/></wpPosts>")
-              ,("num1", "<wpPosts num=2><wpTitle/></wpPosts>")
-              ,("num2", "<wpPosts num=2 page=2 limit=1><wpTitle/></wpPosts>")
-              ,("num3", "<wpPosts num=1 page=3><wpTitle/></wpPosts>")
-              ,("tag1", "<wpPosts tags=\"home-featured\" limit=10><wpTitle/></wpPosts>")
-              ,("tag2", "<wpPosts limit=10><wpTitle/></wpPosts>")
-              ,("tag3", "<wpPosts tags=\"+home-featured\" limit=10><wpTitle/></wpPosts>")
-              ,("tag4", "<wpPosts tags=\"-home-featured\" limit=1><wpTitle/></wpPosts>")
-              ,("tag5", "<wpPosts tags=\"+home-featured\" limit=1><wpTitle/></wpPosts>")
-              ,("tag6", "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>")
-              ,("tag7", "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>")
-              ,("cat1", "<wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts>")
-              ,("cat2", "<wpPosts limit=10><wpTitle/></wpPosts>")
-              ,("cat3", "<wpPosts categories=\"-bookmarx\" limit=10><wpTitle/></wpPosts>")
               ,("author-date", "<wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink>")
               ,("fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
               ,("extra-fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
