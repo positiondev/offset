@@ -267,10 +267,16 @@ instance FromJSON TaxRes where
 data TaxDict = TaxDict {dict :: [TaxRes], desc :: Text}
 
 lookupTagIds :: Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
-lookupTagIds = lookupTaxIds "/taxonomies/post_tag/terms" "tag"
+lookupTagIds = lookupTaxIds "post_tag"
 
 lookupCategoryIds :: Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
-lookupCategoryIds = lookupTaxIds "/taxonomies/category/terms" "category"
+lookupCategoryIds = lookupTaxIds "category"
+
+lookupTaxIds :: Text -> Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
+lookupTaxIds _ _ [] = return []
+lookupTaxIds resName end specs =
+  do taxDict <- lookupTaxDict resName end
+     return $ map taxDict specs
 
 getSpecId :: TaxDict -> TaxSpec -> TaxSpecId
 getSpecId taxDict spec =
@@ -284,21 +290,15 @@ getSpecId taxDict spec =
        [] -> error $ T.unpack $ "Couldn't find " <> desc <> ": " <> slug
        (TaxRes (i,_):_) -> i
 
-lookupTaxDict :: Text -> Text -> Text -> Handler b (Wordpress b) (TaxSpec -> TaxSpecId)
-lookupTaxDict url desc end =
+lookupTaxDict :: Text -> Text -> Handler b (Wordpress b) (TaxSpec -> TaxSpecId)
+lookupTaxDict resName end =
   do (Wordpress _ req _ _ _) <- view snapletValue <$> getSnapletState
-     res <- liftIO $ dcode <$> req (end <> url) []
-     return (getSpecId $ TaxDict res desc)
+     res <- liftIO $ dcode <$> req (end <> "/taxonomies/" <> resName <> "/terms") []
+     return (getSpecId $ TaxDict res resName)
   where dcode :: Text -> [TaxRes]
         dcode res = case decodeStrict $ T.encodeUtf8 res of
-                     Nothing -> error $ "Unparsable JSON from " <> T.unpack url <> ": " <> T.unpack res
+                     Nothing -> error $ T.unpack $ "Unparsable JSON from " <> resName <> ": " <> res
                      Just dict -> dict
-
-lookupTaxIds :: Text -> Text -> Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
-lookupTaxIds _ _ _ [] = return []
-lookupTaxIds url desc end specs =
-  do taxDict <- lookupTaxDict url desc end
-     return $ map taxDict specs
 
 extractPostIds :: [Object] -> [(Int, Object)]
 extractPostIds = map extractPostId
