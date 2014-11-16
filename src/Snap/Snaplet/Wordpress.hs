@@ -74,14 +74,14 @@ import qualified Text.XmlHtml             as X
 
 import           Debug.Trace
 
+import           Snap.Snaplet.Wordpress.Cache
+
 
 readSafe :: Read a => Text -> Maybe a
 readSafe = fmap fst . listToMaybe . reads . T.unpack
 
 tshow :: Show a => a -> Text
 tshow = T.pack . show
-
-data CacheBehavior = NoCache | CacheSeconds Int | CacheForever deriving (Show, Eq)
 
 data WordpressConfig m = WordpressConfig { endpoint    :: Text
                                          , requester   :: Maybe (Text -> [(Text, Text)] -> IO Text)
@@ -132,15 +132,14 @@ wordpressSplices conf wordpress =
      "wpPostByPermalink" ## wpPostByPermalinkSplice conf wordpress
      "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wordpress
 
-
 wpNoPostDuplicatesSplice :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                          -> Splice (Handler b b)
 wpNoPostDuplicatesSplice wordpress =
   return $ yieldRuntime $
-    do (Wordpress red ht act ps wpconf) <- lift $ use (wordpress . snapletValue)
-       case ps of
+    do w@Wordpress{..} <- lift $ use (wordpress . snapletValue)
+       case requestPostSet of
          Nothing -> lift $ assign (wordpress . snapletValue)
-                                  (Wordpress red ht act (Just IntSet.empty) wpconf)
+                                  w{requestPostSet = (Just IntSet.empty)}
          Just _ -> return ()
        codeGen $ yieldPureText ""
 
@@ -171,26 +170,31 @@ instance Read TaxSpecList where
                         then [(TaxSpecList $ catMaybes vs, "")]
                         else []
 
+getWordpress :: Handler b v v
+getWordpress = view snapletValue <$> getSnapletState
 
 runningQueryFor :: CacheKey
                 -> Handler b (Wordpress b) Bool
 runningQueryFor cacheKey =
-  do (Wordpress _ _ act _ _) <- view snapletValue <$> getSnapletState
-     now <- liftIO $ getCurrentTime
-     liftIO $ modifyMVar act $ \a ->
+  do wordpress <- getWordpress
+     liftIO $ startWpQueryMutex wordpress cacheKey
+
+startWpQueryMutex :: Wordpress b -> CacheKey -> IO Bool
+startWpQueryMutex Wordpress{..} cacheKey =
+  do now <- liftIO $ getCurrentTime
+     liftIO $ modifyMVar activeMV $ \a ->
       let active = filterCurrent now a
       in if Map.member cacheKey active
           then return (active, True)
           else return (Map.insert cacheKey now active, False)
   where filterCurrent now = Map.filter (\v -> diffUTCTime now v < 1)
 
+
 markDoneRunning :: CacheKey
                 -> Handler b (Wordpress b) ()
 markDoneRunning cacheKey =
-  do (Wordpress _ _ act _ _) <- view snapletValue <$> getSnapletState
-     liftIO $ modifyMVar_ act $ return .    Map.delete cacheKey
-
---constructPostCacheKey :: Maybe Int -> Maybe Int -> Maybe Int -> Maybe Int -> Maybe TaxSpecList -> [(Int, Text)] -> Maybe TaxSpecList -> [(Int, Text)] -> CacheKey
+  do Wordpress{..} <- getWordpress
+     liftIO $ modifyMVar_ activeMV $ return . Map.delete cacheKey
 
 wpPostsSplice :: WordpressConfig (Handler b b)
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
@@ -209,7 +213,7 @@ wpPostsSplice wpconf wordpress =
          tags' = unTaxSpecList (fromMaybe (TaxSpecList []) $ readSafe =<< X.getAttribute "tags" n)
          cats' = unTaxSpecList (fromMaybe (TaxSpecList []) $ readSafe =<< X.getAttribute "categories" n)
          getPosts =
-          do (Wordpress _ req _ _ _) <- lift $ use (wordpress . snapletValue)
+          do Wordpress{..} <- lift $ use (wordpress . snapletValue)
              tags <- lift $ with wordpress $ lookupTagIds (endpoint wpconf) tags'
              cats <- lift $ with wordpress $ lookupCategoryIds (endpoint wpconf) cats'
              let cacheKey = cacheKey' num offset tags cats
@@ -223,7 +227,7 @@ wpPostsSplice wpconf wordpress =
                                getPosts
                        else
                          do let endpt = endpoint wpconf
-                            h <- liftIO $ req (endpt <> "/posts") $ buildParams cacheKey
+                            h <- liftIO $ runHTTP (endpt <> "/posts") $ buildParams cacheKey
                             lift $ with wordpress $ do
                               cacheSet' (cacheBehavior wpconf) cacheKey h
                               markDoneRunning cacheKey
@@ -232,8 +236,8 @@ wpPostsSplice wpconf wordpress =
        do res <- getPosts
           case (decodeStrict . T.encodeUtf8 $ res) of
             Just posts -> do let postsW = extractPostIds posts
-                             (Wordpress _ _ _ postSet _) <- lift (use (wordpress . snapletValue))
-                             let postsND = noDuplicates postSet . take limit $ postsW
+                             Wordpress{..} <- lift (use (wordpress . snapletValue))
+                             let postsND = noDuplicates requestPostSet . take limit $ postsW
                              lift $ addPostIds wordpress (map fst postsND)
                              putPromise promise (map snd postsND)
                              codeGen outputChildren
@@ -292,8 +296,8 @@ getSpecId taxDict spec =
 
 lookupTaxDict :: Text -> Text -> Handler b (Wordpress b) (TaxSpec -> TaxSpecId)
 lookupTaxDict resName end =
-  do (Wordpress _ req _ _ _) <- view snapletValue <$> getSnapletState
-     res <- liftIO $ dcode <$> req (end <> "/taxonomies/" <> resName <> "/terms") []
+  do Wordpress{..} <- getWordpress
+     res <- liftIO $ dcode <$> runHTTP (end <> "/taxonomies/" <> resName <> "/terms") []
      return (getSpecId $ TaxDict res resName)
   where dcode :: Text -> [TaxRes]
         dcode res = case decodeStrict $ T.encodeUtf8 res of
@@ -318,14 +322,14 @@ extractPostId p = let i = M.lookup "ID" p
 
 addPostIds :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b)) -> [Int] -> Handler b b ()
 addPostIds wordpress ids =
-  do (Wordpress red req act postSet conf) <- use (wordpress . snapletValue)
+  do w@Wordpress{..} <- use (wordpress . snapletValue)
      assign (wordpress . snapletValue)
-            (Wordpress red req act ((`IntSet.union` (IntSet.fromList ids)) <$> postSet) conf)
+            w{requestPostSet = ((`IntSet.union` (IntSet.fromList ids)) <$> requestPostSet) }
 
 getPost :: CacheKey
         -> Handler b (Wordpress b) (Maybe Object)
 getPost cacheKey@(PostByPermalinkKey year month slug) =
-  do (Wordpress _ req _ posts conf) <- view snapletValue <$> getSnapletState
+  do Wordpress{..} <- view snapletValue <$> getSnapletState
      mres <- cacheGet' (cacheBehavior conf) cacheKey
      case mres of
        Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
@@ -334,7 +338,7 @@ getPost cacheKey@(PostByPermalinkKey year month slug) =
             if running
                then do liftIO $ threadDelay 100000
                        getPost cacheKey
-               else do h <- liftIO $ req (endpoint conf <> "/posts")
+               else do h <- liftIO $ runHTTP (endpoint conf <> "/posts")
                               [("filter[year]",year)
                               ,("filter[monthnum]", month)
                               ,("filter[name]", slug)]
@@ -507,13 +511,13 @@ cacheGet' NoCache _ = return Nothing
 cacheGet' _ cacheKey = cacheGet cacheKey
 
 cacheGet :: CacheKey -> Handler b (Wordpress b) (Maybe Text)
-cacheGet key = do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
-                  res <- run $ R.get (formatKey key)
+cacheGet key = do Wordpress{..} <- view snapletValue <$> getSnapletState
+                  res <- runRedis $ R.get (formatKey key)
                   case res of
                    Right (Just val) ->
                      case key of
                       PostByPermalinkKey{} ->
-                        do res' <- run $ R.get val
+                        do res' <- runRedis $ R.get val
                            case res' of
                             Left err -> return Nothing
                             Right val -> return (T.decodeUtf8 <$> val)
@@ -527,17 +531,17 @@ cacheSet' (CacheForever) b c = void $ cacheSet Nothing b c
 
 cacheSet :: Maybe Int -> CacheKey -> Text -> Handler b (Wordpress b) Bool
 cacheSet cachetime key o =
-  do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
+  do Wordpress{..} <- view snapletValue <$> getSnapletState
      res <- case key of
               PostByPermalinkKey{} ->
                 do let (Just p) = decodeStrict . T.encodeUtf8 $ o
                        (i,_) = extractPostId p
-                   r <- run $ set cachetime (formatKey $ PostKey i) (T.encodeUtf8 o)
+                   r <- runRedis $ set cachetime (formatKey $ PostKey i) (T.encodeUtf8 o)
                    case r of
                      Left err -> return r
                      Right _ ->
-                       run $ set cachetime (formatKey key) (formatKey $ PostKey i)
-              _ -> run $ set cachetime (formatKey key) (T.encodeUtf8 o)
+                       runRedis $ set cachetime (formatKey key) (formatKey $ PostKey i)
+              _ -> runRedis $ set cachetime (formatKey key) (T.encodeUtf8 o)
      case res of
        Left err -> return False
        Right val -> return True
@@ -546,32 +550,30 @@ cacheSet cachetime key o =
 
 expireAggregates :: Handler b (Wordpress b) Bool
 expireAggregates =
-  do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
-     do r <- run $ R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:posts:*"]
+  do Wordpress{..} <- view snapletValue <$> getSnapletState
+     do r <- runRedis $ R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:posts:*"]
         case r of
           Left _ -> return False
           Right (_ :: Integer) -> return True
 
 expirePost :: Int -> Handler b (Wordpress b) Bool
 expirePost n =
-  do (Wordpress run _ _ _ _) <- view snapletValue <$> getSnapletState
-     r1 <- run $ R.del [formatKey $ PostKey n]
+  do Wordpress{..} <- view snapletValue <$> getSnapletState
+     r1 <- runRedis $ R.del [formatKey $ PostKey n]
      case r1 of
        Left _ -> return False
        _ -> expireAggregates
 
 wreqRequester :: WordpressConfig (Handler b b) -> Text -> Text -> Text -> [(Text, Text)] -> IO Text
-wreqRequester conf user pass u ps =
+wreqRequester conf user passw u ps =
   do let opts = (W.defaults & W.params .~ ps
-                            & W.auth .~ W.basicAuth user' pass'
-                            )
-     -- print (u, ps, view W.headers opts, view W.auth opts)
+                            & W.auth .~ W.basicAuth user' pass')
      wplog conf $ "wreq: " <> u <> " with params: " <>
                   (T.intercalate "&" . map (\(a,b) -> a <> "=" <> b) $ ps)
      r <- W.getWith opts (T.unpack u)
      return $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
   where user' = T.encodeUtf8 user
-        pass' = T.encodeUtf8 pass
+        pass' = T.encodeUtf8 passw
 
 wplog :: WordpressConfig (Handler b b) -> Text -> IO ()
 wplog conf msg = case logger conf of
