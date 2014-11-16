@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE RecordWildCards       #-}
 
 module Snap.Snaplet.Wordpress (
    Wordpress(..)
@@ -263,28 +264,41 @@ instance FromJSON TaxRes where
   parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
   parseJSON _ = mzero
 
+data TaxDict = TaxDict {dict :: [TaxRes], desc :: Text}
+
 lookupTagIds :: Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
 lookupTagIds = lookupTaxIds "/taxonomies/post_tag/terms" "tag"
 
 lookupCategoryIds :: Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
 lookupCategoryIds = lookupTaxIds "/taxonomies/category/terms" "category"
 
+getSpecId :: TaxDict -> TaxSpec -> TaxSpecId
+getSpecId taxDict spec =
+  case spec of
+    TaxPlus slug -> TaxPlusId $ idFor taxDict slug
+    TaxMinus slug -> TaxMinusId $ idFor taxDict slug
+  where
+    idFor :: TaxDict -> Text -> Int
+    idFor (TaxDict{..}) slug =
+      case filter (\(TaxRes (_,s)) -> s == slug) dict of
+       [] -> error $ T.unpack $ "Couldn't find " <> desc <> ": " <> slug
+       (TaxRes (i,_):_) -> i
+
+lookupTaxDict :: Text -> Text -> Text -> Handler b (Wordpress b) (TaxSpec -> TaxSpecId)
+lookupTaxDict url desc end =
+  do (Wordpress _ req _ _ _) <- view snapletValue <$> getSnapletState
+     res <- liftIO $ dcode <$> req (end <> url) []
+     return (getSpecId $ TaxDict res desc)
+  where dcode :: Text -> [TaxRes]
+        dcode res = case decodeStrict $ T.encodeUtf8 res of
+                     Nothing -> error $ "Unparsable JSON from " <> T.unpack url <> ": " <> T.unpack res
+                     Just dict -> dict
+
 lookupTaxIds :: Text -> Text -> Text -> [TaxSpec] -> Handler b (Wordpress b) [TaxSpecId]
 lookupTaxIds _ _ _ [] = return []
 lookupTaxIds url desc end specs =
-  do (Wordpress _ req _ _ _) <- view snapletValue <$> getSnapletState
-     res <- liftIO $ req (end <> url) []
-     let taxs = dcode res
-     return $ map (getSpecId taxs) specs
-  where dcode res = case decodeStrict $ T.encodeUtf8 res of
-                     Nothing -> error $ "Unparsable JSON " <> T.unpack res
-                     Just taxs -> taxs
-        getSpecId taxs (TaxPlus slug) = matchWith taxs slug TaxPlusId
-        getSpecId taxs (TaxMinus slug) = matchWith taxs slug TaxMinusId
-        matchWith taxs slug constr =
-          case filter (\(TaxRes (_,s)) -> s == slug) taxs of
-           [] -> error $ T.unpack $ "Couldn't find " <> desc <> ": " <> slug
-           (TaxRes (i,_):_) -> constr i
+  do taxDict <- lookupTaxDict url desc end
+     return $ map taxDict specs
 
 extractPostIds :: [Object] -> [(Int, Object)]
 extractPostIds = map extractPostId
