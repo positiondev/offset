@@ -25,6 +25,8 @@ module Snap.Snaplet.Wordpress (
 
  , transformName
  , TaxSpec(..)
+ , TagType
+ , CatType
  , TaxSpecList(..)
  , Field(..)
  , mergeFields
@@ -221,7 +223,7 @@ wpPostsSplice wp wpconf wpLens =
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
 
-wpKey' :: Int -> Int -> [TaxSpecId] -> [TaxSpecId] -> WPKey
+wpKey' :: Int -> Int -> [TaxSpecId TagType] -> [TaxSpecId CatType] -> WPKey
 wpKey' num offset tags cats =
   PostsKey (Set.fromList $ [ NumFilter num , OffsetFilter offset]
             ++ map TagFilter tags ++ map CatFilter cats)
@@ -237,33 +239,25 @@ buildParams (PostsKey filters) = params
         mkFilter (NumFilter num) = ("filter[posts_per_page]", tshow num)
         mkFilter (OffsetFilter offset) = ("filter[offset]", tshow offset)
 
-newtype TaxRes = TaxRes (Int, Text)
-
-instance FromJSON TaxRes where
-  parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
-  parseJSON _ = mzero
-
-data TaxDict = TaxDict {dict :: [TaxRes], desc :: Text}
-
-lookupTagIds :: Wordpress b -> Text -> [TaxSpec] -> IO [TaxSpecId]
+lookupTagIds :: Wordpress b -> Text -> [TaxSpec TagType] -> IO [TaxSpecId TagType]
 lookupTagIds wordpress = lookupTaxIds wordpress "post_tag"
 
-lookupCategoryIds :: Wordpress b -> Text -> [TaxSpec] -> IO [TaxSpecId]
+lookupCategoryIds :: Wordpress b -> Text -> [TaxSpec CatType] -> IO [TaxSpecId CatType]
 lookupCategoryIds wordpress = lookupTaxIds wordpress "category"
 
-lookupTaxIds :: Wordpress b -> Text -> Text -> [TaxSpec] -> IO [TaxSpecId]
+lookupTaxIds :: Wordpress b -> Text -> Text -> [TaxSpec a] -> IO [TaxSpecId a]
 lookupTaxIds _ _ _ [] = return []
 lookupTaxIds wordpress resName end specs =
   do taxDict <- lookupTaxDict wordpress resName end
      return $ map taxDict specs
 
-getSpecId :: TaxDict -> TaxSpec -> TaxSpecId
+getSpecId :: TaxDict a -> TaxSpec a -> TaxSpecId a
 getSpecId taxDict spec =
   case spec of
    TaxPlus slug -> TaxPlusId $ idFor taxDict slug
    TaxMinus slug -> TaxMinusId $ idFor taxDict slug
   where
-    idFor :: TaxDict -> Text -> Int
+    idFor :: TaxDict a -> Text -> Int
     idFor (TaxDict{..}) slug =
       case filter (\(TaxRes (_,s)) -> s == slug) dict of
        [] -> error $ T.unpack $ "Couldn't find " <> desc <> ": " <> slug
@@ -277,7 +271,7 @@ decodeJsonErr res = case decodeStrict $ T.encodeUtf8 res of
 decodeJson :: FromJSON a => Text -> Maybe a
 decodeJson res = decodeStrict $ T.encodeUtf8 res
 
-lookupTaxDict :: Wordpress b -> Text -> Text -> IO (TaxSpec -> TaxSpecId)
+lookupTaxDict :: Wordpress b -> Text -> Text -> IO (TaxSpec a -> TaxSpecId a)
 lookupTaxDict Wordpress{..} resName end =
   do res <- liftIO $ (unRequester runHTTP) (end <> "/taxonomies/" <> resName <> "/terms") [] decodeJsonErr
      return (getSpecId $ TaxDict res resName)
