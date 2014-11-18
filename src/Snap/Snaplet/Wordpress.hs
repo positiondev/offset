@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE ImpredicativeTypes    #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -10,6 +11,7 @@
 module Snap.Snaplet.Wordpress (
    Wordpress(..)
  , WordpressConfig(..)
+ , Requester(..)
  , CacheBehavior(..)
  , initWordpress
  , initWordpress'
@@ -75,23 +77,27 @@ import           Snap.Snaplet.Wordpress.Posts
 import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
 
+newtype Requester = Requester { unRequester :: forall a. Text -> [(Text, Text)] -> (Text -> a) -> IO a}
 
-data WordpressConfig m = WordpressConfig { endpoint      :: Text
-                                         , requester     :: Maybe (Text -> [(Text, Text)] -> IO Text)
-                                         , cacheBehavior :: CacheBehavior
-                                         , extraFields   :: [Field m]
-                                         , logger        :: Maybe (Text -> IO ())
-                                         }
+data WordpressConfig m =
+     WordpressConfig { endpoint      :: Text
+                     , requester     :: Maybe Requester
+                     , cacheBehavior :: CacheBehavior
+                     , extraFields   :: [Field m]
+                     , logger        :: Maybe (Text -> IO ())
+                     }
 
 instance Default (WordpressConfig m) where
   def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) [] Nothing
 
-data Wordpress b = Wordpress { runRedis       :: forall a. Redis a -> Handler b (Wordpress b) a
-                             , runHTTP        :: Text -> [(Text, Text)] -> IO Text
-                             , activeMV       :: MVar (Map WPKey UTCTime)
-                             , requestPostSet :: Maybe IntSet
-                             , conf           :: WordpressConfig (Handler b b)
-                             }
+
+data Wordpress b =
+     Wordpress { runRedis       :: forall a. Redis a -> Handler b (Wordpress b) a
+               , runHTTP        :: Requester
+               , activeMV       :: MVar (Map WPKey UTCTime)
+               , requestPostSet :: Maybe IntSet
+               , conf           :: WordpressConfig (Handler b b)
+               }
 
 initWordpress :: Snaplet (Heist b)
               -> Simple Lens b (Snaplet RedisDB)
@@ -196,7 +202,7 @@ wpPostsSplice wp wpconf wpLens =
                                getPosts
                        else
                          do let endpt = endpoint wpconf
-                            h <- liftIO $ runHTTP (endpt <> "/posts") $ buildParams wpKey
+                            h <- liftIO $ (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
                             lift $ with wpLens $ do
                               wpCacheSet (cacheBehavior wpconf) wpKey h
                               markDoneRunning wpKey
@@ -263,14 +269,18 @@ getSpecId taxDict spec =
        [] -> error $ T.unpack $ "Couldn't find " <> desc <> ": " <> slug
        (TaxRes (i,_):_) -> i
 
+decodeJsonErr :: FromJSON a => Text -> a
+decodeJsonErr res = case decodeStrict $ T.encodeUtf8 res of
+                      Nothing -> error $ T.unpack $ "Unparsable JSON: " <> res
+                      Just val -> val
+
+decodeJson :: FromJSON a => Text -> Maybe a
+decodeJson res = decodeStrict $ T.encodeUtf8 res
+
 lookupTaxDict :: Wordpress b -> Text -> Text -> IO (TaxSpec -> TaxSpecId)
 lookupTaxDict Wordpress{..} resName end =
-  do res <- liftIO $ dcode <$> runHTTP (end <> "/taxonomies/" <> resName <> "/terms") []
+  do res <- liftIO $ (unRequester runHTTP) (end <> "/taxonomies/" <> resName <> "/terms") [] decodeJsonErr
      return (getSpecId $ TaxDict res resName)
-  where dcode :: Text -> [TaxRes]
-        dcode res = case decodeStrict $ T.encodeUtf8 res of
-                     Nothing -> error $ T.unpack $ "Unparsable JSON from " <> resName <> ": " <> res
-                     Just dict -> dict
 
 extractPostIds :: [Object] -> [(Int, Object)]
 extractPostIds = map extractPostId
@@ -293,11 +303,10 @@ getPost wpKey@(PostByPermalinkKey year month slug) =
             if running
                then do liftIO $ threadDelay 100000
                        getPost wpKey
-               else do h <- liftIO $ runHTTP (endpoint conf <> "/posts")
-                              [("filter[year]",year)
-                              ,("filter[monthnum]", month)
-                              ,("filter[name]", slug)]
-                       let post' = decodeStrict . T.encodeUtf8 $ h
+               else do post' <- liftIO $ (unRequester runHTTP) (endpoint conf <> "/posts")
+                                  [("filter[year]",year)
+                                  ,("filter[monthnum]", month)
+                                  ,("filter[name]", slug)] decodeJson
                        case post' of
                          Just (post:_) ->
                            do wpCacheSet (cacheBehavior conf) wpKey
@@ -455,14 +464,17 @@ wpExpirePost i =
   do Wordpress{..} <- view snapletValue <$> getSnapletState
      runRedis $ expirePost i
 
-wreqRequester :: WordpressConfig (Handler b b) -> Text -> Text -> Text -> [(Text, Text)] -> IO Text
-wreqRequester conf user passw u ps =
-  do let opts = (W.defaults & W.params .~ ps
-                            & W.auth .~ W.basicAuth user' pass')
-     wplog conf $ "wreq: " <> u <> " with params: " <>
-                  (T.intercalate "&" . map (\(a,b) -> a <> "=" <> b) $ ps)
-     r <- W.getWith opts (T.unpack u)
-     return $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
+wreqRequester :: WordpressConfig (Handler b b)
+              -> Text
+              -> Text
+              -> Requester
+wreqRequester conf user passw =
+  Requester $ \u ps dcode -> do let opts = (W.defaults & W.params .~ ps
+                                                       & W.auth .~ W.basicAuth user' pass')
+                                wplog conf $ "wreq: " <> u <> " with params: " <>
+                                           (T.intercalate "&" . map (\(a,b) -> a <> "=" <> b) $ ps)
+                                r <- W.getWith opts (T.unpack u)
+                                return $ dcode $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
   where user' = T.encodeUtf8 user
         pass' = T.encodeUtf8 passw
 
