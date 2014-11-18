@@ -104,7 +104,7 @@ initWordpress' :: WordpressConfig (Handler b b)
                -> Simple Lens b (Snaplet RedisDB)
                -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                -> SnapletInit b (Wordpress b)
-initWordpress' wpconf heist redis wordpress =
+initWordpress' wpconf heist redis wpLens =
   makeSnaplet "wordpress" "" Nothing $
     do conf <- getSnapletUserConfig
        req <- case requester wpconf of
@@ -114,25 +114,25 @@ initWordpress' wpconf heist redis wordpress =
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
        let wp = Wordpress (withTop' id . R.runRedisDB redis) req active Nothing wpconf
-       addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wordpress) mempty
+       addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
        return $ wp
 
 wordpressSplices :: Wordpress b
                  -> WordpressConfig (Handler b b)
                  -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                  -> Splices (Splice (Handler b b))
-wordpressSplices wp conf wordpress =
-  do "wpPosts" ## wpPostsSplice wp conf wordpress
-     "wpPostByPermalink" ## wpPostByPermalinkSplice conf wordpress
-     "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wordpress
+wordpressSplices wp conf wpLens =
+  do "wpPosts" ## wpPostsSplice wp conf wpLens
+     "wpPostByPermalink" ## wpPostByPermalinkSplice conf wpLens
+     "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
 
 wpNoPostDuplicatesSplice :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                          -> Splice (Handler b b)
-wpNoPostDuplicatesSplice wordpress =
+wpNoPostDuplicatesSplice wpLens =
   return $ yieldRuntime $
-    do w@Wordpress{..} <- lift $ use (wordpress . snapletValue)
+    do w@Wordpress{..} <- lift $ use (wpLens . snapletValue)
        case requestPostSet of
-         Nothing -> lift $ assign (wordpress . snapletValue)
+         Nothing -> lift $ assign (wpLens . snapletValue)
                                   w{requestPostSet = (Just IntSet.empty)}
          Just _ -> return ()
        codeGen $ yieldPureText ""
@@ -167,7 +167,7 @@ wpPostsSplice :: Wordpress b
               -> WordpressConfig (Handler b b)
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
               -> Splice (Handler b b)
-wpPostsSplice wp wpconf wordpress =
+wpPostsSplice wp wpconf wpLens =
   do promise <- newEmptyPromise
      outputChildren <- manyWithSplices runChildren (postSplices (extraFields wpconf))
                                                    (getPromise promise)
@@ -184,20 +184,20 @@ wpPostsSplice wp wpconf wordpress =
      cats <- lift $ lookupCategoryIds wp (endpoint wpconf) cats'
 
      let getPosts =
-          do Wordpress{..} <- lift $ use (wordpress . snapletValue)
+          do Wordpress{..} <- lift $ use (wpLens . snapletValue)
              let wpKey = wpKey' num offset tags cats
-             cached <- lift $ with wordpress $ wpCacheGet (cacheBehavior wpconf) wpKey
+             cached <- lift $ with wpLens $ wpCacheGet (cacheBehavior wpconf) wpKey
              case cached of
                Just r -> return r
                Nothing ->
-                 do running <- lift $ with wordpress $ runningQueryFor wpKey
+                 do running <- lift $ with wpLens $ runningQueryFor wpKey
                     if running
                        then do liftIO $ threadDelay 100000
                                getPosts
                        else
                          do let endpt = endpoint wpconf
                             h <- liftIO $ runHTTP (endpt <> "/posts") $ buildParams wpKey
-                            lift $ with wordpress $ do
+                            lift $ with wpLens $ do
                               wpCacheSet (cacheBehavior wpconf) wpKey h
                               markDoneRunning wpKey
                             return h
@@ -205,9 +205,9 @@ wpPostsSplice wp wpconf wordpress =
        do res <- getPosts
           case (decodeStrict . T.encodeUtf8 $ res) of
             Just posts -> do let postsW = extractPostIds posts
-                             Wordpress{..} <- lift (use (wordpress . snapletValue))
+                             Wordpress{..} <- lift (use (wpLens . snapletValue))
                              let postsND = noDuplicates requestPostSet . take limit $ postsW
-                             lift $ addPostIds wordpress (map fst postsND)
+                             lift $ addPostIds wpLens (map fst postsND)
                              putPromise promise (map snd postsND)
                              codeGen outputChildren
             Nothing -> codeGen (yieldPureText "")
@@ -277,9 +277,9 @@ extractPostIds = map extractPostId
 
 
 addPostIds :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b)) -> [Int] -> Handler b b ()
-addPostIds wordpress ids =
-  do w@Wordpress{..} <- use (wordpress . snapletValue)
-     assign (wordpress . snapletValue)
+addPostIds wpLens ids =
+  do w@Wordpress{..} <- use (wpLens . snapletValue)
+     assign (wpLens . snapletValue)
             w{requestPostSet = ((`IntSet.union` (IntSet.fromList ids)) <$> requestPostSet) }
 
 getPost :: WPKey -> Handler b (Wordpress b) (Maybe Object)
@@ -311,7 +311,7 @@ getPost key = error $ "getPost: Don't know how to get a post from key: " ++ show
 wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
                         -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                         -> Splice (Handler b b)
-wpPostByPermalinkSplice conf wordpress =
+wpPostByPermalinkSplice conf wpLens =
   do promise <- newEmptyPromise
      outputChildren <- withSplices runChildren (postSplices (extraFields conf)) (getPromise promise)
      return $ yieldRuntime $
@@ -319,7 +319,7 @@ wpPostByPermalinkSplice conf wordpress =
           case mperma of
             Nothing -> codeGen (yieldPureText "")
             Just (year, month, slug) ->
-              do res <- lift $ with wordpress $ getPost (PostByPermalinkKey year month slug)
+              do res <- lift $ with wpLens $ getPost (PostByPermalinkKey year month slug)
                  case res of
                    Just post -> do putPromise promise post
                                    codeGen outputChildren
