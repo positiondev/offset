@@ -32,6 +32,7 @@ module Snap.Snaplet.Wordpress (
  , mergeFields
  ) where
 
+import           Blaze.ByteString.Builder     (Builder)
 import           Control.Applicative
 import           Control.Concurrent           (threadDelay)
 import           Control.Concurrent.MVar
@@ -211,7 +212,7 @@ parseQueryNode n =
                (readSafe =<< X.getAttribute "tags" n)
                (readSafe =<< X.getAttribute "categories" n)
 
-wpPostsSplice :: Wordpress b
+wpPostsSplice :: forall b. Wordpress b
               -> WordpressConfig (Handler b b)
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
               -> Splice (Handler b b)
@@ -223,26 +224,27 @@ wpPostsSplice wp wpconf wpLens =
      tagDict <- lift $ lookupTaxDict "post_tag" wp
      catDict <- lift $ lookupTaxDict "category" wp
 
-     let getPosts =
-          do Wordpress{..} <- lift $ use (wpLens . snapletValue)
+     let getPosts :: Handler b b Text
+         getPosts =
+          do Wordpress{..} <- use (wpLens . snapletValue)
              let wpKey = mkWPKey tagDict catDict postsQuery
-             cached <- lift $ with wpLens $ wpCacheGet (cacheBehavior wpconf) wpKey
+             cached <- with wpLens $ wpCacheGet (cacheBehavior wpconf) wpKey
              case cached of
                Just r -> return r
                Nothing ->
-                 do running <- lift $ with wpLens $ runningQueryFor wpKey
+                 do running <- with wpLens $ runningQueryFor wpKey
                     if running
                        then do liftIO $ threadDelay 100000
                                getPosts
                        else
                          do let endpt = endpoint wpconf
                             h <- liftIO $ (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
-                            lift $ with wpLens $ do
+                            with wpLens $ do
                               wpCacheSet (cacheBehavior wpconf) wpKey h
                               markDoneRunning wpKey
                             return h
      return $ yieldRuntime $
-       do res <- getPosts
+       do res <- lift getPosts
           case (decodeStrict . T.encodeUtf8 $ res) of
             Just posts -> do let postsW = extractPostIds posts
                              Wordpress{..} <- lift (use (wpLens . snapletValue))
