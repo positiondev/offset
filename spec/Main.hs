@@ -6,11 +6,11 @@ module Main where
 import           Prelude                     hiding ((++))
 
 import           Blaze.ByteString.Builder
+import           Control.Concurrent.MVar
 import           Control.Lens                hiding ((.=))
 import           Control.Monad               (join)
 import           Control.Monad.Trans         (liftIO)
 import           Control.Monad.Trans.Either
-import           Control.Concurrent.MVar
 import           Data.Aeson                  hiding (Success)
 import           Data.Default
 import qualified Data.HashMap.Strict         as M
@@ -77,7 +77,7 @@ renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
         templates = return $ M.fromList (map mkTmpl tmpls)
         config = (def { endpoint = ""
-                      , requester = Just (\_ _-> return response)
+                      , requester = Just $ Requester (\_ _ f -> return (f response))
                       , cacheBehavior = NoCache
                       , extraFields = jacobinFields})
 
@@ -92,19 +92,19 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
         templates = return $ M.fromList (map mkTmpl tmpls)
         config = (def { endpoint = ""
-                      , requester = Just recordingRequester
+                      , requester = Just $ Requester recordingRequester
                       , cacheBehavior = NoCache})
-        recordingRequester "/taxonomies/post_tag/terms" [] =
-          return $ enc $ [object [ "ID" .= (177 :: Int)
-                                 , "slug" .= ("home-featured" :: Text)]
-                         ,object [ "ID" .= (160 :: Int)
-                                 , "slug" .= ("featured-global" :: Text)]]
-        recordingRequester "/taxonomies/category/terms" [] =
-          return $ enc $ [object [ "ID" .= (159 :: Int)
-                                 , "slug" .= ("bookmarx" :: Text)]]
-        recordingRequester url params = do
+        recordingRequester "/taxonomies/post_tag/terms" [] f =
+          return $ f $ enc $ [object [ "ID" .= (177 :: Int)
+                                     , "slug" .= ("home-featured" :: Text)]
+                             ,object [ "ID" .= (160 :: Int)
+                                     , "slug" .= ("featured-global" :: Text)]]
+        recordingRequester "/taxonomies/category/terms" [] f =
+          return $ f $ enc $ [object [ "ID" .= (159 :: Int)
+                                     , "slug" .= ("bookmarx" :: Text)]]
+        recordingRequester url params f = do
           tryPutMVar record $ mkUrlUnescape url params
-          return ""
+          return $ f ""
         mkUrlUnescape url params = (url <> "?" <> (T.intercalate "&" $ map (\(k, v) -> k <> "=" <> v) params))
 
 cachingApp :: SnapletInit App App
@@ -114,7 +114,7 @@ cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
   w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
   return $ App h r w
   where config = (def { endpoint = ""
-                      , requester = Just (\_ _-> return "")
+                      , requester = Just $ Requester (\_ _ f -> return $ f ("" :: Text))
                       , cacheBehavior = CacheSeconds 1})
 
 ----------------------------------------------------------
