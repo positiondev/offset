@@ -4,10 +4,10 @@
 module Misc where
 
 import           Data.Monoid
-import           Data.Text                   (Text)
-import qualified Data.Text                   as T
-import           Test.Hspec
+import           Data.Text              (Text)
+import qualified Data.Text              as T
 import           Snap.Snaplet.Wordpress
+import           Test.Hspec
 
 shouldTransformTo :: Text -> Text -> Spec
 shouldTransformTo from to =
@@ -64,13 +64,12 @@ tests = do
       read "+foo-bar,-baz,-qux" `shouldBe`
         (TaxSpecList [TaxPlus "foo-bar", TaxMinus "baz", TaxMinus "qux"])
     it "should round trip tag plus" $
-      show (read "+foo-bar" :: TaxSpec) `shouldBe` "+foo-bar"
+      show (read "+foo-bar" :: TaxSpec TagType) `shouldBe` "+foo-bar"
     it "should round trip tag minus" $
-      show (read "-foo-bar" :: TaxSpec) `shouldBe` "-foo-bar"
+      show (read "-foo-bar" :: TaxSpec TagType) `shouldBe` "-foo-bar"
     it "should add plus to bare tag plus when round tripping" $
-      show (read "foo-bar" :: TaxSpec) `shouldBe` "+foo-bar"
+      show (read "foo-bar" :: TaxSpec TagType) `shouldBe` "+foo-bar"
     it "should round trip list" $
-      show (read "+foo-bar,-baz,-qux" :: TaxSpecList) `shouldBe` "+foo-bar,-baz,-qux"
+      show (read "+foo-bar,-baz,-qux" :: TaxSpecList CatType) `shouldBe` "+foo-bar,-baz,-qux"
     it "should add plus to bare tag pluses in list roundtrip" $
-      show (read "foo-bar,-baz,-qux" :: TaxSpecList) `shouldBe` "+foo-bar,-baz,-qux"
-
+      show (read "foo-bar,-baz,-qux" :: TaxSpecList TagType) `shouldBe` "+foo-bar,-baz,-qux"

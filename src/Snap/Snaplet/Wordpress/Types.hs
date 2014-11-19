@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE EmptyDataDecls    #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Snap.Snaplet.Wordpress.Types where
 
@@ -46,20 +47,31 @@ import qualified Text.XmlHtml                 as X
 
 import           Snap.Snaplet.Wordpress.Utils
 
-data TaxSpec = TaxPlus Text | TaxMinus Text deriving (Eq, Ord)
+data TaxSpec a = TaxPlus Text | TaxMinus Text deriving (Eq, Ord)
 
-data TaxSpecId = TaxPlusId Int | TaxMinusId Int deriving (Eq, Show, Ord)
+data TaxSpecId a = TaxPlusId Int | TaxMinusId Int deriving (Eq, Show, Ord)
 
-instance Show TaxSpec where
+data CatType
+data TagType
+
+instance Show (TaxSpec a) where
   show (TaxPlus t) = "+" ++ (T.unpack t)
   show (TaxMinus t) = "-" ++ (T.unpack t)
+
+newtype TaxRes a = TaxRes (Int, Text)
+
+instance FromJSON (TaxRes a) where
+  parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
+  parseJSON _ = mzero
+
+data TaxDict a = TaxDict {dict :: [TaxRes a], desc :: Text}
 
 
 type Year = Text
 type Month = Text
 type Slug = Text
-data Filter = TagFilter TaxSpecId
-            | CatFilter TaxSpecId
+data Filter = TagFilter (TaxSpecId TagType)
+            | CatFilter (TaxSpecId CatType)
             | NumFilter Int
             | OffsetFilter Int
             deriving (Eq, Ord)
@@ -77,7 +89,7 @@ data WPKey = PostKey Int
 
 
 
-instance Read TaxSpec where
+instance Read (TaxSpec a) where
   readsPrec _ ('+':cs) | all (`elem` tagChars) cs = [(TaxPlus (T.pack cs), "")]
   readsPrec _ ('-':cs) | all (`elem` tagChars) cs = [(TaxMinus (T.pack cs), "")]
   readsPrec _ cs | all (`elem` tagChars) cs = [(TaxPlus (T.pack cs), "")]
@@ -86,12 +98,12 @@ instance Read TaxSpec where
 tagChars :: String
 tagChars = ['a'..'z'] ++ "-"
 
-newtype TaxSpecList = TaxSpecList { unTaxSpecList :: [TaxSpec]} deriving (Eq, Ord)
+newtype TaxSpecList a = TaxSpecList { unTaxSpecList :: [TaxSpec a]} deriving (Eq, Ord)
 
-instance Show TaxSpecList where
+instance Show (TaxSpecList a) where
   show (TaxSpecList ts) = intercalate "," (map show ts)
 
-instance Read TaxSpecList where
+instance Read (TaxSpecList a) where
   readsPrec _ ts = let vs = map (readSafe) $ T.splitOn "," $ T.pack ts in
                      if all isJust vs
                         then [(TaxSpecList $ catMaybes vs, "")]

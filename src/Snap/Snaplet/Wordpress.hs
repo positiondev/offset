@@ -25,11 +25,14 @@ module Snap.Snaplet.Wordpress (
 
  , transformName
  , TaxSpec(..)
+ , TagType
+ , CatType
  , TaxSpecList(..)
  , Field(..)
  , mergeFields
  ) where
 
+import           Blaze.ByteString.Builder     (Builder)
 import           Control.Applicative
 import           Control.Concurrent           (threadDelay)
 import           Control.Concurrent.MVar
@@ -169,7 +172,47 @@ markDoneRunning wpKey =
   do Wordpress{..} <- getWordpress
      liftIO $ modifyMVar_ activeMV $ return . Map.delete wpKey
 
-wpPostsSplice :: Wordpress b
+data WPQuery = WPPostsQuery{ qlimit  :: Int
+                           , qnum    :: Int
+                           , qoffset :: Int
+                           , qpage   :: Int
+                           , qtags   :: TaxSpecList TagType
+                           , qcats   :: TaxSpecList CatType}
+
+mkPostsQuery :: Maybe Int -> Maybe Int -> Maybe Int -> Maybe Int
+       -> Maybe (TaxSpecList TagType) -> Maybe (TaxSpecList CatType)
+       -> WPQuery
+mkPostsQuery l n o p ts cs =
+  WPPostsQuery{ qlimit = fromMaybe 20 l
+              , qnum = fromMaybe 20 n
+              , qoffset = fromMaybe 0 o
+              , qpage = fromMaybe 1 p
+              , qtags = fromMaybe (TaxSpecList []) ts
+              , qcats = fromMaybe (TaxSpecList []) cs
+              }
+
+mkWPKey :: (TaxSpec TagType -> TaxSpecId TagType)
+    -> (TaxSpec CatType -> TaxSpecId CatType)
+    -> WPQuery
+    -> WPKey
+mkWPKey tagDict catDict WPPostsQuery{..} =
+  let page = if qpage < 1 then 1 else qpage
+      offset = qnum * (page - 1) + qoffset
+      tags = map tagDict $ unTaxSpecList qtags
+      cats = map catDict $ unTaxSpecList qcats
+  in PostsKey (Set.fromList $ [ NumFilter qnum , OffsetFilter offset]
+               ++ map TagFilter tags ++ map CatFilter cats)
+
+parseQueryNode :: X.Node -> WPQuery
+parseQueryNode n =
+  mkPostsQuery (readSafe =<< X.getAttribute "limit" n)
+               (readSafe =<< X.getAttribute "num" n)
+               (readSafe =<< X.getAttribute "offset" n)
+               (readSafe =<< X.getAttribute "page" n)
+               (readSafe =<< X.getAttribute "tags" n)
+               (readSafe =<< X.getAttribute "categories" n)
+
+wpPostsSplice :: forall b. Wordpress b
               -> WordpressConfig (Handler b b)
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
               -> Splice (Handler b b)
@@ -177,42 +220,35 @@ wpPostsSplice wp wpconf wpLens =
   do promise <- newEmptyPromise
      outputChildren <- manyWithSplices runChildren (postSplices (extraFields wpconf))
                                                    (getPromise promise)
-     n <- getParamNode
-     let limit = (fromMaybe 20 $ readSafe =<< X.getAttribute "limit" n) :: Int
-         num = (fromMaybe 20 $ readSafe =<< X.getAttribute "num" n) :: Int
-         offset' = (fromMaybe 0 $ readSafe =<< X.getAttribute "offset" n) :: Int
-         page' = (fromMaybe 1 $ readSafe =<< X.getAttribute "page" n) :: Int
-         page = if page' < 1 then 1 else page'
-         offset = num * (page - 1) + offset'
-         tags' = unTaxSpecList (fromMaybe (TaxSpecList []) $ readSafe =<< X.getAttribute "tags" n)
-         cats' = unTaxSpecList (fromMaybe (TaxSpecList []) $ readSafe =<< X.getAttribute "categories" n)
-     tags <- lift $ lookupTagIds wp (endpoint wpconf) tags'
-     cats <- lift $ lookupCategoryIds wp (endpoint wpconf) cats'
+     postsQuery <- parseQueryNode <$> getParamNode
+     tagDict <- lift $ lookupTaxDict "post_tag" wp
+     catDict <- lift $ lookupTaxDict "category" wp
 
-     let getPosts =
-          do Wordpress{..} <- lift $ use (wpLens . snapletValue)
-             let wpKey = wpKey' num offset tags cats
-             cached <- lift $ with wpLens $ wpCacheGet (cacheBehavior wpconf) wpKey
+     let getPosts :: Handler b b Text
+         getPosts =
+          do Wordpress{..} <- use (wpLens . snapletValue)
+             let wpKey = mkWPKey tagDict catDict postsQuery
+             cached <- with wpLens $ wpCacheGet (cacheBehavior wpconf) wpKey
              case cached of
                Just r -> return r
                Nothing ->
-                 do running <- lift $ with wpLens $ runningQueryFor wpKey
+                 do running <- with wpLens $ runningQueryFor wpKey
                     if running
                        then do liftIO $ threadDelay 100000
                                getPosts
                        else
                          do let endpt = endpoint wpconf
                             h <- liftIO $ (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
-                            lift $ with wpLens $ do
+                            with wpLens $ do
                               wpCacheSet (cacheBehavior wpconf) wpKey h
                               markDoneRunning wpKey
                             return h
      return $ yieldRuntime $
-       do res <- getPosts
+       do res <- lift getPosts
           case (decodeStrict . T.encodeUtf8 $ res) of
             Just posts -> do let postsW = extractPostIds posts
                              Wordpress{..} <- lift (use (wpLens . snapletValue))
-                             let postsND = noDuplicates requestPostSet . take limit $ postsW
+                             let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet  $ postsW
                              lift $ addPostIds wpLens (map fst postsND)
                              putPromise promise (map snd postsND)
                              codeGen outputChildren
@@ -220,11 +256,6 @@ wpPostsSplice wp wpconf wpLens =
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
-
-wpKey' :: Int -> Int -> [TaxSpecId] -> [TaxSpecId] -> WPKey
-wpKey' num offset tags cats =
-  PostsKey (Set.fromList $ [ NumFilter num , OffsetFilter offset]
-            ++ map TagFilter tags ++ map CatFilter cats)
 
 
 buildParams :: WPKey -> [(Text, Text)]
@@ -237,33 +268,13 @@ buildParams (PostsKey filters) = params
         mkFilter (NumFilter num) = ("filter[posts_per_page]", tshow num)
         mkFilter (OffsetFilter offset) = ("filter[offset]", tshow offset)
 
-newtype TaxRes = TaxRes (Int, Text)
-
-instance FromJSON TaxRes where
-  parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
-  parseJSON _ = mzero
-
-data TaxDict = TaxDict {dict :: [TaxRes], desc :: Text}
-
-lookupTagIds :: Wordpress b -> Text -> [TaxSpec] -> IO [TaxSpecId]
-lookupTagIds wordpress = lookupTaxIds wordpress "post_tag"
-
-lookupCategoryIds :: Wordpress b -> Text -> [TaxSpec] -> IO [TaxSpecId]
-lookupCategoryIds wordpress = lookupTaxIds wordpress "category"
-
-lookupTaxIds :: Wordpress b -> Text -> Text -> [TaxSpec] -> IO [TaxSpecId]
-lookupTaxIds _ _ _ [] = return []
-lookupTaxIds wordpress resName end specs =
-  do taxDict <- lookupTaxDict wordpress resName end
-     return $ map taxDict specs
-
-getSpecId :: TaxDict -> TaxSpec -> TaxSpecId
+getSpecId :: TaxDict a -> TaxSpec a -> TaxSpecId a
 getSpecId taxDict spec =
   case spec of
    TaxPlus slug -> TaxPlusId $ idFor taxDict slug
    TaxMinus slug -> TaxMinusId $ idFor taxDict slug
   where
-    idFor :: TaxDict -> Text -> Int
+    idFor :: TaxDict a -> Text -> Int
     idFor (TaxDict{..}) slug =
       case filter (\(TaxRes (_,s)) -> s == slug) dict of
        [] -> error $ T.unpack $ "Couldn't find " <> desc <> ": " <> slug
@@ -277,9 +288,9 @@ decodeJsonErr res = case decodeStrict $ T.encodeUtf8 res of
 decodeJson :: FromJSON a => Text -> Maybe a
 decodeJson res = decodeStrict $ T.encodeUtf8 res
 
-lookupTaxDict :: Wordpress b -> Text -> Text -> IO (TaxSpec -> TaxSpecId)
-lookupTaxDict Wordpress{..} resName end =
-  do res <- liftIO $ (unRequester runHTTP) (end <> "/taxonomies/" <> resName <> "/terms") [] decodeJsonErr
+lookupTaxDict :: Text -> Wordpress b -> IO (TaxSpec a -> TaxSpecId a)
+lookupTaxDict resName Wordpress{..} =
+  do res <- liftIO $ (unRequester runHTTP) (endpoint conf <> "/taxonomies/" <> resName <> "/terms") [] decodeJsonErr
      return (getSpecId $ TaxDict res resName)
 
 extractPostIds :: [Object] -> [(Int, Object)]
