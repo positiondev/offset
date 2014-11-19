@@ -87,16 +87,23 @@ data WPKey = PostKey Int
               | PostsKey (Set Filter)
               deriving (Eq, Show, Ord)
 
-
-
-instance Read (TaxSpec a) where
-  readsPrec _ ('+':cs) | all (`elem` tagChars) cs = [(TaxPlus (T.pack cs), "")]
-  readsPrec _ ('-':cs) | all (`elem` tagChars) cs = [(TaxMinus (T.pack cs), "")]
-  readsPrec _ cs | all (`elem` tagChars) cs = [(TaxPlus (T.pack cs), "")]
-  readsPrec _ _ = []
-
 tagChars :: String
 tagChars = ['a'..'z'] ++ "-"
+
+digitChars :: String
+digitChars = ['0'..'9']
+
+instance Read (TaxSpec a) where
+  readsPrec _ ('+':cs) | not (null cs) && all (`elem` tagChars) cs = [(TaxPlus (T.pack cs), "")]
+  readsPrec _ ('-':cs) | not (null cs) && all (`elem` tagChars) cs = [(TaxMinus (T.pack cs), "")]
+  readsPrec _ cs | not (null cs) && all (`elem` tagChars) cs       = [(TaxPlus (T.pack cs), "")]
+  readsPrec _ _ = []
+
+instance Read (TaxSpecId a) where
+  readsPrec _ ('+':cs) | not (null cs) && all (`elem` digitChars) cs = [(TaxPlusId (read cs), "")]
+  readsPrec _ ('-':cs) | not (null cs) && all (`elem` digitChars) cs = [(TaxMinusId (read cs), "")]
+  readsPrec _ cs       | not (null cs) && all (`elem` digitChars) cs = [(TaxPlusId (read cs), "")]
+  readsPrec _ _ = []
 
 newtype TaxSpecList a = TaxSpecList { unTaxSpecList :: [TaxSpec a]} deriving (Eq, Ord)
 

@@ -32,6 +32,7 @@ module Snap.Snaplet.Wordpress (
  , mergeFields
  ) where
 
+
 import           Blaze.ByteString.Builder     (Builder)
 import           Control.Applicative
 import           Control.Concurrent           (threadDelay)
@@ -51,7 +52,7 @@ import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Map.Syntax
 import           Data.Maybe                   (catMaybes, fromJust, fromMaybe,
-                                               isJust, listToMaybe)
+                                               isJust, listToMaybe, mapMaybe)
 import           Data.Monoid
 import           Data.Ratio
 import           Data.Set                     (Set)
@@ -123,7 +124,8 @@ initWordpress' wpconf heist redis wpLens =
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
        let wp = Wordpress (withTop' id . R.runRedisDB redis) req active Nothing wpconf
-       addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
+       addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens)  $
+                         mempty
        return $ wp
 
 wordpressSplices :: Wordpress b
@@ -134,6 +136,30 @@ wordpressSplices wp conf wpLens =
   do "wpPosts" ## wpPostsSplice wp conf wpLens
      "wpPostByPermalink" ## wpPostByPermalinkSplice conf wpLens
      "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
+     "wpFireRequests" ## wpFireRequestsSplice wpLens conf
+
+
+wpFireRequestsSplice :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+                     -> WordpressConfig (Handler b b)
+                     -> Splice (Handler b b)
+wpFireRequestsSplice wpLens wpconf = do n <- getParamNode
+                                        let urls = getUrls $ X.elementChildren n
+                                        return $ yieldRuntime $
+                                          do lift $ mapM_ (getPosts wpLens wpconf False) urls
+                                             codeGen (yieldPureText "")
+
+  where getUrls = map getWpKey . filter isReqNode
+        isReqNode (X.Element "req" _ _) = True
+        isReqNode _ = False
+        getWpKey x = let num = readSafe =<< X.getAttribute "num" x
+                         off = readSafe =<< X.getAttribute "offset" x
+                         ts  = filter (/= "") $ T.splitOn "," $ fromMaybe "" $ X.getAttribute "tags" x
+                         cs  = filter (/= "") $ T.splitOn "," $ fromMaybe "" $ X.getAttribute "cats" x
+                     in PostsKey (Set.fromList $ [NumFilter (fromMaybe 20 num)
+                                               ,OffsetFilter (fromMaybe 0 off)]
+                                             ++ map TagFilter (mapMaybe readSafe ts)
+                                             ++ map CatFilter (mapMaybe readSafe cs)
+                                             )
 
 wpNoPostDuplicatesSplice :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                          -> Splice (Handler b b)
@@ -212,6 +238,30 @@ parseQueryNode n =
                (readSafe =<< X.getAttribute "tags" n)
                (readSafe =<< X.getAttribute "categories" n)
 
+getPosts :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+         -> WordpressConfig (Handler b b)
+         -> Bool
+         -> WPKey
+         -> Handler b b Text
+getPosts wpLens wpconf tryAgain wpKey =
+  do Wordpress{..} <- use (wpLens . snapletValue)
+     cached <- with wpLens $ wpCacheGet (cacheBehavior wpconf) wpKey
+     case cached of
+       Just r -> return r
+       Nothing ->
+         do running <- with wpLens $ runningQueryFor wpKey
+            if running
+               then if tryAgain then (do liftIO $ threadDelay 100000
+                                         getPosts wpLens wpconf tryAgain wpKey)
+                                else return ""
+               else
+                 do let endpt = endpoint wpconf
+                    h <- liftIO $ (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
+                    with wpLens $ do
+                      wpCacheSet (cacheBehavior wpconf) wpKey h
+                      markDoneRunning wpKey
+                    return h
+
 wpPostsSplice :: forall b. Wordpress b
               -> WordpressConfig (Handler b b)
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
@@ -223,28 +273,9 @@ wpPostsSplice wp wpconf wpLens =
      postsQuery <- parseQueryNode <$> getParamNode
      tagDict <- lift $ lookupTaxDict "post_tag" wp
      catDict <- lift $ lookupTaxDict "category" wp
-
-     let getPosts :: Handler b b Text
-         getPosts =
-          do Wordpress{..} <- use (wpLens . snapletValue)
-             let wpKey = mkWPKey tagDict catDict postsQuery
-             cached <- with wpLens $ wpCacheGet (cacheBehavior wpconf) wpKey
-             case cached of
-               Just r -> return r
-               Nothing ->
-                 do running <- with wpLens $ runningQueryFor wpKey
-                    if running
-                       then do liftIO $ threadDelay 100000
-                               getPosts
-                       else
-                         do let endpt = endpoint wpconf
-                            h <- liftIO $ (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
-                            with wpLens $ do
-                              wpCacheSet (cacheBehavior wpconf) wpKey h
-                              markDoneRunning wpKey
-                            return h
+     let wpKey = mkWPKey tagDict catDict postsQuery
      return $ yieldRuntime $
-       do res <- lift getPosts
+       do res <- lift $ getPosts wpLens wpconf True wpKey
           case (decodeStrict . T.encodeUtf8 $ res) of
             Just posts -> do let postsW = extractPostIds posts
                              Wordpress{..} <- lift (use (wpLens . snapletValue))

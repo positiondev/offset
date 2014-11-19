@@ -81,7 +81,7 @@ renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
                       , cacheBehavior = NoCache
                       , extraFields = jacobinFields})
 
-queryingApp :: [(Text, Text)] -> MVar Text -> SnapletInit App App
+queryingApp :: [(Text, Text)] -> MVar [Text] -> SnapletInit App App
 queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." Nothing $ do
   h <- nestSnaplet "" heist $ heistInit "templates"
   addConfig h $ set scTemplateLocations (return templates) mempty
@@ -103,7 +103,7 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
           return $ f $ enc $ [object [ "ID" .= (159 :: Int)
                                      , "slug" .= ("bookmarx" :: Text)]]
         recordingRequester url params f = do
-          tryPutMVar record $ mkUrlUnescape url params
+          modifyMVar_ record $ (return . (++ [mkUrlUnescape url params]))
           return $ f ""
         mkUrlUnescape url params = (url <> "?" <> (T.intercalate "&" $ map (\(k, v) -> k <> "=" <> v) params))
 
@@ -217,53 +217,68 @@ main = hspec $ do
   describe "generate queries from <wpPosts>" $ do
     shouldQueryTo
       "<wpPosts></wpPosts>"
-      "/posts?filter[offset]=0&filter[posts_per_page]=20"
+      ["/posts?filter[offset]=0&filter[posts_per_page]=20"]
     shouldQueryTo
       "<wpPosts limit=2></wpPosts>"
-      "/posts?filter[offset]=0&filter[posts_per_page]=20"
+      ["/posts?filter[offset]=0&filter[posts_per_page]=20"]
     shouldQueryTo
       "<wpPosts offset=1 limit=1></wpPosts>"
-      "/posts?filter[offset]=1&filter[posts_per_page]=20"
+      ["/posts?filter[offset]=1&filter[posts_per_page]=20"]
     shouldQueryTo
       "<wpPosts offset=0 limit=1></wpPosts>"
-      "/posts?filter[offset]=0&filter[posts_per_page]=20"
+      ["/posts?filter[offset]=0&filter[posts_per_page]=20"]
     shouldQueryTo
       "<wpPosts limit=10 page=1></wpPosts>"
-      "/posts?filter[offset]=0&filter[posts_per_page]=20"
+      ["/posts?filter[offset]=0&filter[posts_per_page]=20"]
     shouldQueryTo
       "<wpPosts limit=10 page=2></wpPosts>"
-      "/posts?filter[offset]=20&filter[posts_per_page]=20"
+      ["/posts?filter[offset]=20&filter[posts_per_page]=20"]
     shouldQueryTo
       "<wpPosts num=2></wpPosts>"
-      "/posts?filter[offset]=0&filter[posts_per_page]=2"
+      ["/posts?filter[offset]=0&filter[posts_per_page]=2"]
     shouldQueryTo
       "<wpPosts num=2 page=2 limit=1></wpPosts>"
-      "/posts?filter[offset]=2&filter[posts_per_page]=2"
+      ["/posts?filter[offset]=2&filter[posts_per_page]=2"]
     shouldQueryTo
       "<wpPosts num=1 page=3></wpPosts>"
-      "/posts?filter[offset]=2&filter[posts_per_page]=1"
+      ["/posts?filter[offset]=2&filter[posts_per_page]=1"]
     shouldQueryTo
       "<wpPosts tags=\"+home-featured\" limit=10></wpPosts>"
-      "/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=177"
+      ["/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=177"]
     shouldQueryTo
       "<wpPosts tags=\"-home-featured\" limit=1></wpPosts>"
-      "/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__not_in]=177"
+      ["/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__not_in]=177"]
     shouldQueryTo
       "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>"
-      "/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=177&filter[tag__not_in]=160"
+      ["/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=177&filter[tag__not_in]=160"]
     shouldQueryTo
       "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>"
-      "/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=160&filter[tag__in]=177"
+      ["/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=160&filter[tag__in]=177"]
     shouldQueryTo
       "<wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts>"
-      "/posts?filter[category__in]=159&filter[offset]=0&filter[posts_per_page]=20"
+      ["/posts?filter[category__in]=159&filter[offset]=0&filter[posts_per_page]=20"]
     shouldQueryTo
       "<wpPosts categories=\"-bookmarx\" limit=10><wpTitle/></wpPosts>"
-      "/posts?filter[category__not_in]=159&filter[offset]=0&filter[posts_per_page]=20"
+      ["/posts?filter[category__not_in]=159&filter[offset]=0&filter[posts_per_page]=20"]
+    describe "wpFireRequests" $ do
+      shouldQueryTo
+        "<wpFireRequests><req cats=\"-159\" offset=1></req></wpFireRequests>"
+        ["/posts?filter[category__not_in]=159&filter[offset]=1&filter[posts_per_page]=20"]
+      shouldQueryTo
+        "<wpFireRequests><req tags=\"1\"></req></wpFireRequests>"
+        ["/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=1"]
+      shouldQueryTo
+        "<wpFireRequests><req num=1 offset=10></req></wpFireRequests>"
+        ["/posts?filter[offset]=10&filter[posts_per_page]=1"]
+      shouldQueryTo
+        "<wpFireRequests><req cats=\"-159,20\" offset=1></req><req tags=\"1\" num=1></req></wpFireRequests>"
+        ["/posts?filter[category__in]=20&filter[category__not_in]=159&filter[offset]=1&filter[posts_per_page]=20"
+        ,"/posts?filter[offset]=0&filter[posts_per_page]=1&filter[tag__in]=1"
+        ]
 
-shouldQueryTo :: Text -> Text -> Spec
+shouldQueryTo :: Text -> [Text] -> Spec
 shouldQueryTo hQuery wpQuery = do
-  record <- runIO newEmptyMVar
+  record <- runIO $ newMVar []
   snap (route []) (queryingApp [("x", hQuery)] record) $
     it ("query from " <> T.unpack hQuery) $ do
       eval $ render "x"
