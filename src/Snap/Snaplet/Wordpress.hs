@@ -36,10 +36,10 @@ module Snap.Snaplet.Wordpress (
  , mergeFields
  ) where
 
-
 import           Blaze.ByteString.Builder     (Builder)
 import           Control.Applicative
 import           Control.Concurrent           (threadDelay)
+import           Control.Concurrent.Async
 import           Control.Concurrent.MVar
 import           Control.Lens
 import           Data.Aeson
@@ -127,14 +127,10 @@ initWordpress' wpconf heist redis wpLens =
                               return $ wreqRequester wpconf u p
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
-       let wp = Wordpress (x redis) req active Nothing wpconf
+       let connection = view (snapletValue . R.redisConnection) redis
+       let wp = Wordpress (R.runRedis connection) req active Nothing wpconf
        addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
        return wp
-
-x snaplet action = do
-  let connection = view (snapletValue . R.redisConnection) snaplet
-  R.runRedis connection action
-
 
 wordpressSplices :: Wordpress b
                  -> WordpressConfig (Handler b b)
@@ -144,21 +140,26 @@ wordpressSplices wp conf wpLens =
   do "wpPosts" ## wpPostsSplice wp conf wpLens
      "wpPostByPermalink" ## wpPostByPermalinkSplice conf wpLens
      "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
-     "wp" ## wpPrefetch wp wpLens conf
+     "wp" ## wpPrefetch wp
 
+cc :: [IO a] -> IO [a]
+cc [] = return []
+cc [a] = do res <- a
+            return [res]
+cc (a:as) = do
+  (r1, rs) <- concurrently a (cc as)
+  return (r1:rs)
 
 wpPrefetch :: Wordpress b
-           -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
-           -> WordpressConfig (Handler b b)
            -> Splice (Handler b b)
-wpPrefetch wp wpLens conf =
+wpPrefetch wp =
   do n <- getParamNode
      childrenRes <- runChildren
      tagDict <- lift $ lookupTaxDict "post_tag" wp
      catDict <- lift $ lookupTaxDict "category" wp
      let wpKeys = findPrefetchables tagDict catDict n
      return $ yieldRuntime $
-       do lift $ mapM_ (getPosts wpLens conf False) wpKeys
+       do void $ liftIO $ cc $ map (getPosts wp) wpKeys
           codeGen childrenRes
 
 findPrefetchables :: (TaxSpec TagType -> TaxSpecId TagType)
@@ -242,52 +243,34 @@ parseQueryNode n =
                (readSafe =<< X.getAttribute "tags" n)
                (readSafe =<< X.getAttribute "categories" n)
 
-getPosts :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
-         -> WordpressConfig (Handler b b)
-         -> Bool
+getPostsRetry :: (Wordpress b)
          -> WPKey
-         -> Handler b b Text
-getPosts wpLens wpconf tryAgain wpKey =
-  do wp@Wordpress{..} <- use (wpLens . snapletValue)
-     cached <- liftIO $ wpCacheGet wp wpKey
-     case cached of
+         -> IO Text
+getPostsRetry wp wpKey =
+  do response <- getPosts wp wpKey
+     case response of
        Just r -> return r
-       Nothing ->
-         do running <- liftIO $ startWpQueryMutex wp wpKey
-            if running
-               then if tryAgain then (do liftIO $ threadDelay 100000
-                                         getPosts wpLens wpconf tryAgain wpKey)
-                                else return ""
-               else
-                 do let endpt = endpoint wpconf
-                    h <- liftIO $ (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
-                    liftIO $ do
-                      wpCacheSet wp wpKey h
-                      markDoneRunning wp wpKey
-                    return h
+       Nothing -> do threadDelay 100000
+                     getPostsRetry wp wpKey
 
-{-
-getPosts' :: WordpressConfig (Handler b b)
+getPosts :: Wordpress b
           -> WPKey
           -> IO (Maybe Text)
-getPosts' wpconf wpKey = -- FINDME
-  do wordpress@Wordpress{..} <- undefined
-     cached <- runRedis $ cacheGet (cacheBehavior wpconf) wpKey
+getPosts wp@Wordpress{..} wpKey =
+  do cached <- wpCacheGet wp wpKey
      case cached of
-       Just r -> return r
+       Just _ -> return cached
        Nothing ->
-         do running <- startWpQueryMutex wordpress wpKey
+         do running <- startWpQueryMutex wp wpKey
             if running
                then return Nothing
                else
-                 do let endpt = endpoint wpconf
-                    h <- liftIO $ (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
-                    runRedis $ wpCacheSet (cacheBehavior wpconf) wpKey h
-
-                    with wpLens $ do
-                      markDoneRunning wpKey
+                 do let endpt = endpoint conf
+                    h <- (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
+                    wpCacheSet wp wpKey h
+                    markDoneRunning wp wpKey
                     return $ Just h
--}
+
 
 wpPostsSplice :: forall b. Wordpress b
               -> WordpressConfig (Handler b b)
@@ -302,7 +285,7 @@ wpPostsSplice wp wpconf wpLens =
      catDict <- lift $ lookupTaxDict "category" wp
      let wpKey = mkWPKey tagDict catDict postsQuery
      return $ yieldRuntime $
-       do res <- lift $ getPosts wpLens wpconf True wpKey
+       do res <- liftIO $ getPostsRetry wp wpKey
           case (decodeStrict . T.encodeUtf8 $ res) of
             Just posts -> do let postsW = extractPostIds posts
                              Wordpress{..} <- lift (use (wpLens . snapletValue))
@@ -366,6 +349,8 @@ wpGetPost wpKey =
   do wp <- view snapletValue <$> getSnapletState
      liftIO $ getPost wp wpKey
 
+getPost :: (ToJSON a, FromJSON a)
+        => Wordpress b -> WPKey -> IO (Maybe a)
 getPost wp@Wordpress{..} wpKey@(PostByPermalinkKey year month slug) = do
          mres <- wpCacheGet wp wpKey
          case mres of
@@ -386,7 +371,7 @@ getPost wp@Wordpress{..} wpKey@(PostByPermalinkKey year month slug) = do
                                   return $ Just post
                              _ -> do markDoneRunning wp wpKey
                                      return Nothing
-getPost wp key = error $ "getPost: Don't know how to get a post from key: " ++ show key
+getPost _ key = error $ "getPost: Don't know how to get a post from key: " ++ show key
 
 wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
                         -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
