@@ -20,8 +20,12 @@ module Snap.Snaplet.Wordpress (
  , Filter(..)
  , wpCacheGet
  , wpCacheSet
+ , wpCacheGet'
+ , wpCacheSet'
  , wpExpirePost
  , wpExpireAggregates
+ , wpExpirePost'
+ , wpExpireAggregates'
 
  , transformName
  , TaxSpec(..)
@@ -96,7 +100,7 @@ instance Default (WordpressConfig m) where
 
 
 data Wordpress b =
-     Wordpress { runRedis       :: forall a. Redis a -> Handler b (Wordpress b) a
+     Wordpress { runRedis       :: forall a. Redis a -> IO a
                , runHTTP        :: Requester
                , activeMV       :: MVar (Map WPKey UTCTime)
                , requestPostSet :: Maybe IntSet
@@ -104,14 +108,14 @@ data Wordpress b =
                }
 
 initWordpress :: Snaplet (Heist b)
-              -> Simple Lens b (Snaplet RedisDB)
+              -> Snaplet RedisDB
               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
               -> SnapletInit b (Wordpress b)
 initWordpress = initWordpress' def
 
 initWordpress' :: WordpressConfig (Handler b b)
                -> Snaplet (Heist b)
-               -> Simple Lens b (Snaplet RedisDB)
+               -> Snaplet RedisDB
                -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                -> SnapletInit b (Wordpress b)
 initWordpress' wpconf heist redis wpLens =
@@ -123,10 +127,14 @@ initWordpress' wpconf heist redis wpLens =
                               return $ wreqRequester wpconf u p
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
-       let wp = Wordpress (withTop' id . R.runRedisDB redis) req active Nothing wpconf
-       addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens)  $
-                         mempty
-       return $ wp
+       let wp = Wordpress (x redis) req active Nothing wpconf
+       addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
+       return wp
+
+x snaplet action = do
+  let connection = view (snapletValue . R.redisConnection) snaplet
+  R.runRedis connection action
+
 
 wordpressSplices :: Wordpress b
                  -> WordpressConfig (Handler b b)
@@ -179,12 +187,6 @@ wpNoPostDuplicatesSplice wpLens =
 getWordpress :: Handler b v v
 getWordpress = view snapletValue <$> getSnapletState
 
-runningQueryFor :: WPKey
-                -> Handler b (Wordpress b) Bool
-runningQueryFor wpKey =
-  do wordpress <- getWordpress
-     liftIO $ startWpQueryMutex wordpress wpKey
-
 startWpQueryMutex :: Wordpress b -> WPKey -> IO Bool
 startWpQueryMutex Wordpress{..} wpKey =
   do now <- liftIO $ getCurrentTime
@@ -196,11 +198,9 @@ startWpQueryMutex Wordpress{..} wpKey =
   where filterCurrent now = Map.filter (\v -> diffUTCTime now v < 1)
 
 
-markDoneRunning :: WPKey
-                -> Handler b (Wordpress b) ()
-markDoneRunning wpKey =
-  do Wordpress{..} <- getWordpress
-     liftIO $ modifyMVar_ activeMV $ return . Map.delete wpKey
+markDoneRunning :: Wordpress b -> WPKey -> IO ()
+markDoneRunning Wordpress{..} wpKey =
+  modifyMVar_ activeMV $ return . Map.delete wpKey
 
 data WPQuery = WPPostsQuery{ qlimit  :: Int
                            , qnum    :: Int
@@ -248,12 +248,12 @@ getPosts :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
          -> WPKey
          -> Handler b b Text
 getPosts wpLens wpconf tryAgain wpKey =
-  do Wordpress{..} <- use (wpLens . snapletValue)
-     cached <- with wpLens $ wpCacheGet (cacheBehavior wpconf) wpKey
+  do wp@Wordpress{..} <- use (wpLens . snapletValue)
+     cached <- liftIO $ wpCacheGet wp wpKey
      case cached of
        Just r -> return r
        Nothing ->
-         do running <- with wpLens $ runningQueryFor wpKey
+         do running <- liftIO $ startWpQueryMutex wp wpKey
             if running
                then if tryAgain then (do liftIO $ threadDelay 100000
                                          getPosts wpLens wpconf tryAgain wpKey)
@@ -261,10 +261,33 @@ getPosts wpLens wpconf tryAgain wpKey =
                else
                  do let endpt = endpoint wpconf
                     h <- liftIO $ (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
-                    with wpLens $ do
-                      wpCacheSet (cacheBehavior wpconf) wpKey h
-                      markDoneRunning wpKey
+                    liftIO $ do
+                      wpCacheSet wp wpKey h
+                      markDoneRunning wp wpKey
                     return h
+
+{-
+getPosts' :: WordpressConfig (Handler b b)
+          -> WPKey
+          -> IO (Maybe Text)
+getPosts' wpconf wpKey = -- FINDME
+  do wordpress@Wordpress{..} <- undefined
+     cached <- runRedis $ cacheGet (cacheBehavior wpconf) wpKey
+     case cached of
+       Just r -> return r
+       Nothing ->
+         do running <- startWpQueryMutex wordpress wpKey
+            if running
+               then return Nothing
+               else
+                 do let endpt = endpoint wpconf
+                    h <- liftIO $ (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
+                    runRedis $ wpCacheSet (cacheBehavior wpconf) wpKey h
+
+                    with wpLens $ do
+                      markDoneRunning wpKey
+                    return $ Just h
+-}
 
 wpPostsSplice :: forall b. Wordpress b
               -> WordpressConfig (Handler b b)
@@ -338,30 +361,32 @@ addPostIds wpLens ids =
      assign (wpLens . snapletValue)
             w{requestPostSet = ((`IntSet.union` (IntSet.fromList ids)) <$> requestPostSet) }
 
-getPost :: WPKey -> Handler b (Wordpress b) (Maybe Object)
-getPost wpKey@(PostByPermalinkKey year month slug) =
-  do Wordpress{..} <- view snapletValue <$> getSnapletState
-     mres <- wpCacheGet (cacheBehavior conf) wpKey
-     case mres of
-       Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
-       Nothing ->
-         do running <- runningQueryFor wpKey
-            if running
-               then do liftIO $ threadDelay 100000
-                       getPost wpKey
-               else do post' <- liftIO $ (unRequester runHTTP) (endpoint conf <> "/posts")
-                                  [("filter[year]",year)
-                                  ,("filter[monthnum]", month)
-                                  ,("filter[name]", slug)] decodeJson
-                       case post' of
-                         Just (post:_) ->
-                           do wpCacheSet (cacheBehavior conf) wpKey
-                                (TL.toStrict . TL.decodeUtf8 . encode $ post)
-                              markDoneRunning wpKey
-                              return $ Just post
-                         _ -> do markDoneRunning wpKey
-                                 return Nothing
-getPost key = error $ "getPost: Don't know how to get a post from key: " ++ show key
+wpGetPost :: WPKey -> Handler b (Wordpress b) (Maybe Object)
+wpGetPost wpKey =
+  do wp <- view snapletValue <$> getSnapletState
+     liftIO $ getPost wp wpKey
+
+getPost wp@Wordpress{..} wpKey@(PostByPermalinkKey year month slug) = do
+         mres <- wpCacheGet wp wpKey
+         case mres of
+           Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
+           Nothing ->
+             do running <- startWpQueryMutex wp wpKey
+                if running
+                   then do threadDelay 100000
+                           getPost wp wpKey
+                   else do post' <- (unRequester runHTTP) (endpoint conf <> "/posts")
+                                      [("filter[year]",year)
+                                      ,("filter[monthnum]", month)
+                                      ,("filter[name]", slug)] decodeJson
+                           case post' of
+                             Just (post:_) ->
+                               do wpCacheSet wp wpKey (TL.toStrict . TL.decodeUtf8 . encode $ post)
+                                  markDoneRunning wp wpKey
+                                  return $ Just post
+                             _ -> do markDoneRunning wp wpKey
+                                     return Nothing
+getPost wp key = error $ "getPost: Don't know how to get a post from key: " ++ show key
 
 wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
                         -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
@@ -374,7 +399,7 @@ wpPostByPermalinkSplice conf wpLens =
           case mperma of
             Nothing -> codeGen (yieldPureText "")
             Just (year, month, slug) ->
-              do res <- lift $ with wpLens $ getPost (PostByPermalinkKey year month slug)
+              do res <- lift $ with wpLens $ wpGetPost (PostByPermalinkKey year month slug)
                  case res of
                    Just post -> do putPromise promise post
                                    codeGen outputChildren
@@ -489,26 +514,33 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
         f (False, rest) next = (False, T.snoc rest next)
 
 
-wpCacheGet :: CacheBehavior -> WPKey -> Handler b (Wordpress b) (Maybe Text)
-wpCacheGet b wpKey =
-  do Wordpress{..} <- view snapletValue <$> getSnapletState
-     runRedis $ cacheGet b wpKey
+wpCacheGet :: Wordpress b -> WPKey -> IO (Maybe Text)
+wpCacheGet Wordpress{..} wpKey = runRedis $ cacheGet (cacheBehavior conf) wpKey
 
+wpCacheGet' key = do
+  wp <- getWordpress
+  liftIO $ wpCacheGet wp key
 
-wpCacheSet :: CacheBehavior -> WPKey -> Text -> Handler b (Wordpress b) ()
-wpCacheSet b key o = void $
-  do Wordpress{..} <- view snapletValue <$> getSnapletState
-     runRedis $ cacheSet b key o
+wpCacheSet' key o= do
+  wp <- getWordpress
+  liftIO $ wpCacheSet wp key o
 
-wpExpireAggregates :: Handler b (Wordpress b) Bool
-wpExpireAggregates =
-  do Wordpress{..} <- view snapletValue <$> getSnapletState
-     runRedis $ expireAggregates
+wpCacheSet :: Wordpress b -> WPKey -> Text -> IO ()
+wpCacheSet Wordpress{..} key o = void $ runRedis $ cacheSet (cacheBehavior conf) key o
 
-wpExpirePost :: Int -> Handler b (Wordpress b) Bool
-wpExpirePost i =
-  do Wordpress{..} <- view snapletValue <$> getSnapletState
-     runRedis $ expirePost i
+wpExpireAggregates :: Wordpress b -> IO Bool
+wpExpireAggregates Wordpress{..} = runRedis expireAggregates
+
+wpExpireAggregates' = do
+  wp <- getWordpress
+  liftIO $ wpExpireAggregates wp
+
+wpExpirePost' i = do
+  wp <- getWordpress
+  liftIO $ wpExpirePost wp i
+
+wpExpirePost :: Wordpress b -> Int -> IO Bool
+wpExpirePost Wordpress{..} i = runRedis $ expirePost i
 
 wreqRequester :: WordpressConfig (Handler b b)
               -> Text

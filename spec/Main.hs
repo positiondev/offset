@@ -71,7 +71,7 @@ renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
   h <- nestSnaplet "" heist $ heistInit ""
   addConfig h $ set scTemplateLocations (return templates) mempty
   r <- nestSnaplet "" redis redisDBInitConf
-  w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
+  w <- nestSnaplet "" wordpress $ initWordpress' config h r wordpress
   return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
@@ -86,7 +86,7 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
   h <- nestSnaplet "" heist $ heistInit "templates"
   addConfig h $ set scTemplateLocations (return templates) mempty
   r <- nestSnaplet "" redis redisDBInitConf
-  w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
+  w <- nestSnaplet "" wordpress $ initWordpress' config h r wordpress
   return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
@@ -111,11 +111,11 @@ cachingApp :: SnapletInit App App
 cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
   h <- nestSnaplet "" heist $ heistInit "templates"
   r <- nestSnaplet "" redis redisDBInitConf
-  w <- nestSnaplet "" wordpress $ initWordpress' config h redis wordpress
+  w <- nestSnaplet "" wordpress $ initWordpress' config h r wordpress
   return $ App h r w
   where config = (def { endpoint = ""
                       , requester = Just $ Requester (\_ _ f -> return $ f ("" :: Text))
-                      , cacheBehavior = CacheSeconds 1})
+                      , cacheBehavior = CacheSeconds 10})
 
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
@@ -181,38 +181,38 @@ main = hspec $ do
         "The post" -}
   describe "caching" $ snap (route []) cachingApp $ afterEval (void clearRedisCache) $ do
     it "should find nothing for a non-existent post" $ do
-      p <- eval (with wordpress $ wpCacheGet (CacheSeconds 10) (PostByPermalinkKey "2000" "1" "the-article"))
+      p <- eval (with wordpress $ wpCacheGet' (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` Nothing
     it "should find something if there is a post in cache" $ do
-      eval (with wordpress $ wpCacheSet (CacheSeconds 10) (PostByPermalinkKey "2000" "1" "the-article")
+      eval (with wordpress $ wpCacheSet' (PostByPermalinkKey "2000" "1" "the-article")
                                          (enc article1))
-      p <- eval (with wordpress $ wpCacheGet (CacheSeconds 10) (PostByPermalinkKey "2000" "1" "the-article"))
+      p <- eval (with wordpress $ wpCacheGet' (PostByPermalinkKey "2000" "1" "the-article"))
       p `shouldEqual` (Just $ enc article1)
     it "should not find single post after expire handler is called" $
-      do eval (with wordpress $ wpCacheSet (CacheSeconds 10) (PostByPermalinkKey "2000" "1" "the-article")
+      do eval (with wordpress $ wpCacheSet' (PostByPermalinkKey "2000" "1" "the-article")
                                             (enc article1))
-         eval (with wordpress $ wpExpirePost 1)
-         eval (with wordpress $ wpCacheGet (CacheSeconds 10) (PostByPermalinkKey "2000" "1" "the-article"))
+         eval (with wordpress $ wpExpirePost' 1)
+         eval (with wordpress $ wpCacheGet' (PostByPermalinkKey "2000" "1" "the-article"))
            >>= shouldEqual Nothing
     it "should not find post aggregates after expire handler is called" $
       do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
-         eval (with wordpress $ wpCacheSet (CacheSeconds 10) key ("[" ++ enc article1 ++ "]"))
-         eval (with wordpress $ wpExpirePost 1)
-         eval (with wordpress $ wpCacheGet (CacheSeconds 10) key)
+         eval (with wordpress $ wpCacheSet' key ("[" ++ enc article1 ++ "]"))
+         eval (with wordpress $ wpExpirePost' 1)
+         eval (with wordpress $ wpCacheGet' key)
            >>= shouldEqual Nothing
     it "should find single post after expiring aggregates" $
-      do eval (with wordpress $ wpCacheSet (CacheSeconds 10) (PostByPermalinkKey "2000" "1" "the-article")
+      do eval (with wordpress $ wpCacheSet' (PostByPermalinkKey "2000" "1" "the-article")
                                            (enc article1))
-         eval (with wordpress wpExpireAggregates)
-         eval (with wordpress $ wpCacheGet (CacheSeconds 10) (PostByPermalinkKey "2000" "1" "the-article"))
+         eval (with wordpress wpExpireAggregates')
+         eval (with wordpress $ wpCacheGet' (PostByPermalinkKey "2000" "1" "the-article"))
            >>= shouldNotEqual Nothing
     it "should find a different single post after expiring another" $
       do let key1 = (PostByPermalinkKey "2000" "1" "the-article")
              key2 = (PostByPermalinkKey "2001" "2" "another-article")
-         eval (with wordpress $ wpCacheSet (CacheSeconds 10) key1 (enc article1))
-         eval (with wordpress $ wpCacheSet (CacheSeconds 10) key2 (enc article2))
-         eval (with wordpress $ wpExpirePost 1)
-         eval (with wordpress $ wpCacheGet (CacheSeconds 10) key2) >>= shouldEqual (Just (enc article2))
+         eval (with wordpress $ wpCacheSet' key1 (enc article1))
+         eval (with wordpress $ wpCacheSet' key2 (enc article2))
+         eval (with wordpress $ wpExpirePost' 1)
+         eval (with wordpress $ wpCacheGet' key2) >>= shouldEqual (Just (enc article2))
 
   describe "generate queries from <wpPosts>" $ do
     shouldQueryTo
