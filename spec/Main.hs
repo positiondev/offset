@@ -147,29 +147,29 @@ main = hspec $ do
   Misc.tests
   describe "<wpPosts>" $ do
     ("<wp><wpPosts><wpTitle/></wpPosts></wp>", enc [article1]) `shouldRenderTo` "Foo bar"
-    ("<wpPosts><wpID/></wpPosts>", enc [article1]) `shouldRenderTo` "1"
-    ("<wpPosts><wpExcerpt/></wpPosts>", enc [article1]) `shouldRenderTo` "summary"
+    ("<wp><wpPosts><wpID/></wpPosts></wp>", enc [article1]) `shouldRenderTo` "1"
+    ("<wp><wpPosts><wpExcerpt/></wpPosts></wp>", enc [article1]) `shouldRenderTo` "summary"
   describe "<wpNoPostDuplicates/>" $ do
-    ("<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>", enc [article1])
+    ("<wp><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts></wp>", enc [article1])
       `shouldRenderTo` "Foo bar"
-    ("<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts>", enc [article1])
+    ("<wp><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts></wp>", enc [article1])
       `shouldRenderTo` "Foo barFoo bar"
-    ("<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>", enc [article1])
+    ("<wp><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts></wp>", enc [article1])
       `shouldRenderTo` "Foo barFoo bar"
-    ("<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>", enc [article1])
+    ("<wp><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/></wp>", enc [article1])
       `shouldRenderTo` "Foo barFoo bar"
 {-  describe "<wpPostByPermalink>" $ do
     shouldRenderAtUrl "/2009/10/the-post/"
-                      "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
+                      "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
                       "The post"
     shouldRenderAtUrl "/posts/2009/10/the-post/"
-                      "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
+                      "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
                       "The post"
     shouldRenderAtUrl "/posts/2009/10/the-post"
-                      "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
+                      "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
                       "The post"
     shouldRenderAtUrl "/2009/10/the-post/"
-                      "<wpPostByPermalink><wpTitle/>: <wpExcerpt/></wpPostByPermalink>"
+                      "<wp><wpPostByPermalink><wpTitle/>: <wpExcerpt/></wpPostByPermalink></wp>"
                       "The post: summary" -}
 {-    describe "should grab post from cache if it's there" $
       let (Object a2) = article2 in
@@ -177,7 +177,7 @@ main = hspec $ do
         (void $ with wordpress $ cacheSet (Just 10) (PostByPermalinkKey "2001" "10" "the-post")
                                             (enc a2))
         "/2001/10/the-post/"
-        "<wpPostByPermalink><wpTitle/></wpPostByPermalink>"
+        "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
         "The post" -}
   describe "caching" $ snap (route []) cachingApp $ afterEval (void clearRedisCache) $ do
     it "should find nothing for a non-existent post" $ do
@@ -278,10 +278,10 @@ shouldQueryTo hQuery wpQuery = do
     snap (route [("/2014/10/a-war-for-power", render "single")
                 ,("/2014/10/the-assassination-of-detroit/", render "author-date")
                 ])
-         (queryingApp [("single", "<wpPostByPermalink><wpTitle/></wpPostByPermalink>")
-              ,("author-date", "<wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink>")
-              ,("fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
-              ,("extra-fields", "<wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts>")
+         (queryingApp [("single", "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>")
+              ,("author-date", "<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
+              ,("fields", "<wp><wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
+              ,("extra-fields", "<wp><wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
               ]
           ) $
       do it "should have title on page" $
