@@ -136,30 +136,34 @@ wordpressSplices wp conf wpLens =
   do "wpPosts" ## wpPostsSplice wp conf wpLens
      "wpPostByPermalink" ## wpPostByPermalinkSplice conf wpLens
      "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
-     "wpFireRequests" ## wpFireRequestsSplice wpLens conf
+     "wp" ## wpPrefetch wp wpLens conf
 
 
-wpFireRequestsSplice :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
-                     -> WordpressConfig (Handler b b)
-                     -> Splice (Handler b b)
-wpFireRequestsSplice wpLens wpconf = do n <- getParamNode
-                                        let urls = getUrls $ X.elementChildren n
-                                        return $ yieldRuntime $
-                                          do lift $ mapM_ (getPosts wpLens wpconf False) urls
-                                             codeGen (yieldPureText "")
+wpPrefetch :: Wordpress b
+           -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+           -> WordpressConfig (Handler b b)
+           -> Splice (Handler b b)
+wpPrefetch wp wpLens conf =
+  do n <- getParamNode
+     childrenRes <- runChildren
+     tagDict <- lift $ lookupTaxDict "post_tag" wp
+     catDict <- lift $ lookupTaxDict "category" wp
+     let wpKeys = findPrefetchables tagDict catDict n
+     return $ yieldRuntime $
+       do lift $ mapM_ (getPosts wpLens conf False) wpKeys
+          codeGen childrenRes
 
-  where getUrls = map getWpKey . filter isReqNode
-        isReqNode (X.Element "req" _ _) = True
-        isReqNode _ = False
-        getWpKey x = let num = readSafe =<< X.getAttribute "num" x
-                         off = readSafe =<< X.getAttribute "offset" x
-                         ts  = filter (/= "") $ T.splitOn "," $ fromMaybe "" $ X.getAttribute "tags" x
-                         cs  = filter (/= "") $ T.splitOn "," $ fromMaybe "" $ X.getAttribute "cats" x
-                     in PostsKey (Set.fromList $ [NumFilter (fromMaybe 20 num)
-                                               ,OffsetFilter (fromMaybe 0 off)]
-                                             ++ map TagFilter (mapMaybe readSafe ts)
-                                             ++ map CatFilter (mapMaybe readSafe cs)
-                                             )
+findPrefetchables :: (TaxSpec TagType -> TaxSpecId TagType)
+    -> (TaxSpec CatType -> TaxSpecId CatType)
+    -> X.Node
+    -> [WPKey]
+findPrefetchables tdict cdict e@(X.Element "wpPosts" _ children) =
+  concat (map (findPrefetchables tdict cdict) children) <>
+    [mkWPKey tdict cdict $ parseQueryNode e]
+findPrefetchables tdict cdict (X.Element _ _ children) =
+  concat (map (findPrefetchables tdict cdict) children)
+findPrefetchables _ _ _ = []
+
 
 wpNoPostDuplicatesSplice :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
                          -> Splice (Handler b b)

@@ -146,7 +146,7 @@ main :: IO ()
 main = hspec $ do
   Misc.tests
   describe "<wpPosts>" $ do
-    ("<wpPosts><wpTitle/></wpPosts>", enc [article1]) `shouldRenderTo` "Foo bar"
+    ("<wp><wpPosts><wpTitle/></wpPosts></wp>", enc [article1]) `shouldRenderTo` "Foo bar"
     ("<wpPosts><wpID/></wpPosts>", enc [article1]) `shouldRenderTo` "1"
     ("<wpPosts><wpExcerpt/></wpPosts>", enc [article1]) `shouldRenderTo` "summary"
   describe "<wpNoPostDuplicates/>" $ do
@@ -260,21 +260,10 @@ main = hspec $ do
     shouldQueryTo
       "<wpPosts categories=\"-bookmarx\" limit=10><wpTitle/></wpPosts>"
       ["/posts?filter[category__not_in]=159&filter[offset]=0&filter[posts_per_page]=20"]
-    describe "wpFireRequests" $ do
-      shouldQueryTo
-        "<wpFireRequests><req cats=\"-159\" offset=1></req></wpFireRequests>"
-        ["/posts?filter[category__not_in]=159&filter[offset]=1&filter[posts_per_page]=20"]
-      shouldQueryTo
-        "<wpFireRequests><req tags=\"1\"></req></wpFireRequests>"
-        ["/posts?filter[offset]=0&filter[posts_per_page]=20&filter[tag__in]=1"]
-      shouldQueryTo
-        "<wpFireRequests><req num=1 offset=10></req></wpFireRequests>"
-        ["/posts?filter[offset]=10&filter[posts_per_page]=1"]
-      shouldQueryTo
-        "<wpFireRequests><req cats=\"-159,20\" offset=1></req><req tags=\"1\" num=1></req></wpFireRequests>"
-        ["/posts?filter[category__in]=20&filter[category__not_in]=159&filter[offset]=1&filter[posts_per_page]=20"
-        ,"/posts?filter[offset]=0&filter[posts_per_page]=1&filter[tag__in]=1"
-        ]
+    shouldQueryTo
+      "<wp><div><wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts></div></wp>"
+      (replicate 2 "/posts?filter[category__in]=159&filter[offset]=0&filter[posts_per_page]=20")
+
 
 shouldQueryTo :: Text -> [Text] -> Spec
 shouldQueryTo hQuery wpQuery = do
