@@ -13,7 +13,6 @@ module Snap.Snaplet.Wordpress.Cache where
 import           Control.Applicative
 import           Control.Concurrent           (threadDelay)
 import           Control.Concurrent.MVar
-import           Control.Lens
 import           Data.Aeson
 import qualified Data.Attoparsec.Text         as A
 import           Data.ByteString              (ByteString)
@@ -46,7 +45,7 @@ import           Heist
 import           Heist.Compiled
 import           Heist.Compiled.LowLevel
 import qualified Network.Wreq                 as W
-import           Snap
+import           Snap                         hiding (get)
 import           Snap.Snaplet.Heist           (Heist, addConfig)
 import           Snap.Snaplet.RedisDB         (RedisDB)
 import qualified Snap.Snaplet.RedisDB         as R
@@ -58,11 +57,11 @@ import           Snap.Snaplet.Wordpress.Utils
 
 data CacheBehavior = NoCache | CacheSeconds Int | CacheForever deriving (Show, Eq)
 
-cacheGet :: R.RedisCtx m (Either t) => CacheBehavior -> WPKey -> m (Maybe Text)
+cacheGet :: CacheBehavior -> WPKey -> Redis (Maybe Text)
 cacheGet NoCache _ = return Nothing
 cacheGet _ key =
   do
-    res <- R.get (formatKey key)
+    res <- rget (formatKey key)
     case res of
      Right (Just val) ->
        case key of
@@ -74,28 +73,23 @@ cacheGet _ key =
         _ -> return (Just $ T.decodeUtf8 val)
      _ -> return Nothing
 
-cacheSet :: R.RedisCtx m (Either t) => CacheBehavior -> WPKey -> Text -> m Bool
-cacheSet NoCache _ _ = return True
-cacheSet b key o =
-  do res <- case key of
-             PostByPermalinkKey{} ->
-               do let (Just p) = decodeStrict . T.encodeUtf8 $ o
-                      (i,_) = extractPostId p
-                  r <- cset b (formatKey $ PostKey i) (T.encodeUtf8 o)
-                  case r of
-                   Left _err -> return r
-                   Right _ ->
-                     cset b (formatKey key) (formatKey $ PostKey i)
-             _ -> cset b (formatKey key) (T.encodeUtf8 o)
-     case res of
-      Left _err -> return False
-      Right _val -> return True
-  where cset (CacheSeconds n) k v = R.setex k (toInteger n) v
-        cset CacheForever k v = R.set k v
-        cset NoCache _ v = return $ return $ R.Status v
+isSuccess :: Either a b -> Bool
+isSuccess res = case res of
+                 Left _err -> False
+                 Right _val -> True
 
-formatKey :: WPKey -> ByteString
-formatKey = T.encodeUtf8 . format
+cacheSet :: CacheBehavior -> WPKey -> Text -> Redis Bool
+cacheSet (CacheSeconds n) k v = rsetex (formatKey k) n v
+cacheSet CacheForever k v = rset (formatKey k) v
+cacheSet NoCache _ _ = return True
+
+rsetex k n v = isSuccess <$> R.setex (T.encodeUtf8 k) (toInteger n) (T.encodeUtf8 v)
+rset k v = isSuccess <$> R.set (T.encodeUtf8 k) (T.encodeUtf8 v)
+rget k = R.get (T.encodeUtf8 k)
+rdel k = isSuccess <$> R.del [T.encodeUtf8 k]
+
+formatKey :: WPKey -> Text
+formatKey = format
   where format (PostByPermalinkKey y m s) = "wordpress:post_perma:" <> y <> "_" <> m <> "_" <> s
         format (PostsKey filters) =
           "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
@@ -109,8 +103,4 @@ expireAggregates =
       Right (_ :: Integer) -> return True
 
 expirePost :: Int -> Redis Bool
-expirePost i =
-       do r1 <- R.del [formatKey $ PostKey i]
-          case r1 of
-           Left _err -> return False
-           _ -> expireAggregates
+expirePost i = rdel (formatKey (PostKey i)) >> expireAggregates

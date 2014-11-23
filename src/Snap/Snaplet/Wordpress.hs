@@ -36,7 +36,6 @@ module Snap.Snaplet.Wordpress (
  , mergeFields
  ) where
 
-import           Blaze.ByteString.Builder     (Builder)
 import           Control.Applicative
 import           Control.Concurrent           (threadDelay)
 import           Control.Concurrent.Async
@@ -44,22 +43,17 @@ import           Control.Concurrent.MVar
 import           Control.Lens
 import           Data.Aeson
 import qualified Data.Attoparsec.Text         as A
-import           Data.ByteString              (ByteString)
 import           Data.Char                    (toUpper)
 import qualified Data.Configurator            as C
 import           Data.Default
 import qualified Data.HashMap.Strict          as M
 import           Data.IntSet                  (IntSet)
 import qualified Data.IntSet                  as IntSet
-import           Data.List                    (intercalate)
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Map.Syntax
-import           Data.Maybe                   (catMaybes, fromJust, fromMaybe,
-                                               isJust, listToMaybe, mapMaybe)
+import           Data.Maybe                   (fromJust, fromMaybe)
 import           Data.Monoid
-import           Data.Ratio
-import           Data.Set                     (Set)
 import qualified Data.Set                     as Set
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
@@ -142,13 +136,7 @@ wordpressSplices wp conf wpLens =
      "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
      "wp" ## wpPrefetch wp
 
-cc :: [IO a] -> IO [a]
-cc [] = return []
-cc [a] = do res <- a
-            return [res]
-cc (a:as) = do
-  (r1, rs) <- concurrently a (cc as)
-  return (r1:rs)
+
 
 wpPrefetch :: Wordpress b
            -> Splice (Handler b b)
@@ -161,6 +149,13 @@ wpPrefetch wp =
      return $ yieldRuntime $
        do void $ liftIO $ cc $ map (getPosts wp) wpKeys
           codeGen childrenRes
+  where cc :: [IO a] -> IO [a]
+        cc [] = return []
+        cc [a] = do res <- a
+                    return [res]
+        cc (a:as) = do (r1, rs) <- concurrently a (cc as)
+                       return (r1:rs)
+
 
 findPrefetchables :: (TaxSpec TagType -> TaxSpecId TagType)
     -> (TaxSpec CatType -> TaxSpecId CatType)
@@ -266,10 +261,10 @@ getPosts wp@Wordpress{..} wpKey =
                then return Nothing
                else
                  do let endpt = endpoint conf
-                    h <- (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
-                    wpCacheSet wp wpKey h
+                    post <- (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
+                    wpCacheSet wp wpKey post
                     markDoneRunning wp wpKey
-                    return $ Just h
+                    return $ Just post
 
 
 wpPostsSplice :: forall b. Wordpress b
@@ -511,7 +506,15 @@ wpCacheSet' key o= do
   liftIO $ wpCacheSet wp key o
 
 wpCacheSet :: Wordpress b -> WPKey -> Text -> IO ()
-wpCacheSet Wordpress{..} key o = void $ runRedis $ cacheSet (cacheBehavior conf) key o
+wpCacheSet Wordpress{..} key o =
+  void $ runRedis $
+    do let b = cacheBehavior conf
+       case key of
+        PostByPermalinkKey{} -> do
+          let (Just p) = decodeStrict . T.encodeUtf8 $ o
+              (i,_) = extractPostId p
+          (cacheSet b (PostKey i) o) >> cacheSet b key (formatKey $ PostKey i)
+        _ -> cacheSet b key o
 
 wpExpireAggregates :: Wordpress b -> IO Bool
 wpExpireAggregates Wordpress{..} = runRedis expireAggregates
