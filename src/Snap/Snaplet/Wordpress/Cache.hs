@@ -63,29 +63,42 @@ cacheGet _ key =
   do
     res <- rget (formatKey key)
     case res of
-     Right (Just val) ->
+     Just val ->
        case key of
         PostByPermalinkKey{} ->
-          do res' <- R.get val
-             case res' of
-              Left _err -> return Nothing
-              Right val -> return (T.decodeUtf8 <$> val)
-        _ -> return (Just $ T.decodeUtf8 val)
-     _ -> return Nothing
+          do res' <- rget val
+             return res'
+        _ -> return (Just val)
+     Nothing -> return Nothing
 
 isSuccess :: Either a b -> Bool
 isSuccess res = case res of
                  Left _err -> False
                  Right _val -> True
 
+eitherToMaybe :: Either a b -> Maybe b
+eitherToMaybe e =
+  case e of
+   Right a -> Just a
+   Left _ -> Nothing
+
+
 cacheSet :: CacheBehavior -> WPKey -> Text -> Redis Bool
 cacheSet (CacheSeconds n) k v = rsetex (formatKey k) n v
 cacheSet CacheForever k v = rset (formatKey k) v
 cacheSet NoCache _ _ = return True
 
+
+rsetex :: Text -> Int -> Text -> Redis Bool
 rsetex k n v = isSuccess <$> R.setex (T.encodeUtf8 k) (toInteger n) (T.encodeUtf8 v)
+
+rset :: Text -> Text -> Redis Bool
 rset k v = isSuccess <$> R.set (T.encodeUtf8 k) (T.encodeUtf8 v)
-rget k = R.get (T.encodeUtf8 k)
+
+rget :: Text -> Redis (Maybe Text)
+rget k = (fmap T.decodeUtf8) <$> join <$> eitherToMaybe <$> R.get (T.encodeUtf8 k)
+
+rdel :: Text -> Redis Bool
 rdel k = isSuccess <$> R.del [T.encodeUtf8 k]
 
 formatKey :: WPKey -> Text
