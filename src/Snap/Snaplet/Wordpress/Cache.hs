@@ -58,24 +58,24 @@ import           Snap.Snaplet.Wordpress.Utils
 data CacheBehavior = NoCache | CacheSeconds Int | CacheForever deriving (Show, Eq)
 
 cacheGet :: CacheBehavior -> WPKey -> Redis (Maybe Text)
-cacheGet NoCache _ = return Nothing
-cacheGet _ key =
-  do 
-    res <- rget (formatKey key)
-    case res of
-     Just val ->
-       case key of
-        PostByPermalinkKey{} ->
-          do res' <- rget val
-             return res'
-        _ -> return (Just val)
-     Nothing -> return Nothing
+cacheGet b key@PostByPermalinkKey{} =
+  do x <- cGet b (formatKey key)
+     case x of
+      Just key' -> cGet b key'
+      Nothing -> return Nothing
+cacheGet b key = cGet b (formatKey key)
 
+cGet :: CacheBehavior -> Text -> Redis (Maybe Text)
+cGet NoCache _ = return Nothing
+cGet _ key = rget key
 
 cacheSet :: CacheBehavior -> WPKey -> Text -> Redis Bool
-cacheSet (CacheSeconds n) k v = rsetex (formatKey k) n v
-cacheSet CacheForever k v = rset (formatKey k) v
-cacheSet NoCache _ _ = return True
+cacheSet b k v = cSet b (formatKey k) v
+
+cSet :: CacheBehavior -> Text -> Text -> Redis Bool
+cSet (CacheSeconds n) k v = rsetex k n v
+cSet CacheForever k v = rset k v
+cSet NoCache _ _ = return True
 
 
 rsetex :: Text -> Int -> Text -> Redis Bool
