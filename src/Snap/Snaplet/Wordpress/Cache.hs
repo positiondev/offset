@@ -57,12 +57,16 @@ import           Snap.Snaplet.Wordpress.Utils
 
 data CacheBehavior = NoCache | CacheSeconds Int | CacheForever deriving (Show, Eq)
 
+(=<<<) :: Monad m => (t -> m (Maybe t)) -> m (Maybe t) -> m (Maybe t)
+(=<<<) f k = z f =<< k
+  where z :: Monad m => (t -> m (Maybe a)) -> Maybe t -> m (Maybe a)
+        z f k = case k of
+                 Just k' -> f k'
+                 Nothing -> return Nothing
+
 cacheGet :: CacheBehavior -> WPKey -> Redis (Maybe Text)
 cacheGet b key@PostByPermalinkKey{} =
-  do x <- cGet b (formatKey key)
-     case x of
-      Just key' -> cGet b key'
-      Nothing -> return Nothing
+  do (cGet b) =<<< (cGet b (formatKey key))
 cacheGet b key = cGet b (formatKey key)
 
 cGet :: CacheBehavior -> Text -> Redis (Maybe Text)
