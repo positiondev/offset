@@ -60,7 +60,7 @@ data CacheBehavior = NoCache | CacheSeconds Int | CacheForever deriving (Show, E
 cacheGet :: CacheBehavior -> WPKey -> Redis (Maybe Text)
 cacheGet NoCache _ = return Nothing
 cacheGet _ key =
-  do
+  do 
     res <- rget (formatKey key)
     case res of
      Just val ->
@@ -70,17 +70,6 @@ cacheGet _ key =
              return res'
         _ -> return (Just val)
      Nothing -> return Nothing
-
-isSuccess :: Either a b -> Bool
-isSuccess res = case res of
-                 Left _err -> False
-                 Right _val -> True
-
-eitherToMaybe :: Either a b -> Maybe b
-eitherToMaybe e =
-  case e of
-   Right a -> Just a
-   Left _ -> Nothing
 
 
 cacheSet :: CacheBehavior -> WPKey -> Text -> Redis Bool
@@ -95,8 +84,19 @@ rsetex k n v = isSuccess <$> R.setex (T.encodeUtf8 k) (toInteger n) (T.encodeUtf
 rset :: Text -> Text -> Redis Bool
 rset k v = isSuccess <$> R.set (T.encodeUtf8 k) (T.encodeUtf8 v)
 
+isSuccess :: Either a b -> Bool
+isSuccess res = case res of
+                 Left _err -> False
+                 Right _val -> True
+
 rget :: Text -> Redis (Maybe Text)
 rget k = (fmap T.decodeUtf8) <$> join <$> eitherToMaybe <$> R.get (T.encodeUtf8 k)
+  where eitherToMaybe :: Either a b -> Maybe b
+        eitherToMaybe e =
+          case e of
+           Right a -> Just a
+           Left _err -> Nothing
+
 
 rdel :: Text -> Redis Bool
 rdel k = isSuccess <$> R.del [T.encodeUtf8 k]

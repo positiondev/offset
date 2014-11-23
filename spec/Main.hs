@@ -194,6 +194,11 @@ main = hspec $ do
          eval (with wordpress $ wpExpirePost' 1)
          eval (with wordpress $ wpCacheGet' (PostByPermalinkKey "2000" "1" "the-article"))
            >>= shouldEqual Nothing
+    it "should find post aggregates in cache" $
+      do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
+         eval (with wordpress $ wpCacheSet' key ("[" ++ enc article1 ++ "]"))
+         eval (with wordpress $ wpCacheGet' key)
+           >>= shouldEqual (Just $ "[" ++ enc article1 ++ "]")
     it "should not find post aggregates after expire handler is called" $
       do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
          eval (with wordpress $ wpCacheSet' key ("[" ++ enc article1 ++ "]"))
@@ -213,6 +218,10 @@ main = hspec $ do
          eval (with wordpress $ wpCacheSet' key2 (enc article2))
          eval (with wordpress $ wpExpirePost' 1)
          eval (with wordpress $ wpCacheGet' key2) >>= shouldEqual (Just (enc article2))
+    it "should be able to cache and retrieve post" $
+      do let key = (PostKey 200)
+         eval (with wordpress $ wpCacheSet' key (enc article1))
+         eval (with wordpress $ wpCacheGet' key) >>= shouldEqual (Just (enc article1))
 
   describe "generate queries from <wpPosts>" $ do
     shouldQueryTo
