@@ -57,9 +57,9 @@ import           Snap.Snaplet.Wordpress.Utils
 
 data CacheBehavior = NoCache | CacheSeconds Int | CacheForever deriving (Show, Eq)
 
-(=<<<) :: Monad m => (t -> m (Maybe t)) -> m (Maybe t) -> m (Maybe t)
-(=<<<) f k = z f =<< k
-  where z :: Monad m => (t -> m (Maybe a)) -> Maybe t -> m (Maybe a)
+(=<<<) :: Monad r => (a -> r (Maybe b)) -> r (Maybe a) -> r (Maybe b)
+f =<<< k = z f =<< k
+  where z :: Monad m => (a -> m (Maybe b)) -> Maybe a -> m (Maybe b)
         z f k = case k of
                  Just k' -> f k'
                  Nothing -> return Nothing
