@@ -26,13 +26,12 @@ cacheGet :: CacheBehavior -> Text -> Redis (Maybe Text)
 cacheGet NoCache _ = return Nothing
 cacheGet _ key = rget key
 
-cacheSet :: CacheBehavior -> WPKey -> Text -> Redis Bool
+cacheSet :: CacheBehavior -> Text -> Text -> Redis Bool
 cacheSet b k v =
   case b of
-   (CacheSeconds n) -> rsetex key n v
-   CacheForever -> rset key v
+   (CacheSeconds n) -> rsetex k n v
+   CacheForever -> rset k v
    NoCache -> return True
-  where key = formatKey k
 
 expireAggregates :: Redis Bool
 expireAggregates =
@@ -43,11 +42,4 @@ expireAggregates =
 
 expirePost :: Int -> Redis Bool
 expirePost i = rdel (formatKey (PostKey i)) >> expireAggregates
-
-formatKey :: WPKey -> Text
-formatKey = format
-  where format (PostByPermalinkKey y m s) = "wordpress:post_perma:" <> y <> "_" <> m <> "_" <> s
-        format (PostsKey filters) =
-          "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
-        format (PostKey n) = "wordpress:post:" <> tshow n
 

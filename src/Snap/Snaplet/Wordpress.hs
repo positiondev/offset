@@ -332,7 +332,6 @@ lookupTaxDict resName Wordpress{..} =
 extractPostIds :: [Object] -> [(Int, Object)]
 extractPostIds = map extractPostId
 
-
 addPostIds :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b)) -> [Int] -> Handler b b ()
 addPostIds wpLens ids =
   do w@Wordpress{..} <- use (wpLens . snapletValue)
@@ -519,8 +518,8 @@ wpCacheSet Wordpress{..} key o =
         PostByPermalinkKey{} -> do
           let (Just p) = decodeStrict . T.encodeUtf8 $ o
               (i,_) = extractPostId p
-          (cacheSet b (PostKey i) o) >> cacheSet b key (formatKey $ PostKey i)
-        _ -> cacheSet b key o
+          (cacheSet b (formatKey $ PostKey i) o) >> cacheSet b (formatKey key) (formatKey $ PostKey i)
+        _ -> cacheSet b (formatKey key) o
 
 wpExpireAggregates :: Wordpress b -> IO Bool
 wpExpireAggregates Wordpress{..} = runRedis expireAggregates

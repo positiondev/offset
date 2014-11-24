@@ -87,6 +87,14 @@ data WPKey = PostKey Int
               | PostsKey (Set Filter)
               deriving (Eq, Show, Ord)
 
+formatKey :: WPKey -> Text
+formatKey = format
+  where format (PostByPermalinkKey y m s) = "wordpress:post_perma:" <> y <> "_" <> m <> "_" <> s
+        format (PostsKey filters) =
+          "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
+        format (PostKey n) = "wordpress:post:" <> tshow n
+
+
 tagChars :: String
 tagChars = ['a'..'z'] ++ "-"
 
