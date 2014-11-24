@@ -494,16 +494,22 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
         f (False, rest) next = (False, T.snoc rest next)
 
 
-wpCacheGet :: Wordpress b -> WPKey -> IO (Maybe Text)
-wpCacheGet Wordpress{..} wpKey = runRedis $ cacheGet (cacheBehavior conf) wpKey
-
 wpCacheGet' key = do
   wp <- getWordpress
   liftIO $ wpCacheGet wp key
 
-wpCacheSet' key o= do
+wpCacheSet' key o = do
   wp <- getWordpress
   liftIO $ wpCacheSet wp key o
+
+wpCacheGet :: Wordpress b -> WPKey -> IO (Maybe Text)
+wpCacheGet Wordpress{..} wpKey =
+  runRedis $
+    do let b = cacheBehavior conf
+       case wpKey of
+        key@PostByPermalinkKey{} ->
+          (cacheGet b) =<<< (cacheGet b (formatKey key))
+        key -> cacheGet b (formatKey key)
 
 wpCacheSet :: Wordpress b -> WPKey -> Text -> IO ()
 wpCacheSet Wordpress{..} key o =
