@@ -100,16 +100,32 @@ wpRequestInt :: Requester -> Text -> Text -> [(Text, Text)] -> (Text -> a) -> IO
 wpRequestInt runHTTP endpt path params dcode =
   liftIO $ (unRequester runHTTP) (endpt <> path) params dcode
 
+startReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO Bool
+startReqMutexInt activeMV wpKey =
+  do now <- liftIO $ getCurrentTime
+     liftIO $ modifyMVar activeMV $ \a ->
+      let active = filterCurrent now a
+      in if Map.member wpKey active
+          then return (active, True)
+          else return (Map.insert wpKey now active, False)
+  where filterCurrent now = Map.filter (\v -> diffUTCTime now v < 1)
+
+stopReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO ()
+stopReqMutexInt activeMV wpKey =
+  modifyMVar_ activeMV $ return . Map.delete wpKey
+
 initWordpress :: Snaplet (Heist b)
               -> Snaplet RedisDB
-              -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+              -> WPLens b
               -> SnapletInit b (Wordpress b)
 initWordpress = initWordpress' def
+
+type WPLens b = Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
 
 initWordpress' :: WordpressConfig (Handler b b)
                -> Snaplet (Heist b)
                -> Snaplet RedisDB
-               -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+               -> WPLens b
                -> SnapletInit b (Wordpress b)
 initWordpress' wpconf heist redis wpLens =
   makeSnaplet "wordpress" "" Nothing $
@@ -120,30 +136,27 @@ initWordpress' wpconf heist redis wpLens =
                               return $ wreqRequester wpconf u p
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
-       let connection = view (snapletValue . R.redisConnection) redis
-       let wpReq = wpRequestInt req (endpoint wpconf)
-       let rrunRedis = R.runRedis connection
-       let wpCSet = wpCacheSetInt rrunRedis (cacheBehavior wpconf)
-       let wpCGet = wpCacheGetInt rrunRedis (cacheBehavior wpconf)
-       let wpExpAgg = wpExpireAggregatesInt rrunRedis
-       let wpExpPost = wpExpirePostInt rrunRedis
-       let startMutex = startReqMutexInt active
-       let stopMutex = stopReqMutexInt active
-       let wp = Wordpress Nothing wpReq wpCSet wpCGet wpExpAgg wpExpPost startMutex stopMutex
+       let rrunRedis = R.runRedis $ view (snapletValue . R.redisConnection) redis
+       let wp = Wordpress{ requestPostSet = Nothing
+                         , wpRequest = wpRequestInt req (endpoint wpconf)
+                         , wpCacheSet = wpCacheSetInt rrunRedis (cacheBehavior wpconf)
+                         , wpCacheGet = wpCacheGetInt rrunRedis (cacheBehavior wpconf)
+                         , wpExpireAggregates = wpExpireAggregatesInt rrunRedis
+                         , wpExpirePost = wpExpirePostInt rrunRedis
+                         , startReqMutex = startReqMutexInt active
+                         , stopReqMutex = stopReqMutexInt active }
        addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
        return wp
 
 wordpressSplices :: Wordpress b
                  -> WordpressConfig (Handler b b)
-                 -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+                 -> WPLens b
                  -> Splices (Splice (Handler b b))
 wordpressSplices wp conf wpLens =
   do "wpPosts" ## wpPostsSplice wp conf wpLens
      "wpPostByPermalink" ## wpPostByPermalinkSplice conf wpLens
      "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
      "wp" ## wpPrefetch wp
-
-
 
 wpPrefetch :: Wordpress b
            -> Splice (Handler b b)
@@ -176,7 +189,7 @@ findPrefetchables tdict cdict (X.Element _ _ children) =
 findPrefetchables _ _ _ = []
 
 
-wpNoPostDuplicatesSplice :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+wpNoPostDuplicatesSplice :: WPLens b
                          -> Splice (Handler b b)
 wpNoPostDuplicatesSplice wpLens =
   return $ yieldRuntime $
@@ -186,20 +199,6 @@ wpNoPostDuplicatesSplice wpLens =
                                   w{requestPostSet = (Just IntSet.empty)}
          Just _ -> return ()
        codeGen $ yieldPureText ""
-
-startReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO Bool
-startReqMutexInt activeMV wpKey =
-  do now <- liftIO $ getCurrentTime
-     liftIO $ modifyMVar activeMV $ \a ->
-      let active = filterCurrent now a
-      in if Map.member wpKey active
-          then return (active, True)
-          else return (Map.insert wpKey now active, False)
-  where filterCurrent now = Map.filter (\v -> diffUTCTime now v < 1)
-
-stopReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO ()
-stopReqMutexInt activeMV wpKey =
-  modifyMVar_ activeMV $ return . Map.delete wpKey
 
 data WPQuery = WPPostsQuery{ qlimit  :: Int
                            , qnum    :: Int
@@ -271,7 +270,7 @@ getPosts Wordpress{..} wpKey =
 
 wpPostsSplice :: forall b. Wordpress b
               -> WordpressConfig (Handler b b)
-              -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+              -> WPLens b
               -> Splice (Handler b b)
 wpPostsSplice wp wpconf wpLens =
   do promise <- newEmptyPromise
@@ -336,7 +335,7 @@ lookupTaxDict resName Wordpress{..} =
 extractPostIds :: [Object] -> [(Int, Object)]
 extractPostIds = map extractPostId
 
-addPostIds :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b)) -> [Int] -> Handler b b ()
+addPostIds :: WPLens b -> [Int] -> Handler b b ()
 addPostIds wpLens ids =
   do w@Wordpress{..} <- use (wpLens . snapletValue)
      assign (wpLens . snapletValue)
@@ -372,7 +371,7 @@ getPost wp@Wordpress{..} wpKey@(PostByPermalinkKey year month slug) = do
 getPost _ key = error $ "getPost: Don't know how to get a post from key: " ++ show key
 
 wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
-                        -> Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+                        -> WPLens b
                         -> Splice (Handler b b)
 wpPostByPermalinkSplice conf wpLens =
   do promise <- newEmptyPromise
