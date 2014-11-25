@@ -94,12 +94,25 @@ instance Default (WordpressConfig m) where
 
 
 data Wordpress b =
-     Wordpress { runRedis       :: forall a. Redis a -> IO a
-               , runHTTP        :: Requester
-               , activeMV       :: MVar (Map WPKey UTCTime)
-               , requestPostSet :: Maybe IntSet
-               , conf           :: WordpressConfig (Handler b b)
+     Wordpress { runRedisXXX       :: forall a. Redis a -> IO a
+               , activeMVXXX       :: MVar (Map WPKey UTCTime)
+               , requestPostSetXXX :: Maybe IntSet
+               , confXXX           :: WordpressConfig (Handler b b)
+               , wpFcns            :: WPFcns
+               , wpRequest         :: forall a. Text -> [(Text, Text)] -> (Text -> a) -> IO a
                }
+data WordpressInternal b =
+     WordpressInternal { runRedis :: forall a. Redis a -> IO a
+               , runHTTP          :: Requester
+               , activeMV         :: MVar (Map WPKey UTCTime)
+               , requestPostSet   :: Maybe IntSet
+               , conf             :: WordpressConfig (Handler b b)
+               }
+
+wpRequestXXX WordpressInternal{..} path params dcode =
+  liftIO $ (unRequester runHTTP) (endpoint conf <> path) params dcode
+
+data WPFcns = WPFcns
 
 initWordpress :: Snaplet (Heist b)
               -> Snaplet RedisDB
@@ -122,7 +135,10 @@ initWordpress' wpconf heist redis wpLens =
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
        let connection = view (snapletValue . R.redisConnection) redis
-       let wp = Wordpress (R.runRedis connection) req active Nothing wpconf
+       let wpFcns = WPFcns
+       let wpInt = WordpressInternal (R.runRedis connection) req active Nothing wpconf
+       let wpReq = wpRequestXXX wpInt
+       let wp = Wordpress (R.runRedis connection) active Nothing wpconf wpFcns wpReq
        addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
        return wp
 
@@ -174,9 +190,9 @@ wpNoPostDuplicatesSplice :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress
 wpNoPostDuplicatesSplice wpLens =
   return $ yieldRuntime $
     do w@Wordpress{..} <- lift $ use (wpLens . snapletValue)
-       case requestPostSet of
+       case requestPostSetXXX of
          Nothing -> lift $ assign (wpLens . snapletValue)
-                                  w{requestPostSet = (Just IntSet.empty)}
+                                  w{requestPostSetXXX = (Just IntSet.empty)}
          Just _ -> return ()
        codeGen $ yieldPureText ""
 
@@ -186,7 +202,7 @@ getWordpress = view snapletValue <$> getSnapletState
 startWpQueryMutex :: Wordpress b -> WPKey -> IO Bool
 startWpQueryMutex Wordpress{..} wpKey =
   do now <- liftIO $ getCurrentTime
-     liftIO $ modifyMVar activeMV $ \a ->
+     liftIO $ modifyMVar activeMVXXX $ \a ->
       let active = filterCurrent now a
       in if Map.member wpKey active
           then return (active, True)
@@ -196,7 +212,7 @@ startWpQueryMutex Wordpress{..} wpKey =
 
 markDoneRunning :: Wordpress b -> WPKey -> IO ()
 markDoneRunning Wordpress{..} wpKey =
-  modifyMVar_ activeMV $ return . Map.delete wpKey
+  modifyMVar_ activeMVXXX $ return . Map.delete wpKey
 
 data WPQuery = WPPostsQuery{ qlimit  :: Int
                            , qnum    :: Int
@@ -260,8 +276,7 @@ getPosts wp@Wordpress{..} wpKey =
             if running
                then return Nothing
                else
-                 do let endpt = endpoint conf
-                    post <- (unRequester runHTTP) (endpt <> "/posts") (buildParams wpKey) id
+                 do post <- wpRequest "/posts" (buildParams wpKey) id
                     wpCacheSet wp wpKey post
                     markDoneRunning wp wpKey
                     return $ Just post
@@ -284,7 +299,7 @@ wpPostsSplice wp wpconf wpLens =
           case (decodeStrict . T.encodeUtf8 $ res) of
             Just posts -> do let postsW = extractPostIds posts
                              Wordpress{..} <- lift (use (wpLens . snapletValue))
-                             let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet  $ postsW
+                             let postsND = take (qlimit postsQuery) . noDuplicates requestPostSetXXX  $ postsW
                              lift $ addPostIds wpLens (map fst postsND)
                              putPromise promise (map snd postsND)
                              codeGen outputChildren
@@ -324,9 +339,11 @@ decodeJsonErr res = case decodeStrict $ T.encodeUtf8 res of
 decodeJson :: FromJSON a => Text -> Maybe a
 decodeJson res = decodeStrict $ T.encodeUtf8 res
 
+
+
 lookupTaxDict :: Text -> Wordpress b -> IO (TaxSpec a -> TaxSpecId a)
 lookupTaxDict resName Wordpress{..} =
-  do res <- liftIO $ (unRequester runHTTP) (endpoint conf <> "/taxonomies/" <> resName <> "/terms") [] decodeJsonErr
+  do res <- wpRequest ("/taxonomies/" <> resName <> "/terms") [] decodeJsonErr
      return (getSpecId $ TaxDict res resName)
 
 extractPostIds :: [Object] -> [(Int, Object)]
@@ -336,7 +353,7 @@ addPostIds :: Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b)) -> [Int] 
 addPostIds wpLens ids =
   do w@Wordpress{..} <- use (wpLens . snapletValue)
      assign (wpLens . snapletValue)
-            w{requestPostSet = ((`IntSet.union` (IntSet.fromList ids)) <$> requestPostSet) }
+            w{requestPostSetXXX = ((`IntSet.union` (IntSet.fromList ids)) <$> requestPostSetXXX) }
 
 wpGetPost :: WPKey -> Handler b (Wordpress b) (Maybe Object)
 wpGetPost wpKey =
@@ -354,7 +371,7 @@ getPost wp@Wordpress{..} wpKey@(PostByPermalinkKey year month slug) = do
                 if running
                    then do threadDelay 100000
                            getPost wp wpKey
-                   else do post' <- (unRequester runHTTP) (endpoint conf <> "/posts")
+                   else do post' <- wpRequest "/posts"
                                       [("filter[year]",year)
                                       ,("filter[monthnum]", month)
                                       ,("filter[name]", slug)] decodeJson
@@ -503,8 +520,8 @@ wpCacheSet' key o = do
 
 wpCacheGet :: Wordpress b -> WPKey -> IO (Maybe Text)
 wpCacheGet Wordpress{..} wpKey =
-  runRedis $
-    do let b = cacheBehavior conf
+  runRedisXXX $
+    do let b = cacheBehavior confXXX
        case wpKey of
         key@PostByPermalinkKey{} ->
           (cacheGet b) =<<< (cacheGet b (formatKey key))
@@ -512,8 +529,8 @@ wpCacheGet Wordpress{..} wpKey =
 
 wpCacheSet :: Wordpress b -> WPKey -> Text -> IO ()
 wpCacheSet Wordpress{..} key o =
-  void $ runRedis $
-    do let b = cacheBehavior conf
+  void $ runRedisXXX $
+    do let b = cacheBehavior confXXX
        case key of
         PostByPermalinkKey{} -> do
           let (Just p) = decodeStrict . T.encodeUtf8 $ o
@@ -522,7 +539,7 @@ wpCacheSet Wordpress{..} key o =
         _ -> cacheSet b (formatKey key) o
 
 wpExpireAggregates :: Wordpress b -> IO Bool
-wpExpireAggregates Wordpress{..} = runRedis expireAggregates
+wpExpireAggregates Wordpress{..} = runRedisXXX expireAggregates
 
 wpExpireAggregates' = do
   wp <- getWordpress
@@ -533,7 +550,7 @@ wpExpirePost' i = do
   liftIO $ wpExpirePost wp i
 
 wpExpirePost :: Wordpress b -> Int -> IO Bool
-wpExpirePost Wordpress{..} i = runRedis $ expirePost i
+wpExpirePost Wordpress{..} i = runRedisXXX $ expirePost i
 
 wreqRequester :: WordpressConfig (Handler b b)
               -> Text
