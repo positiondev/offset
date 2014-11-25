@@ -18,9 +18,6 @@ module Snap.Snaplet.Wordpress (
  , getPost
  , WPKey(..)
  , Filter(..)
- , wpExpirePost
- , wpExpireAggregates
-
  , transformName
  , TaxSpec(..)
  , TagType
@@ -89,13 +86,14 @@ instance Default (WordpressConfig m) where
 type RunRedis = forall a. Redis a -> IO a
 
 data Wordpress b =
-     Wordpress { runRedisXXX       :: RunRedis
-               , activeMVXXX       :: MVar (Map WPKey UTCTime)
-               , requestPostSetXXX :: Maybe IntSet
-               , cacheBehaviorXXX  :: CacheBehavior
-               , wpRequest         :: forall a. Text -> [(Text, Text)] -> (Text -> a) -> IO a
-               , wpCacheSet     :: WPKey -> Text -> IO ()
-               , wpCacheGet     :: WPKey -> IO (Maybe Text)
+     Wordpress { activeMVXXX        :: MVar (Map WPKey UTCTime)
+               , requestPostSetXXX  :: Maybe IntSet
+               , cacheBehaviorXXX   :: CacheBehavior
+               , wpRequest          :: forall a. Text -> [(Text, Text)] -> (Text -> a) -> IO a
+               , wpCacheSet         :: WPKey -> Text -> IO ()
+               , wpCacheGet         :: WPKey -> IO (Maybe Text)
+               , wpExpireAggregates :: IO Bool
+               , wpExpirePost       :: Int -> IO Bool
                }
 data WordpressInternal b =
      WordpressInternal { runRedis :: forall a. Redis a -> IO a
@@ -105,8 +103,8 @@ data WordpressInternal b =
                , conf             :: WordpressConfig (Handler b b)
                }
 
-wpRequestXXX WordpressInternal{..} path params dcode =
-  liftIO $ (unRequester runHTTP) (endpoint conf <> path) params dcode
+wpRequestInt runHTTP endpt path params dcode =
+  liftIO $ (unRequester runHTTP) (endpt <> path) params dcode
 
 initWordpress :: Snaplet (Heist b)
               -> Snaplet RedisDB
@@ -129,12 +127,13 @@ initWordpress' wpconf heist redis wpLens =
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
        let connection = view (snapletValue . R.redisConnection) redis
-       let wpInt = WordpressInternal (R.runRedis connection) req active Nothing wpconf
-       let wpReq = wpRequestXXX wpInt
+       let wpReq = wpRequestInt req (endpoint wpconf)
        let rrunRedis = R.runRedis connection
        let wpCSet = wpCacheSetInt rrunRedis (cacheBehavior wpconf)
        let wpCGet = wpCacheGetInt rrunRedis (cacheBehavior wpconf)
-       let wp = Wordpress rrunRedis active Nothing (cacheBehavior wpconf) wpReq wpCSet wpCGet
+       let wpExpAgg = wpExpireAggregatesInt rrunRedis
+       let wpExpPost = wpExpirePostInt rrunRedis
+       let wp = Wordpress active Nothing (cacheBehavior wpconf) wpReq wpCSet wpCGet wpExpAgg wpExpPost
        addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
        return wp
 
@@ -521,11 +520,11 @@ wpCacheSetInt runRedis b key o =
           (cacheSet b (formatKey $ PostKey i) o) >> cacheSet b (formatKey key) (formatKey $ PostKey i)
         _ -> cacheSet b (formatKey key) o
 
-wpExpireAggregates :: Wordpress b -> IO Bool
-wpExpireAggregates Wordpress{..} = runRedisXXX expireAggregates
+wpExpireAggregatesInt :: RunRedis -> IO Bool
+wpExpireAggregatesInt runRedis = runRedis expireAggregates
 
-wpExpirePost :: Wordpress b -> Int -> IO Bool
-wpExpirePost Wordpress{..} i = runRedisXXX $ expirePost i
+wpExpirePostInt :: RunRedis -> Int -> IO Bool
+wpExpirePostInt runRedis i = runRedis $ expirePost i
 
 wreqRequester :: WordpressConfig (Handler b b)
               -> Text
