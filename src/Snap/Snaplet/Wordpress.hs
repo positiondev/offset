@@ -27,12 +27,12 @@ module Snap.Snaplet.Wordpress (
  , mergeFields
  ) where
 
-import           Control.Applicative
+
 import           Control.Concurrent           (threadDelay)
 import           Control.Concurrent.Async
 import           Control.Concurrent.MVar
 import           Control.Lens
-import           Data.Aeson
+import           Data.Aeson                   hiding (encode, decode)
 import qualified Data.Attoparsec.Text         as A
 import           Data.Char                    (toUpper)
 import qualified Data.Configurator            as C
@@ -83,8 +83,6 @@ data WordpressConfig m =
 instance Default (WordpressConfig m) where
   def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) [] Nothing
 
-type RunRedis = forall a. Redis a -> IO a
-
 data Wordpress b =
      Wordpress { requestPostSet     :: Maybe IntSet
                , wpRequest          :: forall a. Text -> [(Text, Text)] -> (Text -> a) -> IO a
@@ -98,12 +96,12 @@ data Wordpress b =
 
 wpRequestInt :: Requester -> Text -> Text -> [(Text, Text)] -> (Text -> a) -> IO a
 wpRequestInt runHTTP endpt path params dcode =
-  liftIO $ (unRequester runHTTP) (endpt <> path) params dcode
+  (unRequester runHTTP) (endpt <> path) params dcode
 
 startReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO Bool
 startReqMutexInt activeMV wpKey =
-  do now <- liftIO $ getCurrentTime
-     liftIO $ modifyMVar activeMV $ \a ->
+  do now <- getCurrentTime
+     modifyMVar activeMV $ \a ->
       let active = filterCurrent now a
       in if Map.member wpKey active
           then return (active, True)
@@ -282,7 +280,7 @@ wpPostsSplice wp wpconf wpLens =
      let wpKey = mkWPKey tagDict catDict postsQuery
      return $ yieldRuntime $
        do res <- liftIO $ getPostsRetry wp wpKey
-          case (decodeStrict . T.encodeUtf8 $ res) of
+          case (decode res) of
             Just posts -> do let postsW = extractPostIds posts
                              Wordpress{..} <- lift (use (wpLens . snapletValue))
                              let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet  $ postsW
@@ -318,12 +316,12 @@ getSpecId taxDict spec =
        (TaxRes (i,_):_) -> i
 
 decodeJsonErr :: FromJSON a => Text -> a
-decodeJsonErr res = case decodeStrict $ T.encodeUtf8 res of
+decodeJsonErr res = case decode res of
                       Nothing -> error $ T.unpack $ "Unparsable JSON: " <> res
                       Just val -> val
 
 decodeJson :: FromJSON a => Text -> Maybe a
-decodeJson res = decodeStrict $ T.encodeUtf8 res
+decodeJson res = decode res
 
 
 
@@ -351,7 +349,7 @@ getPost :: (ToJSON a, FromJSON a)
 getPost wp@Wordpress{..} wpKey@(PostByPermalinkKey year month slug) = do
          mres <- wpCacheGet wpKey
          case mres of
-           Just r' -> return (decodeStrict . T.encodeUtf8 $ r')
+           Just r' -> return (decode r')
            Nothing ->
              do running <- startReqMutex wpKey
                 if running
@@ -363,7 +361,7 @@ getPost wp@Wordpress{..} wpKey@(PostByPermalinkKey year month slug) = do
                                       ,("filter[name]", slug)] decodeJson
                            case post' of
                              Just (post:_) ->
-                               do wpCacheSet wpKey (TL.toStrict . TL.decodeUtf8 . encode $ post)
+                               do wpCacheSet wpKey $ encode post
                                   stopReqMutex wpKey
                                   return $ Just post
                              _ -> do stopReqMutex wpKey
@@ -494,31 +492,6 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
         f (False, rest) '_' = (True, rest)
         f (False, rest) '-' = (True, rest)
         f (False, rest) next = (False, T.snoc rest next)
-
-
-wpCacheGetInt :: RunRedis -> CacheBehavior -> WPKey -> IO (Maybe Text)
-wpCacheGetInt runRedis b wpKey =
-  runRedis $
-    do case wpKey of
-        key@PostByPermalinkKey{} ->
-          (cacheGet b) =<<< (cacheGet b (formatKey key))
-        key -> cacheGet b (formatKey key)
-
-wpCacheSetInt :: RunRedis -> CacheBehavior -> WPKey -> Text -> IO ()
-wpCacheSetInt runRedis b key o =
-  void $ runRedis $
-    do case key of
-        PostByPermalinkKey{} -> do
-          let (Just p) = decodeStrict . T.encodeUtf8 $ o
-              (i,_) = extractPostId p
-          (cacheSet b (formatKey $ PostKey i) o) >> cacheSet b (formatKey key) (formatKey $ PostKey i)
-        _ -> cacheSet b (formatKey key) o
-
-wpExpireAggregatesInt :: RunRedis -> IO Bool
-wpExpireAggregatesInt runRedis = runRedis expireAggregates
-
-wpExpirePostInt :: RunRedis -> Int -> IO Bool
-wpExpirePostInt runRedis i = runRedis $ expirePost i
 
 wreqRequester :: WordpressConfig (Handler b b)
               -> Text

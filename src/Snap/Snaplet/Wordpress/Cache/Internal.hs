@@ -1,7 +1,7 @@
 module Snap.Snaplet.Wordpress.Cache.Internal where
 
-import           Control.Applicative
-import           Control.Monad
+import           Control.Applicative ((<$>))
+import           Control.Monad       (join)
 import           Data.Text           (Text)
 import qualified Data.Text.Encoding  as T
 import           Database.Redis      (Redis)
@@ -25,7 +25,6 @@ rget k = (fmap T.decodeUtf8) <$> join <$> eitherToMaybe <$> R.get (T.encodeUtf8 
           case e of
            Right a -> Just a
            Left _err -> Nothing
-
 
 rdel :: Text -> Redis Bool
 rdel k = isSuccess <$> R.del [T.encodeUtf8 k]
