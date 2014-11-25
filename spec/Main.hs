@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TemplateHaskell   #-}
 
 module Main where
@@ -339,3 +340,23 @@ shouldQueryTo hQuery wpQuery = do
            do get "/fields" >>= shouldHaveText "https://"
               get "/extra-fields" >>= shouldHaveText "https://"
 -}
+
+getWordpress :: Handler b v v
+getWordpress = view snapletValue <$> getSnapletState
+
+wpCacheGet' :: WPKey -> Handler b (Wordpress b) (Maybe Text)
+wpCacheGet' wpKey = do
+  Wordpress{..} <- getWordpress
+  liftIO $ wpCacheGet wpKey
+wpCacheSet' :: WPKey -> Text -> Handler b (Wordpress b) ()
+wpCacheSet' wpKey o = do
+  Wordpress{..} <- getWordpress
+  liftIO $ wpCacheSet wpKey o
+
+wpExpireAggregates' = do
+  wp <- getWordpress
+  liftIO $ wpExpireAggregates wp
+
+wpExpirePost' i = do
+  wp <- getWordpress
+  liftIO $ wpExpirePost wp i
