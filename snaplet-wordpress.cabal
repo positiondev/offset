@@ -43,7 +43,7 @@ library
                      -- because cabal couldn't figure it out.
                      , network < 2.6
                      , async
-                     , hspec2
+                     , hspec >= 2
                      , hspec-snap
                      , mtl
                      , either
@@ -61,7 +61,7 @@ Test-Suite test-snaplet-wordpress
     build-depends:     base >= 4.6 && < 4.8
                      , heist
                      , hspec-snap
-                     , hspec2
+                     , hspec >= 2
                      , snap
                      , snaplet-wordpress
                      , blaze-builder
