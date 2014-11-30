@@ -16,7 +16,11 @@ cabal-version:       >=1.10
 library
   exposed-modules:
     Snap.Snaplet.Wordpress
-  -- other-modules:
+  other-modules: Snap.Snaplet.Wordpress.Types
+               , Snap.Snaplet.Wordpress.Cache
+               , Snap.Snaplet.Wordpress.Cache.Internal
+               , Snap.Snaplet.Wordpress.Posts
+               , Snap.Snaplet.Wordpress.Utils
   -- other-extensions:
   build-depends:       aeson
                      , base >=4.5 && <4.8
