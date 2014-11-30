@@ -38,7 +38,7 @@ library
                      -- NOTE(dbp 2014-09-10): network is a transitive dependency,
                      -- because cabal couldn't figure it out.
                      , network < 2.6
-
+                     , async
                      , hspec2
                      , hspec-snap
                      , mtl
@@ -69,3 +69,6 @@ Test-Suite test-snaplet-wordpress
                      , mtl
                      , either
                      , unordered-containers
+                     , aeson
+                     , containers
+                     , hedis
