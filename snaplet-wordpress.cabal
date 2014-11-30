@@ -1,5 +1,5 @@
 name:                snaplet-wordpress
-version:             0.1.0.0
+version:             0.1.1.0
 synopsis:            A snaplet that communicates with wordpress over it's api.
 -- description:
 homepage:            https://github.com/dbp/snaplet-wordpress
