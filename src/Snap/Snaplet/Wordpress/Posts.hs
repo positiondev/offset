@@ -15,7 +15,6 @@ import           Control.Concurrent.MVar
 import           Control.Lens
 import           Data.Aeson
 import qualified Data.Attoparsec.Text         as A
-import           Data.ByteString              (ByteString)
 import           Data.Char                    (toUpper)
 import qualified Data.Configurator            as C
 import           Data.Default

@@ -127,7 +127,7 @@ shouldRenderTo (tags, response) match =
   snap (route []) (renderingApp [("test", tags)] response) $
     it (T.unpack $ tags ++ " should render to match " ++ match) $
       do t <- eval (do st <- getHeistState
-                       builder <- (fst.fromJust) $ renderTemplate st "test"
+                       builder <- (fst . fromJust) $ renderTemplate st "test"
                        return $ T.decodeUtf8 $ toByteString builder)
          setResult $
            if match == t

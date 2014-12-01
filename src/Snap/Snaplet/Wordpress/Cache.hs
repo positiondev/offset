@@ -12,7 +12,6 @@ module Snap.Snaplet.Wordpress.Cache where
 import           Control.Monad                         (void)
 import           Data.Text                             (Text)
 import           Database.Redis                        (Redis)
-import qualified Database.Redis                        as R
 
 import           Snap.Snaplet.Wordpress.Cache.Internal
 import           Snap.Snaplet.Wordpress.Posts
@@ -58,14 +57,7 @@ cacheSet b k v =
    NoCache -> return True
 
 expireAggregates :: Redis Bool
-expireAggregates =
-  do r <- R.eval "return redis.call('del', unpack(redis.call('keys', ARGV[1])))" [] ["wordpress:posts:*"]
-     case r of
-      Left _err -> return False
-      Right (_ :: Integer) -> return True
+expireAggregates = rdelstar "wordpress:posts:*"
 
 expirePost :: Int -> Redis Bool
-expirePost i = rdel (formatKey (PostKey i)) >> expireAggregates
-
-expire :: Int -> Redis Bool
-expire i = rdel (formatKey (PostKey i)) >> expireAggregates
+expirePost i = rdel [formatKey (PostKey i)] >> expireAggregates
