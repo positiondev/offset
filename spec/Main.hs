@@ -33,7 +33,7 @@ import           Snap.Snaplet.Heist.Compiled
 import           Snap.Snaplet.RedisDB
 import           Snap.Snaplet.Wordpress
 import           Test.Hspec
-import           Test.Hspec.Core             (Result (..))
+import           Test.Hspec.Core.Spec        (Result (..))
 import           Test.Hspec.Snap
 import qualified Text.XmlHtml                as X
 
