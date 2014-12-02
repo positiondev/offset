@@ -83,18 +83,13 @@ instance Default (WordpressConfig m) where
 
 data Wordpress b =
      Wordpress { requestPostSet     :: Maybe IntSet
-               , wpRequest          :: WPKey -> IO Text
-               , wpCacheSet         :: WPKey -> Text -> IO ()
-               , wpCacheGet         :: WPKey -> IO (Maybe Text)
                , wpExpireAggregates :: IO Bool
                , wpExpirePost       :: WPKey -> IO Bool
-               , startReqMutex      :: WPKey -> IO Bool
-               , stopReqMutex       :: WPKey -> IO ()
                , cachingGet         :: WPKey -> IO (Maybe Text)
                , cachingGetRetry    :: WPKey -> IO Text
                , cachingGetError    :: WPKey -> IO Text
+               , cacheInternals     :: WordpressInt b
                }
-
 
 initWordpress :: Snaplet (Heist b)
               -> Snaplet RedisDB
@@ -112,29 +107,25 @@ initWordpress' :: WordpressConfig (Handler b b)
 initWordpress' wpconf heist redis wpLens =
   makeSnaplet "wordpress" "" Nothing $
     do conf <- getSnapletUserConfig
-       req <- case requester wpconf of
+       wpReq <- case requester wpconf of
                 Nothing -> do u <- liftIO $ C.require conf "username"
                               p <- liftIO $ C.require conf "password"
                               return $ wreqRequester wpconf u p
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
        let rrunRedis = R.runRedis $ view (snapletValue . R.redisConnection) redis
-       let wpInt = WordpressInt{ wpRequest = wpRequestInt req (endpoint wpconf)
+       let wpInt = WordpressInt{ wpRequest = wpRequestInt wpReq (endpoint wpconf)
                                , wpCacheSet = wpCacheSetInt rrunRedis (cacheBehavior wpconf)
                                , wpCacheGet = wpCacheGetInt rrunRedis (cacheBehavior wpconf)
                                , startReqMutex = startReqMutexInt active
                                , stopReqMutex = stopReqMutexInt active }
        let wp = Wordpress{ requestPostSet = Nothing
-                         , wpRequest = wpRequestInt req (endpoint wpconf)
-                         , wpCacheSet = wpCacheSetInt rrunRedis (cacheBehavior wpconf)
-                         , wpCacheGet = wpCacheGetInt rrunRedis (cacheBehavior wpconf)
                          , wpExpireAggregates = wpExpireAggregatesInt rrunRedis
                          , wpExpirePost = wpExpirePostInt rrunRedis
-                         , startReqMutex = startReqMutexInt active
-                         , stopReqMutex = stopReqMutexInt active
                          , cachingGet = cachingGetInt wpInt
                          , cachingGetRetry = cachingGetRetryInt wpInt
                          , cachingGetError = cachingGetErrorInt wpInt
+                         , cacheInternals = wpInt
                          }
        addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
        return wp

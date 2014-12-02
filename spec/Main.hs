@@ -38,6 +38,7 @@ import qualified Text.XmlHtml                          as X
 
 import           Snap.Snaplet.Wordpress
 import           Snap.Snaplet.Wordpress.Cache.Internal
+import           Snap.Snaplet.Wordpress.Internal
 
 (++) :: Monoid a => a -> a -> a
 (++) = mappend
@@ -348,11 +349,11 @@ getWordpress = view snapletValue <$> getSnapletState
 
 wpCacheGet' :: WPKey -> Handler b (Wordpress b) (Maybe Text)
 wpCacheGet' wpKey = do
-  Wordpress{..} <- getWordpress
+  WordpressInt{..} <- cacheInternals <$> getWordpress
   liftIO $ wpCacheGet wpKey
 wpCacheSet' :: WPKey -> Text -> Handler b (Wordpress b) ()
 wpCacheSet' wpKey o = do
-  Wordpress{..} <- getWordpress
+  WordpressInt{..} <- cacheInternals <$> getWordpress
   liftIO $ wpCacheSet wpKey o
 
 wpExpireAggregates' = do
