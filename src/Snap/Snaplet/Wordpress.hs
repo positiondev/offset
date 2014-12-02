@@ -29,10 +29,9 @@ module Snap.Snaplet.Wordpress (
 
 
 import           Control.Concurrent           (threadDelay)
-import           Control.Concurrent.Async
 import           Control.Concurrent.MVar
 import           Control.Lens
-import           Data.Aeson                   hiding (encode, decode)
+import           Data.Aeson                   hiding (decode, encode)
 import qualified Data.Attoparsec.Text         as A
 import           Data.Char                    (toUpper)
 import qualified Data.Configurator            as C
@@ -100,8 +99,8 @@ wpRequestInt runHTTP endpt key =
    TaxDictKey resName -> req ("/taxonomies/" <> resName <> "/terms") []
    PostByPermalinkKey year month slug ->
      req "/posts" [("filter[year]", year)
-                        ,("filter[monthnum]", month)
-                        ,("filter[name]", slug)]
+                  ,("filter[monthnum]", month)
+                  ,("filter[name]", slug)]
    PostsKey{} -> req "/posts" (buildParams key)
    PostKey i -> req ("/posts" <> tshow i) []
   where req path params = (unRequester runHTTP) (endpt <> path) params id
@@ -119,6 +118,30 @@ startReqMutexInt activeMV wpKey =
 stopReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO ()
 stopReqMutexInt activeMV wpKey =
   modifyMVar_ activeMV $ return . Map.delete wpKey
+
+cachingGetRetry :: (Wordpress b) -> WPKey -> IO Text
+cachingGetRetry wp wpKey = retryUnless (cachingGet wp wpKey)
+
+cachingGetError :: (Wordpress b) -> WPKey -> IO Text
+cachingGetError wp wpKey = errorUnless msg (cachingGet wp wpKey)
+  where msg = ("Could not retrieve " <> formatKey wpKey)
+
+cachingGet :: Wordpress b
+           -> WPKey
+           -> IO (Maybe Text)
+cachingGet Wordpress{..} wpKey =
+  do cached <- wpCacheGet wpKey
+     case cached of
+       Just _ -> return cached
+       Nothing ->
+         do running <- startReqMutex wpKey
+            if running
+               then return Nothing
+               else
+                 do o <- wpRequest wpKey
+                    wpCacheSet wpKey o
+                    stopReqMutex wpKey
+                    return $ Just o
 
 initWordpress :: Snaplet (Heist b)
               -> Snaplet RedisDB
@@ -173,15 +196,8 @@ wpPrefetch wp =
      catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
      let wpKeys = findPrefetchables tagDict catDict n
      return $ yieldRuntime $
-       do void $ liftIO $ cc $ map (getPosts wp) wpKeys
+       do void $ liftIO $ concurrently $ map (cachingGet wp) wpKeys
           codeGen childrenRes
-  where cc :: [IO a] -> IO [a]
-        cc [] = return []
-        cc [a] = do res <- a
-                    return [res]
-        cc (a:as) = do (r1, rs) <- concurrently a (cc as)
-                       return (r1:rs)
-
 
 findPrefetchables :: (TaxSpec TagType -> TaxSpecId TagType)
     -> (TaxSpec CatType -> TaxSpecId CatType)
@@ -246,35 +262,7 @@ parseQueryNode n =
                (readSafe =<< X.getAttribute "tags" n)
                (readSafe =<< X.getAttribute "categories" n)
 
-getPostsRetry :: (Wordpress b)
-         -> WPKey
-         -> IO Text
-getPostsRetry wp wpKey =
-  do response <- getPosts wp wpKey
-     case response of
-       Just r -> return r
-       Nothing -> do threadDelay 100000
-                     getPostsRetry wp wpKey
-
-getPosts :: Wordpress b
-          -> WPKey
-          -> IO (Maybe Text)
-getPosts Wordpress{..} wpKey =
-  do cached <- wpCacheGet wpKey
-     case cached of
-       Just _ -> return cached
-       Nothing ->
-         do running <- startReqMutex wpKey
-            if running
-               then return Nothing
-               else
-                 do post <- wpRequest wpKey
-                    wpCacheSet wpKey post
-                    stopReqMutex wpKey
-                    return $ Just post
-
-
-wpPostsSplice :: forall b. Wordpress b
+wpPostsSplice :: Wordpress b
               -> WordpressConfig (Handler b b)
               -> WPLens b
               -> Splice (Handler b b)
@@ -287,7 +275,7 @@ wpPostsSplice wp wpconf wpLens =
      catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
      let wpKey = mkWPKey tagDict catDict postsQuery
      return $ yieldRuntime $
-       do res <- liftIO $ getPostsRetry wp wpKey
+       do res <- liftIO $ cachingGetRetry wp wpKey
           case (decode res) of
             Just posts -> do let postsW = extractPostIds posts
                              Wordpress{..} <- lift (use (wpLens . snapletValue))
@@ -332,8 +320,8 @@ decodeJson :: FromJSON a => Text -> Maybe a
 decodeJson res = decode res
 
 lookupTaxDict :: WPKey -> Wordpress b -> IO (TaxSpec a -> TaxSpecId a)
-lookupTaxDict key@(TaxDictKey resName) Wordpress{..} =
-  do res <- decodeJsonErr <$> wpRequest key
+lookupTaxDict key@(TaxDictKey resName) wp@Wordpress{..} =
+  do res <- decodeJsonErr <$> cachingGetError wp key
      return (getSpecId $ TaxDict res resName)
 
 addPostIds :: WPLens b -> [Int] -> Handler b b ()
@@ -347,8 +335,7 @@ wpGetPost wpKey =
   do wp <- view snapletValue <$> getSnapletState
      liftIO $ getPost wp wpKey
 
-getPost :: (ToJSON a, FromJSON a)
-        => Wordpress b -> WPKey -> IO (Maybe a)
+getPost :: Wordpress b -> WPKey -> IO (Maybe Object)
 getPost wp@Wordpress{..} wpKey = do
          mres <- wpCacheGet wpKey
          case mres of
@@ -358,15 +345,16 @@ getPost wp@Wordpress{..} wpKey = do
                 if running
                    then do threadDelay 100000
                            getPost wp wpKey
-                   else do post' <- decodeJson <$> wpRequest wpKey
-                           case post' of
-                             Just (post:_) ->
-                               do wpCacheSet wpKey $ encode post
-                                  stopReqMutex wpKey
-                                  return $ Just post
-                             _ -> do stopReqMutex wpKey
-                                     return Nothing
-getPost _ key = error $ "getPost: Don't know how to get a post from key: " ++ show key
+                   else do post' <- decodePost <$> wpRequest wpKey
+                           performOnJust ((wpCacheSet wpKey) . encode) post'
+                           stopReqMutex wpKey
+                           return post'
+  where decodePost :: Text -> Maybe Object
+        decodePost t =
+          do post' <- decodeJson t
+             case post' of
+              Just (post:_) -> Just post
+              _ -> Nothing
 
 wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
                         -> WPLens b
