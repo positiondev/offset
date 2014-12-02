@@ -2,7 +2,7 @@ module Snap.Snaplet.Wordpress.Cache.Internal where
 
 import           Control.Applicative ((<$>))
 import           Control.Monad       (join)
-import           Data.Either
+import           Data.Either         (isRight)
 import           Data.Text           (Text)
 import qualified Data.Text.Encoding  as T
 import           Database.Redis      (Redis)

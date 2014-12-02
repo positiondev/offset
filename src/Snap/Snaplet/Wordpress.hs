@@ -330,9 +330,6 @@ lookupTaxDict resName Wordpress{..} =
   do res <- wpRequest ("/taxonomies/" <> resName <> "/terms") [] decodeJsonErr
      return (getSpecId $ TaxDict res resName)
 
-extractPostIds :: [Object] -> [(Int, Object)]
-extractPostIds = map extractPostId
-
 addPostIds :: WPLens b -> [Int] -> Handler b b ()
 addPostIds wpLens ids =
   do w@Wordpress{..} <- use (wpLens . snapletValue)

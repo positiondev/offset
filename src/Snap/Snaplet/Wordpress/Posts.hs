@@ -65,3 +65,5 @@ extractPostId p = let i = M.lookup "ID" p
                       id' = fromMaybe 0 is in
                     (id', p)
 
+extractPostIds :: [Object] -> [(Int, Object)]
+extractPostIds = map extractPostId
