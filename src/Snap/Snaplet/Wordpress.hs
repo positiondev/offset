@@ -88,7 +88,7 @@ data Wordpress b =
                , wpCacheSet         :: WPKey -> Text -> IO ()
                , wpCacheGet         :: WPKey -> IO (Maybe Text)
                , wpExpireAggregates :: IO Bool
-               , wpExpirePost       :: Int -> IO Bool
+               , wpExpirePost       :: WPKey -> IO Bool
                , startReqMutex      :: WPKey -> IO Bool
                , stopReqMutex       :: WPKey -> IO ()
                }

@@ -194,7 +194,7 @@ main = hspec $ do
     it "should not find single post after expire handler is called" $
       do eval (with wordpress $ wpCacheSet' (PostByPermalinkKey "2000" "1" "the-article")
                                             (enc article1))
-         eval (with wordpress $ wpExpirePost' 1)
+         eval (with wordpress $ wpExpirePost' (PostByPermalinkKey "2000" "1" "the-article"))
          eval (with wordpress $ wpCacheGet' (PostByPermalinkKey "2000" "1" "the-article"))
            >>= shouldEqual Nothing
     it "should find post aggregates in cache" $
@@ -205,7 +205,7 @@ main = hspec $ do
     it "should not find post aggregates after expire handler is called" $
       do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
          eval (with wordpress $ wpCacheSet' key ("[" ++ enc article1 ++ "]"))
-         eval (with wordpress $ wpExpirePost' 1)
+         eval (with wordpress $ wpExpirePost' (PostByPermalinkKey "2000" "1" "the-article"))
          eval (with wordpress $ wpCacheGet' key)
            >>= shouldEqual Nothing
     it "should find single post after expiring aggregates" $
@@ -219,7 +219,7 @@ main = hspec $ do
              key2 = (PostByPermalinkKey "2001" "2" "another-article")
          eval (with wordpress $ wpCacheSet' key1 (enc article1))
          eval (with wordpress $ wpCacheSet' key2 (enc article2))
-         eval (with wordpress $ wpExpirePost' 1)
+         eval (with wordpress $ wpExpirePost' (PostByPermalinkKey "2000" "1" "the-article"))
          eval (with wordpress $ wpCacheGet' key2) >>= shouldEqual (Just (enc article2))
     it "should be able to cache and retrieve post" $
       do let key = (PostKey 200)
@@ -356,9 +356,9 @@ wpCacheSet' wpKey o = do
   liftIO $ wpCacheSet wpKey o
 
 wpExpireAggregates' = do
-  wp <- getWordpress
-  liftIO $ wpExpireAggregates wp
+  Wordpress{..} <- getWordpress
+  liftIO $ wpExpireAggregates
 
-wpExpirePost' i = do
-  wp <- getWordpress
-  liftIO $ wpExpirePost wp i
+wpExpirePost' k = do
+  Wordpress{..} <- getWordpress
+  liftIO $ wpExpirePost k

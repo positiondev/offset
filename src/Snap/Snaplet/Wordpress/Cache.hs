@@ -9,36 +9,22 @@ import           Data.Text                             (Text)
 import           Database.Redis                        (Redis)
 
 import           Snap.Snaplet.Wordpress.Cache.Internal
-import           Snap.Snaplet.Wordpress.Posts
 import           Snap.Snaplet.Wordpress.Types
-import           Snap.Snaplet.Wordpress.Utils
 
 data CacheBehavior = NoCache | CacheSeconds Int | CacheForever deriving (Show, Eq)
 type RunRedis = forall a. Redis a -> IO a
 
 wpCacheGetInt :: RunRedis -> CacheBehavior -> WPKey -> IO (Maybe Text)
-wpCacheGetInt runRedis b wpKey =
-  runRedis $
-    do case wpKey of
-        key@PostByPermalinkKey{} ->
-          (cacheGet b) =<<< (cacheGet b (formatKey key))
-        key -> cacheGet b (formatKey key)
+wpCacheGetInt runRedis b = runRedis . (cacheGet b) . formatKey
 
 wpCacheSetInt :: RunRedis -> CacheBehavior -> WPKey -> Text -> IO ()
-wpCacheSetInt runRedis b key o =
-  void $ runRedis $
-    do case key of
-        PostByPermalinkKey{} -> do
-          let (Just p) = decode o
-              (i,_) = extractPostId p
-          (cacheSet b (formatKey $ PostKey i) o) >> cacheSet b (formatKey key) (formatKey $ PostKey i)
-        _ -> cacheSet b (formatKey key) o
+wpCacheSetInt runRedis b key = void . runRedis . (cacheSet b (formatKey key))
 
 wpExpireAggregatesInt :: RunRedis -> IO Bool
 wpExpireAggregatesInt runRedis = runRedis expireAggregates
 
-wpExpirePostInt :: RunRedis -> Int -> IO Bool
-wpExpirePostInt runRedis i = runRedis $ expirePost i
+wpExpirePostInt :: RunRedis -> WPKey -> IO Bool
+wpExpirePostInt runRedis = runRedis . expire
 
 cacheGet :: CacheBehavior -> Text -> Redis (Maybe Text)
 cacheGet NoCache _ = return Nothing
@@ -54,5 +40,5 @@ cacheSet b k v =
 expireAggregates :: Redis Bool
 expireAggregates = rdelstar "wordpress:posts:*"
 
-expirePost :: Int -> Redis Bool
-expirePost i = rdel [formatKey (PostKey i)] >> expireAggregates
+expire :: WPKey -> Redis Bool
+expire key = rdel [formatKey key] >> expireAggregates
