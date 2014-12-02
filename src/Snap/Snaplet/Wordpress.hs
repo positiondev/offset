@@ -85,7 +85,7 @@ instance Default (WordpressConfig m) where
 
 data Wordpress b =
      Wordpress { requestPostSet     :: Maybe IntSet
-               , wpRequest          :: forall a. Text -> [(Text, Text)] -> (Text -> a) -> IO a
+               , wpRequest          :: WPKey -> IO Text
                , wpCacheSet         :: WPKey -> Text -> IO ()
                , wpCacheGet         :: WPKey -> IO (Maybe Text)
                , wpExpireAggregates :: IO Bool
@@ -94,9 +94,17 @@ data Wordpress b =
                , stopReqMutex       :: WPKey -> IO ()
                }
 
-wpRequestInt :: Requester -> Text -> Text -> [(Text, Text)] -> (Text -> a) -> IO a
-wpRequestInt runHTTP endpt path params dcode =
-  (unRequester runHTTP) (endpt <> path) params dcode
+wpRequestInt :: Requester -> Text -> WPKey -> IO Text
+wpRequestInt runHTTP endpt key =
+  case key of
+   TaxDictKey resName -> req ("/taxonomies/" <> resName <> "/terms") []
+   PostByPermalinkKey year month slug ->
+     req "/posts" [("filter[year]", year)
+                        ,("filter[monthnum]", month)
+                        ,("filter[name]", slug)]
+   PostsKey{} -> req "/posts" (buildParams key)
+   PostKey i -> req ("/posts" <> tshow i) []
+  where req path params = (unRequester runHTTP) (endpt <> path) params id
 
 startReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO Bool
 startReqMutexInt activeMV wpKey =
@@ -161,8 +169,8 @@ wpPrefetch :: Wordpress b
 wpPrefetch wp =
   do n <- getParamNode
      childrenRes <- runChildren
-     tagDict <- lift $ lookupTaxDict "post_tag" wp
-     catDict <- lift $ lookupTaxDict "category" wp
+     tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
+     catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
      let wpKeys = findPrefetchables tagDict catDict n
      return $ yieldRuntime $
        do void $ liftIO $ cc $ map (getPosts wp) wpKeys
@@ -260,7 +268,7 @@ getPosts Wordpress{..} wpKey =
             if running
                then return Nothing
                else
-                 do post <- wpRequest "/posts" (buildParams wpKey) id
+                 do post <- wpRequest wpKey
                     wpCacheSet wpKey post
                     stopReqMutex wpKey
                     return $ Just post
@@ -275,8 +283,8 @@ wpPostsSplice wp wpconf wpLens =
      outputChildren <- manyWithSplices runChildren (postSplices (extraFields wpconf))
                                                    (getPromise promise)
      postsQuery <- parseQueryNode <$> getParamNode
-     tagDict <- lift $ lookupTaxDict "post_tag" wp
-     catDict <- lift $ lookupTaxDict "category" wp
+     tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
+     catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
      let wpKey = mkWPKey tagDict catDict postsQuery
      return $ yieldRuntime $
        do res <- liftIO $ getPostsRetry wp wpKey
@@ -323,11 +331,9 @@ decodeJsonErr res = case decode res of
 decodeJson :: FromJSON a => Text -> Maybe a
 decodeJson res = decode res
 
-
-
-lookupTaxDict :: Text -> Wordpress b -> IO (TaxSpec a -> TaxSpecId a)
-lookupTaxDict resName Wordpress{..} =
-  do res <- wpRequest ("/taxonomies/" <> resName <> "/terms") [] decodeJsonErr
+lookupTaxDict :: WPKey -> Wordpress b -> IO (TaxSpec a -> TaxSpecId a)
+lookupTaxDict key@(TaxDictKey resName) Wordpress{..} =
+  do res <- decodeJsonErr <$> wpRequest key
      return (getSpecId $ TaxDict res resName)
 
 addPostIds :: WPLens b -> [Int] -> Handler b b ()
@@ -343,7 +349,7 @@ wpGetPost wpKey =
 
 getPost :: (ToJSON a, FromJSON a)
         => Wordpress b -> WPKey -> IO (Maybe a)
-getPost wp@Wordpress{..} wpKey@(PostByPermalinkKey year month slug) = do
+getPost wp@Wordpress{..} wpKey = do
          mres <- wpCacheGet wpKey
          case mres of
            Just r' -> return (decode r')
@@ -352,10 +358,7 @@ getPost wp@Wordpress{..} wpKey@(PostByPermalinkKey year month slug) = do
                 if running
                    then do threadDelay 100000
                            getPost wp wpKey
-                   else do post' <- wpRequest "/posts"
-                                      [("filter[year]",year)
-                                      ,("filter[monthnum]", month)
-                                      ,("filter[name]", slug)] decodeJson
+                   else do post' <- decodeJson <$> wpRequest wpKey
                            case post' of
                              Just (post:_) ->
                                do wpCacheSet wpKey $ encode post

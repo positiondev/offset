@@ -83,9 +83,10 @@ instance Show Filter where
   show (OffsetFilter n) = "offset_" ++ show n
 
 data WPKey = PostKey Int
-              | PostByPermalinkKey Year Month Slug
-              | PostsKey (Set Filter)
-              deriving (Eq, Show, Ord)
+           | PostByPermalinkKey Year Month Slug
+           | PostsKey (Set Filter)
+           | TaxDictKey Text
+           deriving (Eq, Show, Ord)
 
 formatKey :: WPKey -> Text
 formatKey = format
@@ -93,7 +94,7 @@ formatKey = format
         format (PostsKey filters) =
           "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
         format (PostKey n) = "wordpress:post:" <> tshow n
-
+        format (TaxDictKey t) = "wordpress:tax_dict:" <> t
 
 tagChars :: String
 tagChars = ['a'..'z'] ++ "-"
