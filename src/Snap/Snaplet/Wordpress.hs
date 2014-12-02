@@ -28,48 +28,47 @@ module Snap.Snaplet.Wordpress (
  ) where
 
 
-import           Control.Concurrent           (threadDelay)
+import           Control.Concurrent              (threadDelay)
 import           Control.Concurrent.MVar
 import           Control.Lens
-import           Data.Aeson                   hiding (decode, encode)
-import qualified Data.Attoparsec.Text         as A
-import           Data.Char                    (toUpper)
-import qualified Data.Configurator            as C
+import           Data.Aeson                      hiding (decode, encode)
+import qualified Data.Attoparsec.Text            as A
+import           Data.Char                       (toUpper)
+import qualified Data.Configurator               as C
 import           Data.Default
-import qualified Data.HashMap.Strict          as M
-import           Data.IntSet                  (IntSet)
-import qualified Data.IntSet                  as IntSet
-import           Data.Map                     (Map)
-import qualified Data.Map                     as Map
+import qualified Data.HashMap.Strict             as M
+import           Data.IntSet                     (IntSet)
+import qualified Data.IntSet                     as IntSet
+import           Data.Map                        (Map)
+import qualified Data.Map                        as Map
 import           Data.Map.Syntax
-import           Data.Maybe                   (fromJust, fromMaybe)
+import           Data.Maybe                      (fromJust, fromMaybe)
 import           Data.Monoid
-import qualified Data.Set                     as Set
-import           Data.Text                    (Text)
-import qualified Data.Text                    as T
-import qualified Data.Text.Encoding           as T
-import qualified Data.Text.Lazy               as TL
-import qualified Data.Text.Lazy.Encoding      as TL
+import qualified Data.Set                        as Set
+import           Data.Text                       (Text)
+import qualified Data.Text                       as T
+import qualified Data.Text.Encoding              as T
+import qualified Data.Text.Lazy                  as TL
+import qualified Data.Text.Lazy.Encoding         as TL
 import           Data.Time.Clock
-import qualified Data.Vector                  as V
-import           Database.Redis               (Redis)
-import qualified Database.Redis               as R
+import qualified Data.Vector                     as V
+import           Database.Redis                  (Redis)
+import qualified Database.Redis                  as R
 import           Heist
 import           Heist.Compiled
 import           Heist.Compiled.LowLevel
-import qualified Network.Wreq                 as W
-import           Snap                         hiding (path)
-import           Snap.Snaplet.Heist           (Heist, addConfig)
-import           Snap.Snaplet.RedisDB         (RedisDB)
-import qualified Snap.Snaplet.RedisDB         as R
-import qualified Text.XmlHtml                 as X
+import qualified Network.Wreq                    as W
+import           Snap                            hiding (path)
+import           Snap.Snaplet.Heist              (Heist, addConfig)
+import           Snap.Snaplet.RedisDB            (RedisDB)
+import qualified Snap.Snaplet.RedisDB            as R
+import qualified Text.XmlHtml                    as X
 
 import           Snap.Snaplet.Wordpress.Cache
+import           Snap.Snaplet.Wordpress.Internal
 import           Snap.Snaplet.Wordpress.Posts
 import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
-
-newtype Requester = Requester { unRequester :: forall a. Text -> [(Text, Text)] -> (Text -> a) -> IO a}
 
 data WordpressConfig m =
      WordpressConfig { endpoint      :: Text
@@ -91,57 +90,11 @@ data Wordpress b =
                , wpExpirePost       :: WPKey -> IO Bool
                , startReqMutex      :: WPKey -> IO Bool
                , stopReqMutex       :: WPKey -> IO ()
+               , cachingGet         :: WPKey -> IO (Maybe Text)
+               , cachingGetRetry    :: WPKey -> IO Text
+               , cachingGetError    :: WPKey -> IO Text
                }
 
-wpRequestInt :: Requester -> Text -> WPKey -> IO Text
-wpRequestInt runHTTP endpt key =
-  case key of
-   TaxDictKey resName -> req ("/taxonomies/" <> resName <> "/terms") []
-   PostByPermalinkKey year month slug ->
-     req "/posts" [("filter[year]", year)
-                  ,("filter[monthnum]", month)
-                  ,("filter[name]", slug)]
-   PostsKey{} -> req "/posts" (buildParams key)
-   PostKey i -> req ("/posts" <> tshow i) []
-  where req path params = (unRequester runHTTP) (endpt <> path) params id
-
-startReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO Bool
-startReqMutexInt activeMV wpKey =
-  do now <- getCurrentTime
-     modifyMVar activeMV $ \a ->
-      let active = filterCurrent now a
-      in if Map.member wpKey active
-          then return (active, True)
-          else return (Map.insert wpKey now active, False)
-  where filterCurrent now = Map.filter (\v -> diffUTCTime now v < 1)
-
-stopReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO ()
-stopReqMutexInt activeMV wpKey =
-  modifyMVar_ activeMV $ return . Map.delete wpKey
-
-cachingGetRetry :: (Wordpress b) -> WPKey -> IO Text
-cachingGetRetry wp = retryUnless . (cachingGet wp)
-
-cachingGetError :: (Wordpress b) -> WPKey -> IO Text
-cachingGetError wp wpKey = errorUnless msg (cachingGet wp wpKey)
-  where msg = ("Could not retrieve " <> formatKey wpKey)
-
-cachingGet :: Wordpress b
-           -> WPKey
-           -> IO (Maybe Text)
-cachingGet Wordpress{..} wpKey =
-  do cached <- wpCacheGet wpKey
-     case cached of
-       Just _ -> return cached
-       Nothing ->
-         do running <- startReqMutex wpKey
-            if running
-               then return Nothing
-               else
-                 do o <- wpRequest wpKey
-                    wpCacheSet wpKey o
-                    stopReqMutex wpKey
-                    return $ Just o
 
 initWordpress :: Snaplet (Heist b)
               -> Snaplet RedisDB
@@ -166,6 +119,11 @@ initWordpress' wpconf heist redis wpLens =
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
        let rrunRedis = R.runRedis $ view (snapletValue . R.redisConnection) redis
+       let wpInt = WordpressInt{ wpRequest = wpRequestInt req (endpoint wpconf)
+                               , wpCacheSet = wpCacheSetInt rrunRedis (cacheBehavior wpconf)
+                               , wpCacheGet = wpCacheGetInt rrunRedis (cacheBehavior wpconf)
+                               , startReqMutex = startReqMutexInt active
+                               , stopReqMutex = stopReqMutexInt active }
        let wp = Wordpress{ requestPostSet = Nothing
                          , wpRequest = wpRequestInt req (endpoint wpconf)
                          , wpCacheSet = wpCacheSetInt rrunRedis (cacheBehavior wpconf)
@@ -173,7 +131,11 @@ initWordpress' wpconf heist redis wpLens =
                          , wpExpireAggregates = wpExpireAggregatesInt rrunRedis
                          , wpExpirePost = wpExpirePostInt rrunRedis
                          , startReqMutex = startReqMutexInt active
-                         , stopReqMutex = stopReqMutexInt active }
+                         , stopReqMutex = stopReqMutexInt active
+                         , cachingGet = cachingGetInt wpInt
+                         , cachingGetRetry = cachingGetRetryInt wpInt
+                         , cachingGetError = cachingGetErrorInt wpInt
+                         }
        addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
        return wp
 
@@ -288,17 +250,6 @@ wpPostsSplice wp wpconf wpLens =
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
 
-
-buildParams :: WPKey -> [(Text, Text)]
-buildParams (PostsKey filters) = params
-  where params = Set.toList $ Set.map mkFilter filters
-        mkFilter (TagFilter (TaxPlusId i)) = ("filter[tag__in]", tshow i)
-        mkFilter (TagFilter (TaxMinusId i)) = ("filter[tag__not_in]", tshow i)
-        mkFilter (CatFilter (TaxPlusId i)) = ("filter[category__in]", tshow i)
-        mkFilter (CatFilter (TaxMinusId i)) = ("filter[category__not_in]", tshow i)
-        mkFilter (NumFilter num) = ("filter[posts_per_page]", tshow num)
-        mkFilter (OffsetFilter offset) = ("filter[offset]", tshow offset)
-
 getSpecId :: TaxDict a -> TaxSpec a -> TaxSpecId a
 getSpecId taxDict spec =
   case spec of
@@ -321,7 +272,7 @@ decodeJson res = decode res
 
 lookupTaxDict :: WPKey -> Wordpress b -> IO (TaxSpec a -> TaxSpecId a)
 lookupTaxDict key@(TaxDictKey resName) wp@Wordpress{..} =
-  do res <- decodeJsonErr <$> cachingGetError wp key
+  do res <- decodeJsonErr <$> cachingGetError key
      return (getSpecId $ TaxDict res resName)
 
 addPostIds :: WPLens b -> [Int] -> Handler b b ()
@@ -336,7 +287,7 @@ wpGetPost wpKey =
      liftIO $ getPost wp wpKey
 
 getPost :: Wordpress b -> WPKey -> IO (Maybe Object)
-getPost wp@Wordpress{..} wpKey = do decodePost <$> cachingGetRetry wp wpKey
+getPost Wordpress{..} wpKey = do decodePost <$> cachingGetRetry wpKey
   where decodePost :: Text -> Maybe Object
         decodePost t =
           do post' <- decodeJson t
