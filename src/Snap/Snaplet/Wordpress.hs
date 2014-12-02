@@ -120,7 +120,7 @@ stopReqMutexInt activeMV wpKey =
   modifyMVar_ activeMV $ return . Map.delete wpKey
 
 cachingGetRetry :: (Wordpress b) -> WPKey -> IO Text
-cachingGetRetry wp wpKey = retryUnless (cachingGet wp wpKey)
+cachingGetRetry wp = retryUnless . (cachingGet wp)
 
 cachingGetError :: (Wordpress b) -> WPKey -> IO Text
 cachingGetError wp wpKey = errorUnless msg (cachingGet wp wpKey)
@@ -336,19 +336,7 @@ wpGetPost wpKey =
      liftIO $ getPost wp wpKey
 
 getPost :: Wordpress b -> WPKey -> IO (Maybe Object)
-getPost wp@Wordpress{..} wpKey = do
-         mres <- wpCacheGet wpKey
-         case mres of
-           Just r' -> return (decode r')
-           Nothing ->
-             do running <- startReqMutex wpKey
-                if running
-                   then do threadDelay 100000
-                           getPost wp wpKey
-                   else do post' <- decodePost <$> wpRequest wpKey
-                           performOnJust ((wpCacheSet wpKey) . encode) post'
-                           stopReqMutex wpKey
-                           return post'
+getPost wp@Wordpress{..} wpKey = do decodePost <$> cachingGetRetry wp wpKey
   where decodePost :: Text -> Maybe Object
         decodePost t =
           do post' <- decodeJson t
