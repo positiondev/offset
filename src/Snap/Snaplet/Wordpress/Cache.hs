@@ -9,10 +9,8 @@ import           Database.Redis                        (Redis)
 import           Snap
 
 import           Snap.Snaplet.Wordpress.Cache.Internal
+import           Snap.Snaplet.Wordpress.Cache.Types
 import           Snap.Snaplet.Wordpress.Types
-
-data CacheBehavior = NoCache | CacheSeconds Int | CacheForever deriving (Show, Eq)
-type RunRedis = forall a. Redis a -> IO a
 
 wpCacheGetInt :: RunRedis -> CacheBehavior -> WPKey -> IO (Maybe Text)
 wpCacheGetInt runRedis b = runRedis . (cacheGet b) . formatKey

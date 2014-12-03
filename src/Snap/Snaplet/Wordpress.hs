@@ -28,68 +28,47 @@ module Snap.Snaplet.Wordpress (
  ) where
 
 import           Control.Concurrent.MVar
-import           Control.Lens                    hiding (children)
-import           Data.Aeson                      hiding (decode, encode)
-import qualified Data.Attoparsec.Text            as A
-import           Data.Char                       (toUpper)
-import qualified Data.Configurator               as C
+import           Control.Lens                       hiding (children)
+import           Data.Aeson                         hiding (decode, encode)
+import qualified Data.Attoparsec.Text               as A
+import           Data.Char                          (toUpper)
+import qualified Data.Configurator                  as C
 import           Data.Default
-import qualified Data.HashMap.Strict             as M
-import           Data.IntSet                     (IntSet)
-import qualified Data.IntSet                     as IntSet
-import qualified Data.Map                        as Map
+import qualified Data.HashMap.Strict                as M
+import           Data.IntSet                        (IntSet)
+import qualified Data.IntSet                        as IntSet
+import qualified Data.Map                           as Map
 import           Data.Map.Syntax
-import           Data.Maybe                      (fromJust, fromMaybe)
+import           Data.Maybe                         (fromJust, fromMaybe)
 import           Data.Monoid
-import qualified Data.Set                        as Set
-import           Data.Text                       (Text)
-import qualified Data.Text                       as T
-import qualified Data.Vector                     as V
-import qualified Database.Redis                  as R
+import qualified Data.Set                           as Set
+import           Data.Text                          (Text)
+import qualified Data.Text                          as T
+import qualified Data.Vector                        as V
+import qualified Database.Redis                     as R
 import           Heist
 import           Heist.Compiled
 import           Heist.Compiled.LowLevel
-import           Snap                            hiding (path, rqURI)
-import           Snap.Snaplet.Heist              (Heist, addConfig)
-import           Snap.Snaplet.RedisDB            (RedisDB)
-import qualified Snap.Snaplet.RedisDB            as RDB
-import qualified Text.XmlHtml                    as X
+import           Snap                               hiding (path, rqURI)
+import           Snap.Snaplet.Heist                 (Heist, addConfig)
+import           Snap.Snaplet.RedisDB               (RedisDB)
+import qualified Snap.Snaplet.RedisDB               as RDB
+import qualified Text.XmlHtml                       as X
 
 import           Snap.Snaplet.Wordpress.Cache
+import           Snap.Snaplet.Wordpress.Cache.Types
+import           Snap.Snaplet.Wordpress.Field
 import           Snap.Snaplet.Wordpress.HTTP
 import           Snap.Snaplet.Wordpress.Internal
 import           Snap.Snaplet.Wordpress.Posts
 import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
 
-data WordpressConfig m =
-     WordpressConfig { endpoint      :: Text
-                     , requester     :: Maybe Requester
-                     , cacheBehavior :: CacheBehavior
-                     , extraFields   :: [Field m]
-                     , logger        :: Maybe (Text -> IO ())
-                     }
-
-instance Default (WordpressConfig m) where
-  def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) [] Nothing
-
-data Wordpress b =
-     Wordpress { requestPostSet     :: Maybe IntSet
-               , wpExpireAggregates :: IO Bool
-               , wpExpirePost       :: WPKey -> IO Bool
-               , cachingGet         :: WPKey -> IO (Maybe Text)
-               , cachingGetRetry    :: WPKey -> IO Text
-               , cachingGetError    :: WPKey -> IO Text
-               , cacheInternals     :: WordpressInt b
-               }
-
 initWordpress :: Snaplet (Heist b)
               -> Snaplet RedisDB
               -> WPLens b
               -> SnapletInit b (Wordpress b)
 initWordpress = initWordpress' def
-
-type WPLens b = Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
 
 initWordpress' :: WordpressConfig (Handler b b)
                -> Snaplet (Heist b)
@@ -308,12 +287,6 @@ parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
                     return (T.reverse $ T.pack raey
                            ,T.reverse $ T.pack htnom
                            ,T.reverse $ T.pack guls)
-
--- TODO(dbp 2014-10-14): date should be parsed and nested.
-data Field m = F Text -- A single flat field
-             | P Text (RuntimeSplice m Text -> Splice m) -- A customly parsed flat field
-             | N Text [Field m] -- A nested object field
-             | M Text [Field m] -- A list field, where each element is an object
 
 instance (Functor m, Monad m) =>  Show (Field m) where
   show (F t) = "F(" ++ T.unpack t ++ ")"

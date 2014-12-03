@@ -11,23 +11,52 @@
 module Snap.Snaplet.Wordpress.Internal where
 
 import           Control.Concurrent.MVar
-import           Data.Map                     (Map)
-import qualified Data.Map                     as Map
+import           Control.Lens                       hiding (children)
+import           Data.IntSet                        (IntSet)
+import           Data.Map                           (Map)
+import qualified Data.Map                           as Map
 import           Data.Monoid
-import qualified Data.Set                     as Set
-import           Data.Text                    (Text)
+import qualified Data.Set                           as Set
+import           Data.Text                          (Text)
 import           Data.Time.Clock
+import           Snap                               hiding (path)
+import           Data.Default
 
+import           Snap.Snaplet.Wordpress.Cache.Types
+import           Snap.Snaplet.Wordpress.Field
+import           Snap.Snaplet.Wordpress.HTTP
 import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
-import           Snap.Snaplet.Wordpress.HTTP
+
+
+data WordpressConfig m =
+     WordpressConfig { endpoint      :: Text
+                     , requester     :: Maybe Requester
+                     , cacheBehavior :: CacheBehavior
+                     , extraFields   :: [Field m]
+                     , logger        :: Maybe (Text -> IO ())
+                     }
+instance Default (WordpressConfig m) where
+  def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) [] Nothing
+
+data Wordpress b =
+     Wordpress { requestPostSet     :: Maybe IntSet
+               , wpExpireAggregates :: IO Bool
+               , wpExpirePost       :: WPKey -> IO Bool
+               , cachingGet         :: WPKey -> IO (Maybe Text)
+               , cachingGetRetry    :: WPKey -> IO Text
+               , cachingGetError    :: WPKey -> IO Text
+               , cacheInternals     :: WordpressInt b
+               }
+
+type WPLens b = Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
 
 data WordpressInt b =
-     WordpressInt { wpCacheGet :: WPKey -> IO (Maybe Text)
-                  , wpCacheSet :: WPKey -> Text -> IO ()
+     WordpressInt { wpCacheGet    :: WPKey -> IO (Maybe Text)
+                  , wpCacheSet    :: WPKey -> Text -> IO ()
                   , startReqMutex :: WPKey -> IO Bool
-                  , wpRequest :: WPKey -> IO Text
-                  , stopReqMutex :: WPKey -> IO ()
+                  , wpRequest     :: WPKey -> IO Text
+                  , stopReqMutex  :: WPKey -> IO ()
                   }
 
 wpRequestInt :: Requester -> Text -> WPKey -> IO Text
