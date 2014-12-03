@@ -12,6 +12,7 @@ module Snap.Snaplet.Wordpress.Internal where
 
 import           Control.Concurrent.MVar
 import           Control.Lens                       hiding (children)
+import           Data.Default
 import           Data.IntSet                        (IntSet)
 import           Data.Map                           (Map)
 import qualified Data.Map                           as Map
@@ -20,7 +21,6 @@ import qualified Data.Set                           as Set
 import           Data.Text                          (Text)
 import           Data.Time.Clock
 import           Snap                               hiding (path)
-import           Data.Default
 
 import           Snap.Snaplet.Wordpress.Cache.Types
 import           Snap.Snaplet.Wordpress.Field

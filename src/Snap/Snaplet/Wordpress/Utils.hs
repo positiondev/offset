@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Snap.Snaplet.Wordpress.Utils where
 
 import           Control.Concurrent       as CC
@@ -5,6 +7,7 @@ import qualified Control.Concurrent.Async as CC
 import           Data.Aeson               (FromJSON, ToJSON)
 import qualified Data.Aeson               as J
 import           Data.Maybe
+import           Data.Monoid
 import           Data.Text                (Text)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
@@ -29,6 +32,14 @@ decode = J.decodeStrict . T.encodeUtf8
 
 encode :: (ToJSON a) => a -> Text
 encode = TL.toStrict . TL.decodeUtf8 . J.encode
+
+decodeJsonErr :: FromJSON a => Text -> a
+decodeJsonErr res = case decode res of
+                      Nothing -> terror $ "Unparsable JSON: " <> res
+                      Just val -> val
+
+decodeJson :: FromJSON a => Text -> Maybe a
+decodeJson res = decode res
 
 -- * -- IO Utilities -- * --
 performOnJust :: (o -> IO ()) -> Maybe o -> IO ()

@@ -93,3 +93,10 @@ instance Read (TaxSpecList a) where
                      if all isJust vs
                         then [(TaxSpecList $ catMaybes vs, "")]
                         else []
+
+data WPQuery = WPPostsQuery{ qlimit  :: Int
+                           , qnum    :: Int
+                           , qoffset :: Int
+                           , qpage   :: Int
+                           , qtags   :: TaxSpecList TagType
+                           , qcats   :: TaxSpecList CatType}
