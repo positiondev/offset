@@ -107,10 +107,11 @@ initWordpress' :: WordpressConfig (Handler b b)
 initWordpress' wpconf heist redis wpLens =
   makeSnaplet "wordpress" "" Nothing $
     do conf <- getSnapletUserConfig
+       let logf = logger wpconf
        wpReq <- case requester wpconf of
                 Nothing -> do u <- liftIO $ C.require conf "username"
                               p <- liftIO $ C.require conf "password"
-                              return $ wreqRequester wpconf u p
+                              return $ wreqRequester logf u p
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
        let rrunRedis = R.runRedis $ view (snapletValue . R.redisConnection) redis
@@ -232,7 +233,7 @@ wpPostsSplice wp wpconf wpLens =
           case (decode res) of
             Just posts -> do let postsW = extractPostIds posts
                              Wordpress{..} <- lift (use (wpLens . snapletValue))
-                             let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet  $ postsW
+                             let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet $ postsW
                              lift $ addPostIds wpLens (map fst postsND)
                              putPromise promise (map snd postsND)
                              codeGen outputChildren
@@ -411,21 +412,21 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
         f (False, rest) '-' = (True, rest)
         f (False, rest) next = (False, T.snoc rest next)
 
-wreqRequester :: WordpressConfig (Handler b b)
+wreqRequester :: Maybe (Text -> IO ())
               -> Text
               -> Text
               -> Requester
-wreqRequester conf user passw =
-  Requester $ \u ps dcode -> do let opts = (W.defaults & W.params .~ ps
-                                                       & W.auth .~ W.basicAuth user' pass')
-                                wplog conf $ "wreq: " <> u <> " with params: " <>
-                                           (T.intercalate "&" . map (\(a,b) -> a <> "=" <> b) $ ps)
-                                r <- W.getWith opts (T.unpack u)
-                                return $ dcode $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
+wreqRequester logger user passw =
+  Requester $ \u ps -> do let opts = (W.defaults & W.params .~ ps
+                                      & W.auth .~ W.basicAuth user' pass')
+                          wplog logger $ "wreq: " <> u <> " with params: " <>
+                            (T.intercalate "&" . map (\(a,b) -> a <> "=" <> b) $ ps)
+                          r <- W.getWith opts (T.unpack u)
+                          return $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
   where user' = T.encodeUtf8 user
         pass' = T.encodeUtf8 passw
 
-wplog :: WordpressConfig (Handler b b) -> Text -> IO ()
-wplog conf msg = case logger conf of
-                   Nothing -> return ()
-                   Just f -> f msg
+wplog :: Maybe (Text -> IO ()) -> Text -> IO ()
+wplog logger msg = case logger of
+                    Nothing -> return ()
+                    Just f -> f msg

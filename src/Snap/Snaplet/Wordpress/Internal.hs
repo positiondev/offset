@@ -51,7 +51,7 @@ import           Snap.Snaplet.Wordpress.Posts
 import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
 
-newtype Requester = Requester { unRequester :: forall a. Text -> [(Text, Text)] -> (Text -> a) -> IO a}
+newtype Requester = Requester { unRequester :: Text -> [(Text, Text)] -> IO Text }
 
 data WordpressInt b =
      WordpressInt { wpCacheGet :: WPKey -> IO (Maybe Text)
@@ -71,7 +71,7 @@ wpRequestInt runHTTP endpt key =
                   ,("filter[name]", slug)]
    PostsKey{} -> req "/posts" (buildParams key)
    PostKey i -> req ("/posts" <> tshow i) []
-  where req path params = (unRequester runHTTP) (endpt <> path) params id
+  where req path params = (unRequester runHTTP) (endpt <> path) params
 
 startReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO Bool
 startReqMutexInt activeMV wpKey =

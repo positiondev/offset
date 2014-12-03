@@ -81,7 +81,7 @@ renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
         templates = return $ M.fromList (map mkTmpl tmpls)
         config = (def { endpoint = ""
-                      , requester = Just $ Requester (\_ _ f -> return (f response))
+                      , requester = Just $ Requester (\_ _ -> return response)
                       , cacheBehavior = NoCache
                       , extraFields = jacobinFields})
 
@@ -98,17 +98,17 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
         config = (def { endpoint = ""
                       , requester = Just $ Requester recordingRequester
                       , cacheBehavior = NoCache})
-        recordingRequester "/taxonomies/post_tag/terms" [] f =
-          return $ f $ enc $ [object [ "ID" .= (177 :: Int)
+        recordingRequester "/taxonomies/post_tag/terms" [] =
+          return $ enc $ [object [ "ID" .= (177 :: Int)
                                      , "slug" .= ("home-featured" :: Text)]
                              ,object [ "ID" .= (160 :: Int)
                                      , "slug" .= ("featured-global" :: Text)]]
-        recordingRequester "/taxonomies/category/terms" [] f =
-          return $ f $ enc $ [object [ "ID" .= (159 :: Int)
+        recordingRequester "/taxonomies/category/terms" [] =
+          return $ enc $ [object [ "ID" .= (159 :: Int)
                                      , "slug" .= ("bookmarx" :: Text)]]
-        recordingRequester url params f = do
+        recordingRequester url params = do
           modifyMVar_ record $ (return . (++ [mkUrlUnescape url params]))
-          return $ f ""
+          return ""
         mkUrlUnescape url params = (url <> "?" <> (T.intercalate "&" $ map (\(k, v) -> k <> "=" <> v) params))
 
 cachingApp :: SnapletInit App App
@@ -118,7 +118,7 @@ cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
   w <- nestSnaplet "" wordpress $ initWordpress' config h r wordpress
   return $ App h r w
   where config = (def { endpoint = ""
-                      , requester = Just $ Requester (\_ _ f -> return $ f ("" :: Text))
+                      , requester = Just $ Requester (\_ _ -> return "")
                       , cacheBehavior = CacheSeconds 10})
 
 ----------------------------------------------------------
