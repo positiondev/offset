@@ -4,46 +4,15 @@
 module Snap.Snaplet.Wordpress.Types where
 
 import           Control.Applicative
-import           Control.Concurrent           (threadDelay)
-import           Control.Concurrent.MVar
-import           Control.Lens
 import           Data.Aeson
-import qualified Data.Attoparsec.Text         as A
-import           Data.ByteString              (ByteString)
-import           Data.Char                    (toUpper)
-import qualified Data.Configurator            as C
-import           Data.Default
-import qualified Data.HashMap.Strict          as M
-import           Data.IntSet                  (IntSet)
-import qualified Data.IntSet                  as IntSet
 import           Data.List                    (intercalate)
-import           Data.Map                     (Map)
-import qualified Data.Map                     as Map
-import           Data.Map.Syntax
-import           Data.Maybe                   (catMaybes, fromJust, fromMaybe,
-                                               isJust, listToMaybe)
+import           Data.Maybe                   (catMaybes, isJust)
 import           Data.Monoid
-import           Data.Ratio
 import           Data.Set                     (Set)
 import qualified Data.Set                     as Set
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
-import qualified Data.Text.Encoding           as T
-import qualified Data.Text.Lazy               as TL
-import qualified Data.Text.Lazy.Encoding      as TL
-import           Data.Time.Clock
-import qualified Data.Vector                  as V
-import           Database.Redis               (Redis)
-import qualified Database.Redis               as R
-import           Heist
-import           Heist.Compiled
-import           Heist.Compiled.LowLevel
-import qualified Network.Wreq                 as W
 import           Snap
-import           Snap.Snaplet.Heist           (Heist, addConfig)
-import           Snap.Snaplet.RedisDB         (RedisDB)
-import qualified Snap.Snaplet.RedisDB         as R
-import qualified Text.XmlHtml                 as X
 
 import           Snap.Snaplet.Wordpress.Utils
 

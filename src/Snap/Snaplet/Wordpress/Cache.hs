@@ -4,7 +4,6 @@
 
 module Snap.Snaplet.Wordpress.Cache where
 
-import           Control.Monad                         (void)
 import           Data.Text                             (Text)
 import           Database.Redis                        (Redis)
 import           Snap

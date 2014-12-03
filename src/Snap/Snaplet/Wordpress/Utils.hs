@@ -22,11 +22,7 @@ terror :: Text -> a
 terror = error . T.unpack
 
 (=<<<) :: Monad r => (a -> r (Maybe b)) -> r (Maybe a) -> r (Maybe b)
-f =<<< k = z f =<< k
-  where z :: Monad m => (a -> m (Maybe b)) -> Maybe a -> m (Maybe b)
-        z f k = case k of
-                 Just k' -> f k'
-                 Nothing -> return Nothing
+f =<<< g = maybe (return Nothing) f =<< g
 
 decode :: (FromJSON a) => Text -> Maybe a
 decode = J.decodeStrict . T.encodeUtf8
