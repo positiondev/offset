@@ -16,7 +16,8 @@ cabal-version:       >=1.10
 library
   exposed-modules:
     Snap.Snaplet.Wordpress
-  other-modules: Snap.Snaplet.Wordpress.Types
+  other-modules: Snap.Snaplet.Wordpress.Internal
+               , Snap.Snaplet.Wordpress.Types
                , Snap.Snaplet.Wordpress.Cache
                , Snap.Snaplet.Wordpress.Cache.Internal
                , Snap.Snaplet.Wordpress.Posts
