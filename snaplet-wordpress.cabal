@@ -18,6 +18,7 @@ library
     Snap.Snaplet.Wordpress
   other-modules: Snap.Snaplet.Wordpress.Internal
                , Snap.Snaplet.Wordpress.Types
+               , Snap.Snaplet.Wordpress.HTTP
                , Snap.Snaplet.Wordpress.Cache
                , Snap.Snaplet.Wordpress.Cache.Internal
                , Snap.Snaplet.Wordpress.Posts

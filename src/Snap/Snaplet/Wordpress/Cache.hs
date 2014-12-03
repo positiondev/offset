@@ -1,12 +1,13 @@
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Snap.Snaplet.Wordpress.Cache where
 
 import           Control.Monad                         (void)
 import           Data.Text                             (Text)
 import           Database.Redis                        (Redis)
+import           Snap
 
 import           Snap.Snaplet.Wordpress.Cache.Internal
 import           Snap.Snaplet.Wordpress.Types

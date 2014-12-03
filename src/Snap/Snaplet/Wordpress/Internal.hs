@@ -10,48 +10,17 @@
 
 module Snap.Snaplet.Wordpress.Internal where
 
-import           Control.Concurrent           (threadDelay)
 import           Control.Concurrent.MVar
-import           Control.Lens
-import           Data.Aeson                   hiding (decode, encode)
-import qualified Data.Attoparsec.Text         as A
-import           Data.Char                    (toUpper)
-import qualified Data.Configurator            as C
-import           Data.Default
-import qualified Data.HashMap.Strict          as M
-import           Data.IntSet                  (IntSet)
-import qualified Data.IntSet                  as IntSet
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
-import           Data.Map.Syntax
-import           Data.Maybe                   (fromJust, fromMaybe)
 import           Data.Monoid
 import qualified Data.Set                     as Set
 import           Data.Text                    (Text)
-import qualified Data.Text                    as T
-import qualified Data.Text.Encoding           as T
-import qualified Data.Text.Lazy               as TL
-import qualified Data.Text.Lazy.Encoding      as TL
 import           Data.Time.Clock
-import qualified Data.Vector                  as V
-import           Database.Redis               (Redis)
-import qualified Database.Redis               as R
-import           Heist
-import           Heist.Compiled
-import           Heist.Compiled.LowLevel
-import qualified Network.Wreq                 as W
-import           Snap                         hiding (path)
-import           Snap.Snaplet.Heist           (Heist, addConfig)
-import           Snap.Snaplet.RedisDB         (RedisDB)
-import qualified Snap.Snaplet.RedisDB         as R
-import qualified Text.XmlHtml                 as X
 
-import           Snap.Snaplet.Wordpress.Cache
-import           Snap.Snaplet.Wordpress.Posts
 import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
-
-newtype Requester = Requester { unRequester :: Text -> [(Text, Text)] -> IO Text }
+import           Snap.Snaplet.Wordpress.HTTP
 
 data WordpressInt b =
      WordpressInt { wpCacheGet :: WPKey -> IO (Maybe Text)

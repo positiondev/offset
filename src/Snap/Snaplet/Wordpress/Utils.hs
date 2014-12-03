@@ -10,12 +10,16 @@ import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Lazy           as TL
 import qualified Data.Text.Lazy.Encoding  as TL
+import qualified Snap                     as SNAP
 
 readSafe :: Read a => Text -> Maybe a
 readSafe = fmap fst . listToMaybe . reads . T.unpack
 
 tshow :: Show a => a -> Text
 tshow = T.pack . show
+
+terror :: Text -> a
+terror = error . T.unpack
 
 (=<<<) :: Monad r => (a -> r (Maybe b)) -> r (Maybe a) -> r (Maybe b)
 f =<<< k = z f =<< k
@@ -57,3 +61,6 @@ concurrently [a] =
 concurrently (a:as) =
   do (r1, rs) <- CC.concurrently a (concurrently as)
      return (r1:rs)
+
+rqURI :: SNAP.Request -> Text
+rqURI = T.decodeUtf8 . SNAP.rqURI

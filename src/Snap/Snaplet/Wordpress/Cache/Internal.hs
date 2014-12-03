@@ -1,12 +1,15 @@
 module Snap.Snaplet.Wordpress.Cache.Internal where
 
-import           Control.Applicative ((<$>))
-import           Control.Monad       (join)
-import           Data.Either         (isRight)
-import           Data.Text           (Text)
-import qualified Data.Text.Encoding  as T
-import           Database.Redis      (Redis)
-import qualified Database.Redis      as R
+import           Control.Applicative  ((<$>))
+import           Control.Lens         (Lens, Simple)
+import           Control.Monad        (join)
+import           Data.Either          (isRight)
+import           Data.Text            (Text)
+import qualified Data.Text.Encoding   as T
+import           Database.Redis       (Redis)
+import qualified Database.Redis       as R
+import           Snap.Snaplet.RedisDB (RedisDB)
+import qualified Snap.Snaplet.RedisDB as R
 
 rsetex :: Text -> Int -> Text -> Redis Bool
 rsetex k n v = isRight <$> R.setex (T.encodeUtf8 k) (toInteger n) (T.encodeUtf8 v)

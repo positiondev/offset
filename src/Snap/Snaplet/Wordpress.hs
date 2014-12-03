@@ -27,10 +27,8 @@ module Snap.Snaplet.Wordpress (
  , mergeFields
  ) where
 
-
-import           Control.Concurrent              (threadDelay)
 import           Control.Concurrent.MVar
-import           Control.Lens
+import           Control.Lens                    hiding (children)
 import           Data.Aeson                      hiding (decode, encode)
 import qualified Data.Attoparsec.Text            as A
 import           Data.Char                       (toUpper)
@@ -39,7 +37,6 @@ import           Data.Default
 import qualified Data.HashMap.Strict             as M
 import           Data.IntSet                     (IntSet)
 import qualified Data.IntSet                     as IntSet
-import           Data.Map                        (Map)
 import qualified Data.Map                        as Map
 import           Data.Map.Syntax
 import           Data.Maybe                      (fromJust, fromMaybe)
@@ -47,24 +44,19 @@ import           Data.Monoid
 import qualified Data.Set                        as Set
 import           Data.Text                       (Text)
 import qualified Data.Text                       as T
-import qualified Data.Text.Encoding              as T
-import qualified Data.Text.Lazy                  as TL
-import qualified Data.Text.Lazy.Encoding         as TL
-import           Data.Time.Clock
 import qualified Data.Vector                     as V
-import           Database.Redis                  (Redis)
 import qualified Database.Redis                  as R
 import           Heist
 import           Heist.Compiled
 import           Heist.Compiled.LowLevel
-import qualified Network.Wreq                    as W
-import           Snap                            hiding (path)
+import           Snap                            hiding (path, rqURI)
 import           Snap.Snaplet.Heist              (Heist, addConfig)
 import           Snap.Snaplet.RedisDB            (RedisDB)
-import qualified Snap.Snaplet.RedisDB            as R
+import qualified Snap.Snaplet.RedisDB            as RDB
 import qualified Text.XmlHtml                    as X
 
 import           Snap.Snaplet.Wordpress.Cache
+import           Snap.Snaplet.Wordpress.HTTP
 import           Snap.Snaplet.Wordpress.Internal
 import           Snap.Snaplet.Wordpress.Posts
 import           Snap.Snaplet.Wordpress.Types
@@ -114,7 +106,7 @@ initWordpress' wpconf heist redis wpLens =
                               return $ wreqRequester logf u p
                 Just r -> return r
        active <- liftIO $ newMVar Map.empty
-       let rrunRedis = R.runRedis $ view (snapletValue . R.redisConnection) redis
+       let rrunRedis = R.runRedis $ view (snapletValue . RDB.redisConnection) redis
        let wpInt = WordpressInt{ wpRequest = wpRequestInt wpReq (endpoint wpconf)
                                , wpCacheSet = wpCacheSetInt rrunRedis (cacheBehavior wpconf)
                                , wpCacheGet = wpCacheGetInt rrunRedis (cacheBehavior wpconf)
@@ -251,19 +243,19 @@ getSpecId taxDict spec =
     idFor :: TaxDict a -> Text -> Int
     idFor (TaxDict{..}) slug =
       case filter (\(TaxRes (_,s)) -> s == slug) dict of
-       [] -> error $ T.unpack $ "Couldn't find " <> desc <> ": " <> slug
+       [] -> terror $ "Couldn't find " <> desc <> ": " <> slug
        (TaxRes (i,_):_) -> i
 
 decodeJsonErr :: FromJSON a => Text -> a
 decodeJsonErr res = case decode res of
-                      Nothing -> error $ T.unpack $ "Unparsable JSON: " <> res
+                      Nothing -> terror $ "Unparsable JSON: " <> res
                       Just val -> val
 
 decodeJson :: FromJSON a => Text -> Maybe a
 decodeJson res = decode res
 
 lookupTaxDict :: WPKey -> Wordpress b -> IO (TaxSpec a -> TaxSpecId a)
-lookupTaxDict key@(TaxDictKey resName) wp@Wordpress{..} =
+lookupTaxDict key@(TaxDictKey resName) Wordpress{..} =
   do res <- decodeJsonErr <$> cachingGetError key
      return (getSpecId $ TaxDict res resName)
 
@@ -294,7 +286,7 @@ wpPostByPermalinkSplice conf wpLens =
   do promise <- newEmptyPromise
      outputChildren <- withSplices runChildren (postSplices (extraFields conf)) (getPromise promise)
      return $ yieldRuntime $
-       do mperma <- (parsePermalink . T.decodeUtf8 . rqURI) <$> lift getRequest
+       do mperma <- (parsePermalink . rqURI) <$> lift getRequest
           case mperma of
             Nothing -> codeGen (yieldPureText "")
             Just (year, month, slug) ->
@@ -304,14 +296,15 @@ wpPostByPermalinkSplice conf wpLens =
                                    codeGen outputChildren
                    _ -> codeGen (yieldPureText "")
 
+parsePermalink :: Text -> Maybe (Text, Text, Text)
 parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
-  where parser = do A.option ' ' (A.char '/')
+  where parser = do _ <- A.option ' ' (A.char '/')
                     guls <- A.many1 (A.letter <|> A.char '-')
-                    A.char '/'
+                    _ <- A.char '/'
                     htnom <- A.count 2 A.digit
-                    A.char '/'
+                    _ <- A.char '/'
                     raey <- A.count 4 A.digit
-                    A.char '/'
+                    _ <- A.char '/'
                     return (T.reverse $ T.pack raey
                            ,T.reverse $ T.pack htnom
                            ,T.reverse $ T.pack guls)
@@ -411,22 +404,3 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
         f (False, rest) '_' = (True, rest)
         f (False, rest) '-' = (True, rest)
         f (False, rest) next = (False, T.snoc rest next)
-
-wreqRequester :: Maybe (Text -> IO ())
-              -> Text
-              -> Text
-              -> Requester
-wreqRequester logger user passw =
-  Requester $ \u ps -> do let opts = (W.defaults & W.params .~ ps
-                                      & W.auth .~ W.basicAuth user' pass')
-                          wplog logger $ "wreq: " <> u <> " with params: " <>
-                            (T.intercalate "&" . map (\(a,b) -> a <> "=" <> b) $ ps)
-                          r <- W.getWith opts (T.unpack u)
-                          return $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
-  where user' = T.encodeUtf8 user
-        pass' = T.encodeUtf8 passw
-
-wplog :: Maybe (Text -> IO ()) -> Text -> IO ()
-wplog logger msg = case logger of
-                    Nothing -> return ()
-                    Just f -> f msg
