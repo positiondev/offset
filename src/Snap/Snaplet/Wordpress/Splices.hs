@@ -47,7 +47,7 @@ wpPostsSplice :: Wordpress b
               -> Splice (Handler b b)
 wpPostsSplice wp wpconf wpLens =
   do promise <- newEmptyPromise
-     outputChildren <- manyWithSplices runChildren (postSplices (extraFields wpconf))
+     outputChildren <- manyWithSplices runChildren (postSplices (wpConfExtraFields wpconf))
                                                    (getPromise promise)
      postsQuery <- parseQueryNode <$> getParamNode
      tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
@@ -72,7 +72,7 @@ wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
                         -> Splice (Handler b b)
 wpPostByPermalinkSplice conf wpLens =
   do promise <- newEmptyPromise
-     outputChildren <- withSplices runChildren (postSplices (extraFields conf)) (getPromise promise)
+     outputChildren <- withSplices runChildren (postSplices (wpConfExtraFields conf)) (getPromise promise)
      return $ yieldRuntime $
        do mperma <- (parsePermalink . rqURI) <$> lift getRequest
           case mperma of

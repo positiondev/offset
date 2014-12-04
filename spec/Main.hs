@@ -80,10 +80,10 @@ renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
         templates = return $ M.fromList (map mkTmpl tmpls)
-        config = (def { endpoint = ""
-                      , requester = Just $ Requester (\_ _ -> return response)
-                      , cacheBehavior = NoCache
-                      , extraFields = jacobinFields})
+        config = (def { wpConfEndpoint = ""
+                      , wpConfRequester = Just $ Requester (\_ _ -> return response)
+                      , wpConfCacheBehavior = NoCache
+                      , wpConfExtraFields = jacobinFields})
 
 queryingApp :: [(Text, Text)] -> MVar [Text] -> SnapletInit App App
 queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." Nothing $ do
@@ -95,9 +95,9 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
         templates = return $ M.fromList (map mkTmpl tmpls)
-        config = (def { endpoint = ""
-                      , requester = Just $ Requester recordingRequester
-                      , cacheBehavior = NoCache})
+        config = (def { wpConfEndpoint = ""
+                      , wpConfRequester = Just $ Requester recordingRequester
+                      , wpConfCacheBehavior = NoCache})
         recordingRequester "/taxonomies/post_tag/terms" [] =
           return $ enc $ [object [ "ID" .= (177 :: Int)
                                      , "slug" .= ("home-featured" :: Text)]
@@ -117,9 +117,9 @@ cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
   r <- nestSnaplet "" redis redisDBInitConf
   w <- nestSnaplet "" wordpress $ initWordpress' config h r wordpress
   return $ App h r w
-  where config = (def { endpoint = ""
-                      , requester = Just $ Requester (\_ _ -> return "")
-                      , cacheBehavior = CacheSeconds 10})
+  where config = (def { wpConfEndpoint = ""
+                      , wpConfRequester = Just $ Requester (\_ _ -> return "")
+                      , wpConfCacheBehavior = CacheSeconds 10})
 
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
