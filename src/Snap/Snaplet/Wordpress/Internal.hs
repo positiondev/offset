@@ -68,7 +68,7 @@ wpRequestInt runHTTP endpt key =
                   ,("filter[monthnum]", month)
                   ,("filter[name]", slug)]
    PostsKey{} -> req "/posts" (buildParams key)
-   PostKey i -> req ("/posts" <> tshow i) []
+   PostKey i -> req ("/posts/" <> tshow i) []
   where req path params = (unRequester runHTTP) (endpt <> path) params
 
 startReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO Bool

@@ -1,8 +1,13 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE RecordWildCards   #-}
+
 module Snap.Snaplet.Wordpress.Field where
 
-import           Data.Monoid    ((<>))
-import           Data.Text      (Text)
-import qualified Data.Text      as T
+import           Control.Applicative ((<$>))
+import           Data.Monoid         ((<>))
+import           Data.Text           (Text)
+import qualified Data.Text           as T
 import           Heist
 import           Heist.Compiled
 
@@ -37,3 +42,38 @@ instance (Functor m, Monad m) =>  Show (Field m) where
   show (P t _) = "P(" <> T.unpack t <> ",{code})"
   show (N t n) = "N(" <> T.unpack t <> "," <> show n <> ")"
   show (M t m) = "M(" <> T.unpack t <> "," <> show m <> ")"
+
+postFields :: (Functor m, Monad m) => [Field m]
+postFields = [F "ID"
+             ,F "title"
+             ,F "status"
+             ,F "type"
+             ,N "author" [F "ID",F "name",F "first_name",F "last_name",F "description"]
+             ,F "content"
+             ,P "date" dateSplice
+             ,F "slug"
+             ,F "excerpt"
+             ,N "custom_fields" [F "test"]
+             ,N "featured_image" [F "content"
+                                 ,F "source"
+                                 ,N "attachment_meta" [F "width"
+                                                      ,F "height"
+                                                      ,N "sizes" [N "thumbnail" [F "width"
+                                                                                ,F "height"
+                                                                                ,F "url"]
+                                                                 ]]]
+             ,N "terms" [M "category" [F "ID", F "name", F "slug", F "count"]
+                        ,M "post_tag" [F "ID", F "name", F "slug", F "count"]]
+             ]
+
+dateSplice :: (Functor m, Monad m) => RuntimeSplice m Text -> Splice m
+dateSplice d = withSplices runChildren splices (parseDate <$> d)
+  where splices = do "wpYear" ## pureSplice $ textSplice fst3
+                     "wpMonth" ## pureSplice $ textSplice snd3
+                     "wpDay" ## pureSplice $ textSplice trd3
+        parseDate :: Text -> (Text,Text,Text)
+        parseDate = tuplify . T.splitOn "-" . T.takeWhile (/= 'T')
+        tuplify (y:m:d:_) = (y,m,d)
+        fst3 (a,_,_) = a
+        snd3 (_,a,_) = a
+        trd3 (_,_,a) = a
