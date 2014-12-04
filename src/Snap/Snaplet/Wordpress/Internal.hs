@@ -47,6 +47,7 @@ data Wordpress b =
                , cachingGetRetry    :: WPKey -> IO Text
                , cachingGetError    :: WPKey -> IO Text
                , cacheInternals     :: WordpressInt b
+               , wpLogger           :: Text -> IO ()
                }
 
 type WPLens b = Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
@@ -108,6 +109,11 @@ cachingGetInt WordpressInt{..} wpKey =
                     wpCacheSet wpKey o
                     stopReqMutex wpKey
                     return $ Just o
+
+wpLogInt :: Maybe (Text -> IO ()) -> Text -> IO ()
+wpLogInt logger msg = case logger of
+                    Nothing -> return ()
+                    Just f -> f msg
 
 buildParams :: WPKey -> [(Text, Text)]
 buildParams (PostsKey filters) = params
