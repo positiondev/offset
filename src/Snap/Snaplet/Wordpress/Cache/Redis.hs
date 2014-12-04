@@ -1,4 +1,4 @@
-module Snap.Snaplet.Wordpress.Cache.Internal where
+module Snap.Snaplet.Wordpress.Cache.Redis where
 
 import           Control.Applicative  ((<$>))
 import           Control.Monad        (join)

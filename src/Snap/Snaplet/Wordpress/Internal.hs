@@ -16,7 +16,7 @@ import           Data.Default
 import           Data.IntSet                        (IntSet)
 import           Data.Map                           (Map)
 import qualified Data.Map                           as Map
-import           Data.Monoid
+import           Data.Monoid                        ((<>))
 import qualified Data.Set                           as Set
 import           Data.Text                          (Text)
 import           Data.Time.Clock
@@ -90,7 +90,7 @@ cachingGetRetryInt wp = retryUnless . (cachingGetInt wp)
 
 cachingGetErrorInt :: (WordpressInt b) -> WPKey -> IO Text
 cachingGetErrorInt wp wpKey = errorUnless msg (cachingGetInt wp wpKey)
-  where msg = ("Could not retrieve " <> formatKey wpKey)
+  where msg = ("Could not retrieve " <> tshow wpKey)
 
 cachingGetInt :: WordpressInt b
            -> WPKey

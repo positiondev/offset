@@ -4,40 +4,40 @@
 
 module Main where
 
-import           Prelude                               hiding ((++))
+import           Prelude                            hiding ((++))
 
 import           Blaze.ByteString.Builder
 import           Control.Concurrent.MVar
-import           Control.Lens                          hiding ((.=))
-import           Control.Monad                         (join)
-import           Control.Monad.Trans                   (liftIO)
+import           Control.Lens                       hiding ((.=))
+import           Control.Monad                      (join)
+import           Control.Monad.Trans                (liftIO)
 import           Control.Monad.Trans.Either
-import           Data.Aeson                            hiding (Success)
+import           Data.Aeson                         hiding (Success)
 import           Data.Default
-import qualified Data.HashMap.Strict                   as M
-import           Data.List                             (intersect)
+import qualified Data.HashMap.Strict                as M
+import           Data.List                          (intersect)
 import           Data.Maybe
 import           Data.Monoid
-import qualified Data.Set                              as Set
-import           Data.Text                             (Text)
-import qualified Data.Text                             as T
-import qualified Data.Text.Encoding                    as T
-import qualified Data.Text.Lazy                        as TL
-import qualified Data.Text.Lazy.Encoding               as TL
-import qualified Database.Redis                        as R
+import qualified Data.Set                           as Set
+import           Data.Text                          (Text)
+import qualified Data.Text                          as T
+import qualified Data.Text.Encoding                 as T
+import qualified Data.Text.Lazy                     as TL
+import qualified Data.Text.Lazy.Encoding            as TL
+import qualified Database.Redis                     as R
 import           Heist
 import           Heist.Compiled
 import qualified Misc
-import           Snap                                  hiding (get)
+import           Snap                               hiding (get)
 import           Snap.Snaplet.Heist.Compiled
 import           Snap.Snaplet.RedisDB
 import           Test.Hspec
-import           Test.Hspec.Core.Spec                  (Result (..))
+import           Test.Hspec.Core.Spec               (Result (..))
 import           Test.Hspec.Snap
-import qualified Text.XmlHtml                          as X
+import qualified Text.XmlHtml                       as X
 
 import           Snap.Snaplet.Wordpress
-import           Snap.Snaplet.Wordpress.Cache.Internal
+import           Snap.Snaplet.Wordpress.Cache.Redis
 import           Snap.Snaplet.Wordpress.Internal
 
 (++) :: Monoid a => a -> a -> a

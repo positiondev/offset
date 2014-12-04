@@ -4,13 +4,17 @@
 
 module Snap.Snaplet.Wordpress.Cache where
 
+import           Data.Monoid                           ((<>))
+import qualified Data.Set                              as Set
 import           Data.Text                             (Text)
+import qualified Data.Text                             as T
 import           Database.Redis                        (Redis)
 import           Snap
 
-import           Snap.Snaplet.Wordpress.Cache.Internal
+import           Snap.Snaplet.Wordpress.Cache.Redis
 import           Snap.Snaplet.Wordpress.Cache.Types
 import           Snap.Snaplet.Wordpress.Types
+import           Snap.Snaplet.Wordpress.Utils
 
 wpCacheGetInt :: RunRedis -> CacheBehavior -> WPKey -> IO (Maybe Text)
 wpCacheGetInt runRedis b = runRedis . (cacheGet b) . formatKey
@@ -40,3 +44,11 @@ expireAggregates = rdelstar "wordpress:posts:*"
 
 expire :: WPKey -> Redis Bool
 expire key = rdel [formatKey key] >> expireAggregates
+
+formatKey :: WPKey -> Text
+formatKey = format
+  where format (PostByPermalinkKey y m s) = "wordpress:post_perma:" <> y <> "_" <> m <> "_" <> s
+        format (PostsKey filters) =
+          "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
+        format (PostKey n) = "wordpress:post:" <> tshow n
+        format (TaxDictKey t) = "wordpress:tax_dict:" <> t

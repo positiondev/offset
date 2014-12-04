@@ -3,13 +3,11 @@
 
 module Snap.Snaplet.Wordpress.Types where
 
-import           Control.Applicative
-import           Data.Aeson
+import           Data.Aeson                   (FromJSON, Value (..), parseJSON,
+                                               (.:))
 import           Data.List                    (intercalate)
 import           Data.Maybe                   (catMaybes, isJust)
-import           Data.Monoid
 import           Data.Set                     (Set)
-import qualified Data.Set                     as Set
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Snap
@@ -35,7 +33,6 @@ instance FromJSON (TaxRes a) where
 
 data TaxDict a = TaxDict {dict :: [TaxRes a], desc :: Text}
 
-
 type Year = Text
 type Month = Text
 type Slug = Text
@@ -56,14 +53,6 @@ data WPKey = PostKey Int
            | PostsKey (Set Filter)
            | TaxDictKey Text
            deriving (Eq, Show, Ord)
-
-formatKey :: WPKey -> Text
-formatKey = format
-  where format (PostByPermalinkKey y m s) = "wordpress:post_perma:" <> y <> "_" <> m <> "_" <> s
-        format (PostsKey filters) =
-          "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
-        format (PostKey n) = "wordpress:post:" <> tshow n
-        format (TaxDictKey t) = "wordpress:tax_dict:" <> t
 
 tagChars :: String
 tagChars = ['a'..'z'] ++ "-"

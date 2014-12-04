@@ -25,7 +25,7 @@ library
                , Snap.Snaplet.Wordpress.HTTP
                , Snap.Snaplet.Wordpress.Cache
                , Snap.Snaplet.Wordpress.Cache.Types
-               , Snap.Snaplet.Wordpress.Cache.Internal
+               , Snap.Snaplet.Wordpress.Cache.Redis
                , Snap.Snaplet.Wordpress.Posts
                , Snap.Snaplet.Wordpress.Utils
   -- other-extensions:
