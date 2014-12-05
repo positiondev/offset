@@ -4,11 +4,15 @@
 
 module Snap.Snaplet.Wordpress.Cache where
 
-import           Data.Monoid                           ((<>))
-import qualified Data.Set                              as Set
-import           Data.Text                             (Text)
-import qualified Data.Text                             as T
-import           Database.Redis                        (Redis)
+import           Control.Concurrent.MVar
+import           Data.Monoid                        ((<>))
+import qualified Data.Set                           as Set
+import           Data.Text                          (Text)
+import qualified Data.Text                          as T
+import           Data.Map                           (Map)
+import qualified Data.Map                           as Map
+import           Data.Time.Clock                    (getCurrentTime, diffUTCTime, UTCTime)
+import           Database.Redis                     (Redis)
 import           Snap
 
 import           Snap.Snaplet.Wordpress.Cache.Redis
@@ -16,21 +20,53 @@ import           Snap.Snaplet.Wordpress.Cache.Types
 import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
 
+startReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO Bool
+startReqMutexInt activeMV wpKey =
+  do now <- getCurrentTime
+     modifyMVar activeMV $ \a ->
+      let active = filterCurrent now a
+      in if Map.member wpKey active
+          then return (active, True)
+          else return (Map.insert wpKey now active, False)
+  where filterCurrent now = Map.filter (\v -> diffUTCTime now v < 1)
+
+stopReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO ()
+stopReqMutexInt activeMV wpKey =
+  modifyMVar_ activeMV $ return . Map.delete wpKey
+
+cachingGetRetryInt :: (WordpressInt b) -> WPKey -> IO Text
+cachingGetRetryInt wp = retryUnless . (cachingGetInt wp)
+
+cachingGetErrorInt :: (WordpressInt b) -> WPKey -> IO Text
+cachingGetErrorInt wp wpKey = errorUnless msg (cachingGetInt wp wpKey)
+  where msg = ("Could not retrieve " <> tshow wpKey)
+
+cachingGetInt :: WordpressInt b
+           -> WPKey
+           -> IO (Maybe Text)
+cachingGetInt WordpressInt{..} wpKey =
+  do cached <- wpCacheGet wpKey
+     case cached of
+       Just _ -> return cached
+       Nothing ->
+         do running <- startReqMutex wpKey
+            if running
+               then return Nothing
+               else
+                 do o <- wpRequest wpKey
+                    wpCacheSet wpKey o
+                    stopReqMutex wpKey
+                    return $ Just o
+
 wpCacheGetInt :: RunRedis -> CacheBehavior -> WPKey -> IO (Maybe Text)
 wpCacheGetInt runRedis b = runRedis . (cacheGet b) . formatKey
-
-wpCacheSetInt :: RunRedis -> CacheBehavior -> WPKey -> Text -> IO ()
-wpCacheSetInt runRedis b key = void . runRedis . (cacheSet b (formatKey key))
-
-wpExpireAggregatesInt :: RunRedis -> IO Bool
-wpExpireAggregatesInt runRedis = runRedis expireAggregates
-
-wpExpirePostInt :: RunRedis -> WPKey -> IO Bool
-wpExpirePostInt runRedis = runRedis . expire
 
 cacheGet :: CacheBehavior -> Text -> Redis (Maybe Text)
 cacheGet NoCache _ = return Nothing
 cacheGet _ key = rget key
+
+wpCacheSetInt :: RunRedis -> CacheBehavior -> WPKey -> Text -> IO ()
+wpCacheSetInt runRedis b key = void . runRedis . (cacheSet b (formatKey key))
 
 cacheSet :: CacheBehavior -> Text -> Text -> Redis Bool
 cacheSet b k v =
@@ -39,16 +75,24 @@ cacheSet b k v =
    CacheForever -> rset k v
    NoCache -> return True
 
+wpExpireAggregatesInt :: RunRedis -> IO Bool
+wpExpireAggregatesInt runRedis = runRedis expireAggregates
+
 expireAggregates :: Redis Bool
 expireAggregates = rdelstar "wordpress:posts:*"
+
+wpExpirePostInt :: RunRedis -> WPKey -> IO Bool
+wpExpirePostInt runRedis = runRedis . expire
 
 expire :: WPKey -> Redis Bool
 expire key = rdel [formatKey key] >> expireAggregates
 
 formatKey :: WPKey -> Text
 formatKey = format
-  where format (PostByPermalinkKey y m s) = "wordpress:post_perma:" <> y <> "_" <> m <> "_" <> s
+  where format (PostByPermalinkKey y m s) = ns "post_perma:" <> y <> "_" <> m <> "_" <> s
         format (PostsKey filters) =
-          "wordpress:posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
-        format (PostKey n) = "wordpress:post:" <> tshow n
-        format (TaxDictKey t) = "wordpress:tax_dict:" <> t
+          ns "posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
+        format (PostKey n) = ns "post:" <> tshow n
+        format (AuthorKey n) = ns "author:" <> tshow n
+        format (TaxDictKey t) = ns "tax_dict:" <> t
+        ns k = "wordpress:" <> k

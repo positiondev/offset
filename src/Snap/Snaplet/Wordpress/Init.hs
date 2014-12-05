@@ -17,9 +17,14 @@ import           Snap.Snaplet.RedisDB            (RedisDB)
 import qualified Snap.Snaplet.RedisDB            as RDB
 
 import           Snap.Snaplet.Wordpress.Cache
+import           Snap.Snaplet.Wordpress.Cache.Types
 import           Snap.Snaplet.Wordpress.HTTP
 import           Snap.Snaplet.Wordpress.Internal
 import           Snap.Snaplet.Wordpress.Splices
+import           Snap.Snaplet.Wordpress.Types
+
+instance Default (WordpressConfig m) where
+  def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) [] Nothing
 
 initWordpress :: Snaplet (Heist b)
               -> Snaplet RedisDB
