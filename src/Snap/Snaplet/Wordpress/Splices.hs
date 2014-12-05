@@ -32,22 +32,22 @@ import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
 
 wordpressSplices :: Wordpress b
-                 -> WordpressConfig (Handler b b)
+                 -> [Field (Handler b b)]
                  -> WPLens b
                  -> Splices (Splice (Handler b b))
-wordpressSplices wp conf wpLens =
-  do "wpPosts" ## wpPostsSplice wp conf wpLens
-     "wpPostByPermalink" ## wpPostByPermalinkSplice conf wpLens
+wordpressSplices wp extraFields wpLens =
+  do "wpPosts" ## wpPostsSplice wp extraFields wpLens
+     "wpPostByPermalink" ## wpPostByPermalinkSplice extraFields wpLens
      "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
      "wp" ## wpPrefetch wp
 
 wpPostsSplice :: Wordpress b
-              -> WordpressConfig (Handler b b)
+              -> [Field (Handler b b)]
               -> WPLens b
               -> Splice (Handler b b)
-wpPostsSplice wp wpconf wpLens =
+wpPostsSplice wp extraFields wpLens =
   do promise <- newEmptyPromise
-     outputChildren <- manyWithSplices runChildren (postSplices (wpConfExtraFields wpconf))
+     outputChildren <- manyWithSplices runChildren (postSplices extraFields)
                                                    (getPromise promise)
      postsQuery <- parseQueryNode <$> getParamNode
      tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
@@ -67,12 +67,12 @@ wpPostsSplice wp wpconf wpLens =
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
 
-wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
+wpPostByPermalinkSplice :: [Field (Handler b b)]
                         -> WPLens b
                         -> Splice (Handler b b)
-wpPostByPermalinkSplice conf wpLens =
+wpPostByPermalinkSplice extraFields wpLens =
   do promise <- newEmptyPromise
-     outputChildren <- withSplices runChildren (postSplices (wpConfExtraFields conf)) (getPromise promise)
+     outputChildren <- withSplices runChildren (postSplices extraFields) (getPromise promise)
      return $ yieldRuntime $
        do mperma <- (parsePermalink . rqURI) <$> lift getRequest
           case mperma of

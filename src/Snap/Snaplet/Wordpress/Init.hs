@@ -57,5 +57,6 @@ initWordpress' wpconf heist redis wpLens =
                          , cacheInternals = wpInt
                          , wpLogger = logf
                          }
-       addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
+       let extraFields = wpConfExtraFields wpconf
+       addConfig heist $ set scCompiledSplices (wordpressSplices wp extraFields wpLens) mempty
        return wp

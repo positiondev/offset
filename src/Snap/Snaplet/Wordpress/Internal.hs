@@ -29,6 +29,9 @@ import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
 
 
+instance Default (WordpressConfig m) where
+  def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) [] Nothing
+
 data WordpressConfig m =
      WordpressConfig { wpConfEndpoint      :: Text
                      , wpConfRequester     :: Maybe Requester
@@ -36,9 +39,6 @@ data WordpressConfig m =
                      , wpConfExtraFields   :: [Field m]
                      , wpConfLogger        :: Maybe (Text -> IO ())
                      }
-instance Default (WordpressConfig m) where
-  def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) [] Nothing
-
 data Wordpress b =
      Wordpress { requestPostSet     :: Maybe IntSet
                , wpExpireAggregates :: IO Bool
