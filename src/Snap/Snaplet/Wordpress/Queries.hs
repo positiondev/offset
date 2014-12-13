@@ -7,7 +7,6 @@ import           Data.Monoid
 import           Data.Text                          (Text)
 import           Snap                               hiding (path, rqURI)
 
-import           Snap.Snaplet.Wordpress.Internal
 import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
 

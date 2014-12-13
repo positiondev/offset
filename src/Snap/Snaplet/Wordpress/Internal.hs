@@ -11,13 +11,10 @@
 
 module Snap.Snaplet.Wordpress.Internal where
 
-import           Data.Default
 import           Data.Monoid                        ((<>))
 import qualified Data.Set                           as Set
 import           Data.Text                          (Text)
 
-import           Snap.Snaplet.Wordpress.Cache.Types
-import           Snap.Snaplet.Wordpress.Field
 import           Snap.Snaplet.Wordpress.HTTP
 import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils

@@ -25,7 +25,6 @@ import           Snap                               hiding (path, rqURI)
 import qualified Text.XmlHtml                       as X
 
 import           Snap.Snaplet.Wordpress.Field
-import           Snap.Snaplet.Wordpress.Internal
 import           Snap.Snaplet.Wordpress.Posts
 import           Snap.Snaplet.Wordpress.Queries
 import           Snap.Snaplet.Wordpress.Types
