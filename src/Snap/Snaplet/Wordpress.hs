@@ -15,6 +15,7 @@ module Snap.Snaplet.Wordpress (
  , CacheBehavior(..)
  , initWordpress
  , initWordpress'
+ , wpGetPost
  , getPost
  , WPKey(..)
  , Filter(..)
@@ -30,6 +31,6 @@ module Snap.Snaplet.Wordpress (
 import           Snap.Snaplet.Wordpress.Cache.Types
 import           Snap.Snaplet.Wordpress.Field
 import           Snap.Snaplet.Wordpress.HTTP
-import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Init
 import           Snap.Snaplet.Wordpress.Splices
+import           Snap.Snaplet.Wordpress.Types
