@@ -95,12 +95,20 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
                       , wpConfCacheBehavior = NoCache})
         recordingRequester "/taxonomies/post_tag/terms" [] =
           return $ enc $ [object [ "ID" .= (177 :: Int)
-                                     , "slug" .= ("home-featured" :: Text)]
-                             ,object [ "ID" .= (160 :: Int)
-                                     , "slug" .= ("featured-global" :: Text)]]
+                                 , "slug" .= ("home-featured" :: Text)
+                                 , "meta" .= object ["links" .= object ["self" .= ("/177" :: Text)]]
+                                 ]
+                         ,object [ "ID" .= (160 :: Int)
+                                 , "slug" .= ("featured-global" :: Text)
+                                 , "meta" .= object ["links" .= object ["self" .= ("/160" :: Text)]]
+                                 ]
+                         ]
         recordingRequester "/taxonomies/category/terms" [] =
           return $ enc $ [object [ "ID" .= (159 :: Int)
-                                     , "slug" .= ("bookmarx" :: Text)]]
+                                 , "slug" .= ("bookmarx" :: Text)
+                                 , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
+                                 ]
+                         ]
         recordingRequester url params = do
           modifyMVar_ record $ (return . (++ [mkUrlUnescape url params]))
           return ""

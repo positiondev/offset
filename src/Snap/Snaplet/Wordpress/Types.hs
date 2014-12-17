@@ -11,21 +11,21 @@
 
 module Snap.Snaplet.Wordpress.Types where
 
-import           Control.Lens                 hiding (children)
-import           Data.Aeson                   (FromJSON, Value (..), parseJSON,
-                                               (.:))
-import           Data.IntSet                  (IntSet)
-import           Data.List                    (intercalate)
-import           Data.Maybe                   (catMaybes, isJust)
-import           Data.Set                     (Set)
-import           Data.Text                    (Text)
-import qualified Data.Text                    as T
+import           Control.Lens                       hiding (children)
+import           Data.Aeson                         (FromJSON, Value (..),
+                                                     parseJSON, (.:))
+import           Data.IntSet                        (IntSet)
+import           Data.List                          (intercalate)
+import           Data.Maybe                         (catMaybes, isJust)
+import           Data.Set                           (Set)
+import           Data.Text                          (Text)
+import qualified Data.Text                          as T
 import           Snap
 
 import           Snap.Snaplet.Wordpress.Cache.Types
 import           Snap.Snaplet.Wordpress.Field
-import           Snap.Snaplet.Wordpress.Utils
 import           Snap.Snaplet.Wordpress.HTTP
+import           Snap.Snaplet.Wordpress.Utils
 
 data Wordpress b =
      Wordpress { requestPostSet     :: Maybe IntSet
@@ -70,7 +70,22 @@ instance Show (TaxSpec a) where
 newtype TaxRes a = TaxRes (Int, Text)
 
 instance FromJSON (TaxRes a) where
-  parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
+  parseJSON (Object o) = do meta <- o .: "meta"
+                            links <- meta .: "links"
+                            url <- links .: "self"
+                            slug <- o .: "slug"
+                            let id = last $ T.splitOn "/" url
+                            case readSafe id of
+                              Nothing -> fail "FromJSON TaxRes: Could not get ID from self link"
+                              Just i -> return $ TaxRes (i, slug)
+                            -- NOTE(dbp 2014-12-16):
+                            -- See https://github.com/WP-API/WP-API/issues/726
+                            -- The ID is currently wrong. So use the self-link
+                            -- instead (which should always be correct. Correcting
+                            -- the ID by 1, on the other hand, would break when upstream
+                            -- is fixed).
+                            -- But in theory, the following would be all that's needed.
+                            -- TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
   parseJSON _ = mzero
 
 data TaxDict a = TaxDict {dict :: [TaxRes a], desc :: Text}
