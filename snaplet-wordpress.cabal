@@ -5,7 +5,7 @@ synopsis:            A snaplet that communicates with wordpress over it's api.
 homepage:            https://github.com/dbp/snaplet-wordpress
 license:             BSD3
 license-file:        LICENSE
-author:              Daniel Patterson
+author:              Daniel Patterson <dbp@dbpmail.net>, Matt Raibert <mattraibert@gmail.com>
 maintainer:          dbp@dbpmail.net
 -- copyright:
 category:            Web
