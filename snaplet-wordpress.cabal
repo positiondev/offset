@@ -1,5 +1,5 @@
 name:                snaplet-wordpress
-version:             0.1.1.0
+version:             0.1.1.1
 synopsis:            A snaplet that communicates with wordpress over its api.
 -- description:
 homepage:            https://github.com/dbp/snaplet-wordpress
@@ -10,7 +10,7 @@ maintainer:          dbp@dbpmail.net
 -- copyright:
 category:            Web
 build-type:          Simple
--- extra-source-files:
+extra-source-files:  CHANGELOG.md
 cabal-version:       >=1.10
 
 library
@@ -30,11 +30,11 @@ library
                , Snap.Snaplet.Wordpress.Utils
   -- other-extensions:
   build-depends:       aeson
-                     , base
+                     , base < 4.9
                      , blaze-builder
                      , data-default
                      , hedis
-                     , heist
+                     , heist >= 0.14
                      , map-syntax
                      , lens
                      , snap
@@ -45,12 +45,9 @@ library
                      , wreq >= 0.3
                      , configurator
                      , time
-                     , xmlhtml
-                     -- NOTE(dbp 2014-09-10): network is a transitive dependency,
-                     -- because cabal couldn't figure it out.
-                     , network
+                     , xmlhtml >= 0.2.3.2
                      , async
-                     , hspec
+                     , hspec >= 2
                      , hspec-snap
                      , mtl
                      , either

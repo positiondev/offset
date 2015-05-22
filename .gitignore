@@ -4,3 +4,4 @@ TAGS
 dist
 test.cfg
 .shake/
+deps
