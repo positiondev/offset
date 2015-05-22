@@ -12,6 +12,7 @@
 module Snap.Snaplet.Wordpress.Types where
 
 import           Control.Lens                       hiding (children)
+import           Control.Monad                      (mzero)
 import           Data.Aeson                         (FromJSON, Value (..),
                                                      parseJSON, (.:))
 import           Data.IntSet                        (IntSet)

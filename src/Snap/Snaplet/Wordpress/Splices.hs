@@ -4,25 +4,28 @@
 
 module Snap.Snaplet.Wordpress.Splices where
 
-import           Control.Lens                       hiding (children)
-import           Data.Aeson                         hiding (decode, encode)
-import qualified Data.Attoparsec.Text               as A
-import           Data.Char                          (toUpper)
-import qualified Data.HashMap.Strict                as M
-import           Data.IntSet                        (IntSet)
-import qualified Data.IntSet                        as IntSet
+import           Control.Applicative            ((<|>))
+import           Control.Lens                   hiding (children)
+import           Control.Monad                  (void)
+import           Control.Monad.Trans            (lift, liftIO)
+import           Data.Aeson                     hiding (decode, encode)
+import qualified Data.Attoparsec.Text           as A
+import           Data.Char                      (toUpper)
+import qualified Data.HashMap.Strict            as M
+import           Data.IntSet                    (IntSet)
+import qualified Data.IntSet                    as IntSet
 import           Data.Map.Syntax
-import           Data.Maybe                         (fromJust, fromMaybe)
+import           Data.Maybe                     (fromJust, fromMaybe)
 import           Data.Monoid
-import qualified Data.Set                           as Set
-import           Data.Text                          (Text)
-import qualified Data.Text                          as T
-import qualified Data.Vector                        as V
+import qualified Data.Set                       as Set
+import           Data.Text                      (Text)
+import qualified Data.Text                      as T
+import qualified Data.Vector                    as V
 import           Heist
 import           Heist.Compiled
 import           Heist.Compiled.LowLevel
-import           Snap                               hiding (path, rqURI)
-import qualified Text.XmlHtml                       as X
+import           Snap                           hiding (path, rqURI)
+import qualified Text.XmlHtml                   as X
 
 import           Snap.Snaplet.Wordpress.Field
 import           Snap.Snaplet.Wordpress.Posts

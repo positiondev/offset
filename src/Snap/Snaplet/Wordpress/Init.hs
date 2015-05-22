@@ -4,17 +4,18 @@
 module Snap.Snaplet.Wordpress.Init where
 
 import           Control.Concurrent.MVar
-import           Control.Lens                    hiding (children)
-import qualified Data.Configurator               as C
+import           Control.Lens                       hiding (children)
+import           Control.Monad.Trans                (liftIO)
+import qualified Data.Configurator                  as C
 import           Data.Default
-import qualified Data.Map                        as Map
+import qualified Data.Map                           as Map
 import           Data.Monoid
-import qualified Database.Redis                  as R
+import qualified Database.Redis                     as R
 import           Heist
-import           Snap                            hiding (path, rqURI)
-import           Snap.Snaplet.Heist              (Heist, addConfig)
-import           Snap.Snaplet.RedisDB            (RedisDB)
-import qualified Snap.Snaplet.RedisDB            as RDB
+import           Snap                               hiding (path, rqURI)
+import           Snap.Snaplet.Heist                 (Heist, addConfig)
+import           Snap.Snaplet.RedisDB               (RedisDB)
+import qualified Snap.Snaplet.RedisDB               as RDB
 
 import           Snap.Snaplet.Wordpress.Cache
 import           Snap.Snaplet.Wordpress.Cache.Types
