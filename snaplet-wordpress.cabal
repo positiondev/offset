@@ -1,5 +1,5 @@
 name:                snaplet-wordpress
-version:             0.1.1.1
+version:             0.1.1.2
 synopsis:            A snaplet that communicates with wordpress over its api.
 -- description:
 homepage:            https://github.com/dbp/snaplet-wordpress
@@ -15,19 +15,19 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
-    Snap.Snaplet.Wordpress
-  other-modules: Snap.Snaplet.Wordpress.Internal
-               , Snap.Snaplet.Wordpress.Types
-               , Snap.Snaplet.Wordpress.Field
-               , Snap.Snaplet.Wordpress.Init
-               , Snap.Snaplet.Wordpress.Splices
-               , Snap.Snaplet.Wordpress.Queries
-               , Snap.Snaplet.Wordpress.HTTP
-               , Snap.Snaplet.Wordpress.Cache
-               , Snap.Snaplet.Wordpress.Cache.Types
-               , Snap.Snaplet.Wordpress.Cache.Redis
-               , Snap.Snaplet.Wordpress.Posts
-               , Snap.Snaplet.Wordpress.Utils
+                  Snap.Snaplet.Wordpress
+                , Snap.Snaplet.Wordpress.Internal
+                , Snap.Snaplet.Wordpress.Types
+                , Snap.Snaplet.Wordpress.Field
+                , Snap.Snaplet.Wordpress.Init
+                , Snap.Snaplet.Wordpress.Splices
+                , Snap.Snaplet.Wordpress.Queries
+                , Snap.Snaplet.Wordpress.HTTP
+                , Snap.Snaplet.Wordpress.Cache
+                , Snap.Snaplet.Wordpress.Cache.Types
+                , Snap.Snaplet.Wordpress.Cache.Redis
+                , Snap.Snaplet.Wordpress.Posts
+                , Snap.Snaplet.Wordpress.Utils
   -- other-extensions:
   build-depends:       aeson
                      , base < 4.9
@@ -62,10 +62,12 @@ Test-Suite test-snaplet-wordpress
     type:       exitcode-stdio-1.0
     hs-source-dirs: spec
     main-is: Main.hs
+    other-modules: Misc
     build-depends:     base
                      , heist
                      , hspec-snap
                      , hspec >= 2
+                     , hspec-core
                      , snap
                      , snaplet-wordpress
                      , blaze-builder
