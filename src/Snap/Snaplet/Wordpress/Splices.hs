@@ -1,6 +1,7 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Snap.Snaplet.Wordpress.Splices where
 
@@ -52,7 +53,7 @@ wpPostsSplice wp extraFields wpLens =
      outputChildren <- manyWithSplices runChildren (postSplices extraFields)
                                                    (getPromise promise)
      postsQuery <- parseQueryNode <$> getParamNode
-     tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
+     tagDict <- lift $ lookupTaxDict (TaxDictKey "tag") wp
      catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
      let wpKey = mkWPKey tagDict catDict postsQuery
      return $ yieldRuntime $
@@ -107,12 +108,20 @@ postSplices extra = mconcat (map buildSplice (mergeFields postFields extra))
                                  withSplices runChildren
                                                 (mconcat $ map buildSplice fs)
                                                 (unObj . fromJust . M.lookup n <$> o)
+        buildSplice (C n path) =
+          transformName n ## bindLater $ \o -> return (textSplice (getText (last path) . traverseObject (init path)) o)
+        buildSplice (CN n path fs) =
+          transformName n ## \o -> withSplices runChildren
+                                               (mconcat $ map buildSplice fs)
+                                               (traverseObject path <$> o)
         buildSplice (M n fs) = transformName n ## \o ->
                                  manyWithSplices runChildren
                                                     (mconcat $ map buildSplice fs)
                                                     (unArray . fromJust . M.lookup n <$> o)
         unObj (Object o) = o
         unArray (Array v) = map unObj $ V.toList v
+        traverseObject [] o = o
+        traverseObject (x:xs) o = traverseObject xs (unObj . fromJust . M.lookup x $ o)
         getText n o = case M.lookup n o of
                         Just (String t) -> t
                         Just (Number i) -> T.pack $ show i
@@ -147,7 +156,7 @@ wpPrefetch :: Wordpress b
 wpPrefetch wp =
   do n <- getParamNode
      childrenRes <- runChildren
-     tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
+     tagDict <- lift $ lookupTaxDict (TaxDictKey "tag") wp
      catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
      let wpKeys = findPrefetchables tagDict catDict n
      return $ yieldRuntime $

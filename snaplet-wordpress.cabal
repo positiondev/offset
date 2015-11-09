@@ -82,3 +82,4 @@ Test-Suite test-snaplet-wordpress
                      , aeson
                      , containers
                      , hedis
+    default-language: Haskell2010

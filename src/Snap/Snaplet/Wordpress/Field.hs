@@ -15,6 +15,8 @@ import           Heist.Compiled
 data Field m = F Text -- A single flat field
              | P Text (RuntimeSplice m Text -> Splice m) -- A customly parsed flat field
              | N Text [Field m] -- A nested object field
+             | C Text [Text] -- A nested text field that is found by following the specified path
+             | CN Text [Text] [Field m] -- A nested set of fields that is found by follwing the specified path
              | M Text [Field m] -- A list field, where each element is an object
 
 mergeFields :: (Functor m, Monad m) => [Field m] -> [Field m] -> [Field m]
@@ -30,6 +32,8 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
         getName (F t) = t
         getName (P t _) = t
         getName (N t _) = t
+        getName (C t _) = t
+        getName (CN t _ _) = t
         getName (M t _) = t
         mergeField (N _ left) (N nm right) = N nm (mergeFields left right)
         mergeField (M _ left) (N nm right) = N nm (mergeFields left right)
@@ -41,11 +45,13 @@ instance (Functor m, Monad m) =>  Show (Field m) where
   show (F t) = "F(" <> T.unpack t <> ")"
   show (P t _) = "P(" <> T.unpack t <> ",{code})"
   show (N t n) = "N(" <> T.unpack t <> "," <> show n <> ")"
+  show (C t p) = "C(" <> T.unpack t <> ":" <> T.unpack (T.intercalate "/" p) <> ")"
+  show (CN t p fs) = "C(" <> T.unpack t <> "," <> T.unpack (T.intercalate "/" p) <> ","<> show fs <> ")"
   show (M t m) = "M(" <> T.unpack t <> "," <> show m <> ")"
 
 postFields :: (Functor m, Monad m) => [Field m]
 postFields = [F "ID"
-             ,F "title"
+             ,C "title" ["title", "rendered"]
              ,F "status"
              ,F "type"
              ,N "author" [F "ID",F "name",F "first_name",F "last_name",F "description"]
@@ -62,6 +68,9 @@ postFields = [F "ID"
                                                                                 ,F "height"
                                                                                 ,F "url"]
                                                                  ]]]
+             -- ,CN "thumbnail"
+             --     ["featured_image", "attachment_meta", "sizes", "thumbnail"]
+             --     [F "width", F "height", F "url"]
              ,N "terms" [M "category" [F "ID", F "name", F "slug", F "count"]
                         ,M "post_tag" [F "ID", F "name", F "slug", F "count"]]
              ]

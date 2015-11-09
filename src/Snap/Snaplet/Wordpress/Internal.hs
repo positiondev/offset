@@ -11,9 +11,9 @@
 
 module Snap.Snaplet.Wordpress.Internal where
 
-import           Data.Monoid                        ((<>))
-import qualified Data.Set                           as Set
-import           Data.Text                          (Text)
+import           Data.Monoid                  ((<>))
+import qualified Data.Set                     as Set
+import           Data.Text                    (Text)
 
 import           Snap.Snaplet.Wordpress.HTTP
 import           Snap.Snaplet.Wordpress.Types
@@ -22,7 +22,7 @@ import           Snap.Snaplet.Wordpress.Utils
 wpRequestInt :: Requester -> Text -> WPKey -> IO Text
 wpRequestInt runHTTP endpt key =
   case key of
-   TaxDictKey resName -> req ("/taxonomies/" <> resName <> "/terms") []
+   TaxDictKey resName -> req ("/terms/" <> resName) []
    PostByPermalinkKey year month slug ->
      req "/posts" [("filter[year]", year)
                   ,("filter[monthnum]", month)

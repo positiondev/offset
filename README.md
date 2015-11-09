@@ -1,3 +1,61 @@
+For testing, you should install the `wp-cli`, which allows us to have
+a development version of a wordpress server running.
+
+You need to have php installed to do this.
+
+```
+curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+```
+
+Move it to somewhere in your PATH and make it executable.
+
+Next, create a database and user with access to it. The names should
+be the following, or else you'll have to change the config file within
+the `wp` directory.
+
+```
+$ mysql -u root -p
+[enter password]
+mysql> CREATE DATABASE offset_test;
+mysql> CREATE USER 'offset'@'localhost' IDENTIFIED by '111';
+mysql> GRANT ALL PRIVILEGES ON *.* TO 'offset'@'localhost' WITH GRANT OPTION;
+```
+
+Now change into the `wp` directory and finish the install and start the server with:
+
+```
+$ wp core config --dbname=offset_test --dbuser=offset --dbpass=111
+$ wp core install --admin_user=offset --admin_password=111 --url=localhost --title="Offset Test" --admin_email="dbp@positiondev.com"
+$ wp server --port=5555
+```
+
+Now log in to the UI at `http://localhost:5555/wp-admin/` with user
+`offset` and password `111` and go and change the Permalink settings
+to anything but default. Some permalink is needed to make any of the
+requests work... To test that it is working, run the following command
+(requires the `jq` utility, which you can install on macs with `brew
+install jq`):
+
+```
+curl http://localhost:5555/wp-json/wp/v2/ | jq
+```
+
+Which should print out a bunch of json.
+
+Now insert the needed test posts:
+
+```
+wp post create --post_title='A first post' --post_status=publish --post_date='2014-10-01 07:00:00' --post_content="This is the content"
+```
+
+Now go into the admin, and go to users, and set the first and last
+name of the admin `offset` to `Ira` and `Rubel`.
+
+
+**NOTE(dbp 2015-11-08):**
+
+**The following may be out of date.**
+
 ## Requirements
 
 For this to work, you need to have running, on your wordpress server,

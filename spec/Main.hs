@@ -56,7 +56,7 @@ instance HasHeist App where
 enc a = TL.toStrict . TL.decodeUtf8 . encode $ a
 
 article2 = object [ "ID" .= (2 :: Int)
-                  , "title" .= ("The post" :: Text)
+                  , "title" .= object ["rendered" .= ("The post" :: Text)]
                   , "excerpt" .= ("summary" :: Text)
                   ]
 
@@ -66,6 +66,23 @@ jacobinFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-feat
                                                                     ,N "single-featured" [F "width"
                                                                                          ,F "height"
                                                                                          ,F "url"]]]]]
+
+localApp :: [(Text, Text)] -> SnapletInit App App
+localApp tmpls =
+  do makeSnaplet "app" "App." Nothing $ do
+       h <- nestSnaplet "" heist $ heistInit ""
+       addConfig h $ set scTemplateLocations (return templates) mempty
+       r <- nestSnaplet "" redis redisDBInitConf
+       w <- nestSnaplet "" wordpress $ initWordpress' config h r wordpress
+       return $ App h r w
+   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
+                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
+         templates = return $ M.fromList (map mkTmpl tmpls)
+         config = (def { wpConfEndpoint = "http://localhost:5555/wp-json/wp/v2"
+                       , wpConfCacheBehavior = NoCache
+                       , wpConfExtraFields = jacobinFields
+                       , wpConfLogger = Just print
+                       })
 
 renderingApp :: [(Text, Text)] -> Text -> SnapletInit App App
 renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
@@ -95,7 +112,7 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
         config = (def { wpConfEndpoint = ""
                       , wpConfRequester = Just $ Requester recordingRequester
                       , wpConfCacheBehavior = NoCache})
-        recordingRequester "/taxonomies/post_tag/terms" [] =
+        recordingRequester "/terms/tag" [] =
           return $ enc $ [object [ "ID" .= (177 :: Int)
                                  , "slug" .= ("home-featured" :: Text)
                                  , "meta" .= object ["links" .= object ["self" .= ("/177" :: Text)]]
@@ -105,7 +122,7 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
                                  , "meta" .= object ["links" .= object ["self" .= ("/160" :: Text)]]
                                  ]
                          ]
-        recordingRequester "/taxonomies/category/terms" [] =
+        recordingRequester "/terms/category" [] =
           return $ enc $ [object [ "ID" .= (159 :: Int)
                                  , "slug" .= ("bookmarx" :: Text)
                                  , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
@@ -147,7 +164,7 @@ clearRedisCache = runRedisDB redis $ rdelstar "wordpress:*"
 
 article1 :: Value
 article1 = object [ "ID" .= ("1" :: Text)
-                  , "title" .= ("Foo bar" :: Text)
+                  , "title" .= object ["rendered" .= ("Foo bar" :: Text)]
                   , "excerpt" .= ("summary" :: Text)
                   ]
 
@@ -283,27 +300,21 @@ main = hspec $ do
       (replicate 2 "/posts?filter[category__in]=159&filter[offset]=0&filter[posts_per_page]=20")
 
 
-shouldQueryTo :: Text -> [Text] -> Spec
-shouldQueryTo hQuery wpQuery = do
-  record <- runIO $ newMVar []
-  snap (route []) (queryingApp [("x", hQuery)] record) $
-    it ("query from " <> T.unpack hQuery) $ do
-      eval $ render "x"
-      x <- liftIO $ tryTakeMVar record
-      x `shouldEqual` Just wpQuery
-
-{-  describe "live tests (which require config file w/ user and pass to sandbox.jacobinmag.com)" $
-    snap (route [("/2014/10/a-war-for-power", render "single")
-                ,("/2014/10/the-assassination-of-detroit/", render "author-date")
-                ])
-         (queryingApp [("single", "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>")
-              ,("author-date", "<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
-              ,("fields", "<wp><wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
-              ,("extra-fields", "<wp><wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
-              ]
-          ) $
+  describe "live tests (which require running wordpress server)" $
+    snap (route
+            [("/2014/10/a-first-post", render "single")
+            ,("/2014/10/a-second-post/", render "author-date")
+        ])
+     (localApp [("single", "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>")
+                ,("author-date", "<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
+                ,("fields", "<wp><wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
+                ,("extra-fields", "<wp><wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
+                ]
+      ) $
       do it "should have title on page" $
-           get "/2014/10/a-war-for-power" >>= shouldHaveText "A War for Power"
+           do r <- get "/2014/10/a-first-post"
+              liftIO $ print r
+              shouldHaveText "A first post" r
          it "should not have most recent post's title" $
            do p1 <- get "/many"
               get "/many1" >>= shouldNotEqual p1
@@ -333,9 +344,9 @@ shouldQueryTo hQuery wpQuery = do
            do p1 <- get "/tag6"
               get "/tag7" >>= shouldNotEqual p1
          it "should be able to get nested attribute author name" $
-           get "/2014/10/the-assassination-of-detroit/" >>= shouldHaveText "Carlos Salazar"
+           get "/2014/10/a-second-post/" >>= shouldHaveText "Ira Rubel"
          it "should be able to get customly parsed attribute date" $
-           get "/2014/10/the-assassination-of-detroit/" >>= shouldHaveText "2014/10"
+           get "/2014/10/a-second-post/" >>= shouldHaveText "2014/10"
          it "should be able to restrict based on category" $
            do c1 <- get "/cat1"
               c2 <- get "/cat2"
@@ -347,7 +358,16 @@ shouldQueryTo hQuery wpQuery = do
          it "should be able to use extra fields set in application" $
            do get "/fields" >>= shouldHaveText "https://"
               get "/extra-fields" >>= shouldHaveText "https://"
--}
+
+
+shouldQueryTo :: Text -> [Text] -> Spec
+shouldQueryTo hQuery wpQuery = do
+  record <- runIO $ newMVar []
+  snap (route []) (queryingApp [("x", hQuery)] record) $
+    it ("query from " <> T.unpack hQuery) $ do
+      eval $ render "x"
+      x <- liftIO $ tryTakeMVar record
+      x `shouldEqual` Just wpQuery
 
 getWordpress :: Handler b v v
 getWordpress = view snapletValue <$> getSnapletState
