@@ -1,0 +1,9 @@
+resolver: lts-3.10
+
+packages:
+- '.'
+- location:
+    git: https://github.com/dbp/snaplet-redis
+    commit: fe25d41fec273e2ec68d13e65faec1d2b3fa1348
+  extra-dep: true
+extra-deps: []

@@ -1,7 +1,3 @@
-.cabal-sandbox
-cabal.sandbox.config
 TAGS
-dist
 test.cfg
-.shake/
-deps
+.stack-work
