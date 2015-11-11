@@ -11,9 +11,9 @@
 
 module Snap.Snaplet.Wordpress.Internal where
 
-import           Data.Monoid                        ((<>))
-import qualified Data.Set                           as Set
-import           Data.Text                          (Text)
+import           Data.Monoid                  ((<>))
+import qualified Data.Set                     as Set
+import           Data.Text                    (Text)
 
 import           Snap.Snaplet.Wordpress.HTTP
 import           Snap.Snaplet.Wordpress.Types

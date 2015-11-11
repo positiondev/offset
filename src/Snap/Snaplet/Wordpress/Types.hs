@@ -68,28 +68,13 @@ instance Show (TaxSpec a) where
   show (TaxPlus t) = "+" ++ (T.unpack t)
   show (TaxMinus t) = "-" ++ (T.unpack t)
 
-newtype TaxRes a = TaxRes (Int, Text)
+newtype TaxRes a = TaxRes (Int, Text) deriving (Show)
 
 instance FromJSON (TaxRes a) where
-  parseJSON (Object o) = do meta <- o .: "meta"
-                            links <- meta .: "links"
-                            url <- links .: "self"
-                            slug <- o .: "slug"
-                            let id = last $ T.splitOn "/" url
-                            case readSafe id of
-                              Nothing -> fail "FromJSON TaxRes: Could not get ID from self link"
-                              Just i -> return $ TaxRes (i, slug)
-                            -- NOTE(dbp 2014-12-16):
-                            -- See https://github.com/WP-API/WP-API/issues/726
-                            -- The ID is currently wrong. So use the self-link
-                            -- instead (which should always be correct. Correcting
-                            -- the ID by 1, on the other hand, would break when upstream
-                            -- is fixed).
-                            -- But in theory, the following would be all that's needed.
-                            -- TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
+  parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
   parseJSON _ = mzero
 
-data TaxDict a = TaxDict {dict :: [TaxRes a], desc :: Text}
+data TaxDict a = TaxDict {dict :: [TaxRes a], desc :: Text} deriving (Show)
 
 type Year = Text
 type Month = Text
@@ -114,7 +99,7 @@ data WPKey = PostKey Int
            deriving (Eq, Show, Ord)
 
 tagChars :: String
-tagChars = ['a'..'z'] ++ "-"
+tagChars = ['a'..'z'] ++ "-" ++ digitChars
 
 digitChars :: String
 digitChars = ['0'..'9']
@@ -137,7 +122,7 @@ instance Show (TaxSpecList a) where
   show (TaxSpecList ts) = intercalate "," (map show ts)
 
 instance Read (TaxSpecList a) where
-  readsPrec _ ts = let vs = map (readSafe) $ T.splitOn "," $ T.pack ts in
+  readsPrec _ ts = let vs = map readSafe $ T.splitOn "," $ T.pack ts in
                      if all isJust vs
                         then [(TaxSpecList $ catMaybes vs, "")]
                         else []
@@ -147,4 +132,4 @@ data WPQuery = WPPostsQuery{ qlimit  :: Int
                            , qoffset :: Int
                            , qpage   :: Int
                            , qtags   :: TaxSpecList TagType
-                           , qcats   :: TaxSpecList CatType}
+                           , qcats   :: TaxSpecList CatType} deriving (Show)

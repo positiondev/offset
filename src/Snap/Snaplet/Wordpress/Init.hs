@@ -25,7 +25,7 @@ import           Snap.Snaplet.Wordpress.Splices
 import           Snap.Snaplet.Wordpress.Types
 
 instance Default (WordpressConfig m) where
-  def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) [] Nothing
+  def = WordpressConfig "http://127.0.0.1:8080/wp-json" Nothing (CacheSeconds 600) [] Nothing
 
 initWordpress :: Snaplet (Heist b)
               -> Snaplet RedisDB
