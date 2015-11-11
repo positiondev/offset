@@ -53,7 +53,7 @@ wpPostsSplice wp extraFields wpLens =
      outputChildren <- manyWithSplices runChildren (postSplices extraFields)
                                                    (getPromise promise)
      postsQuery <- parseQueryNode <$> getParamNode
-     tagDict <- lift $ lookupTaxDict (TaxDictKey "tag") wp
+     tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
      catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
      let wpKey = mkWPKey tagDict catDict postsQuery
      return $ yieldRuntime $
@@ -156,7 +156,7 @@ wpPrefetch :: Wordpress b
 wpPrefetch wp =
   do n <- getParamNode
      childrenRes <- runChildren
-     tagDict <- lift $ lookupTaxDict (TaxDictKey "tag") wp
+     tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
      catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
      let wpKeys = findPrefetchables tagDict catDict n
      return $ yieldRuntime $

@@ -22,7 +22,7 @@ import           Snap.Snaplet.Wordpress.Utils
 wpRequestInt :: Requester -> Text -> WPKey -> IO Text
 wpRequestInt runHTTP endpt key =
   case key of
-   TaxDictKey resName -> req ("/terms/" <> resName) []
+   TaxDictKey resName -> req ("/taxonomies/" <> resName <> "/terms") []
    PostByPermalinkKey year month slug ->
      req "/posts" [("filter[year]", year)
                   ,("filter[monthnum]", month)

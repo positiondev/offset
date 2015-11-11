@@ -1,3 +1,5 @@
+## Note: We use version 1 of the api (1.2.3 specifically), until they actually support everything in version 2.
+
 For testing, you should install the `wp-cli`, which allows us to have
 a development version of a wordpress server running.
 
@@ -32,9 +34,10 @@ $ wp server --port=5555
 Now log in to the UI at `http://localhost:5555/wp-admin/` with user
 `offset` and password `111` and go and change the Permalink settings
 to anything but default. Some permalink is needed to make any of the
-requests work... To test that it is working, run the following command
-(requires the `jq` utility, which you can install on macs with `brew
-install jq`):
+requests work... Next go to the plugins section and activate both JSON
+Basic Authentication and WP REST API. To test that it is working,
+run the following command (requires the `jq` utility, which you can
+install on macs with `brew install jq`):
 
 ```
 curl http://localhost:5555/wp-json/wp/v2/ | jq
@@ -42,14 +45,27 @@ curl http://localhost:5555/wp-json/wp/v2/ | jq
 
 Which should print out a bunch of json.
 
-Now insert the needed test posts:
+
+Now clear the default and insert the needed test posts:
 
 ```
-wp post create --post_title='A first post' --post_status=publish --post_date='2014-10-01 07:00:00' --post_content="This is the content"
+wp post delete 1
+wp post create --post_title='A first post' --post_status=publish --post_date='2014-10-01 07:00:00' --post_content="This is the content" --post_author=1
+wp post create --post_title='A second post' --post_status=publish --post_date='2014-10-02 07:00:00' --post_content="This is the second post content" --post_author=1
+wp post create --post_title='A third post' --post_status=publish --post_date='2014-10-10 07:00:00' --post_content="This is the third post content" --post_author=1
+wp post create --post_title='A fourth post' --post_status=publish --post_date='2014-10-15 07:00:00' --post_content="This is the fourth post content" --post_author=1
+
 ```
 
 Now go into the admin, and go to users, and set the first and last
-name of the admin `offset` to `Ira` and `Rubel`.
+name of the admin `offset` to `Ira` and `Rubel`. Change "display name
+publically" to "Ira Rubel".
+
+Finally, set up the categories and tags. You unfortunately can't do
+that through the `wp` program yet. So create one category with slug,
+`cat1`, and add the first post to it. Then create two tags, `tag1` and
+`tag2`, and tag the first three posts with `tag1`, and the second post
+with `tag2`.
 
 
 **NOTE(dbp 2015-11-08):**

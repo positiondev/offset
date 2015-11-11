@@ -37,9 +37,6 @@ import           Snap.Snaplet.Wordpress
 import           Snap.Snaplet.Wordpress.Cache.Redis
 import           Snap.Snaplet.Wordpress.Types
 
-(++) :: Monoid a => a -> a -> a
-(++) = mappend
-
 ----------------------------------------------------------
 -- Section 1: Example application used for testing.     --
 ----------------------------------------------------------
@@ -56,7 +53,7 @@ instance HasHeist App where
 enc a = TL.toStrict . TL.decodeUtf8 . encode $ a
 
 article2 = object [ "ID" .= (2 :: Int)
-                  , "title" .= object ["rendered" .= ("The post" :: Text)]
+                  , "title" .= ("The post" :: Text)
                   , "excerpt" .= ("summary" :: Text)
                   ]
 
@@ -69,20 +66,20 @@ jacobinFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-feat
 
 localApp :: [(Text, Text)] -> SnapletInit App App
 localApp tmpls =
-  do makeSnaplet "app" "App." Nothing $ do
-       h <- nestSnaplet "" heist $ heistInit ""
-       addConfig h $ set scTemplateLocations (return templates) mempty
-       r <- nestSnaplet "" redis redisDBInitConf
-       w <- nestSnaplet "" wordpress $ initWordpress' config h r wordpress
-       return $ App h r w
-   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
-                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
-         templates = return $ M.fromList (map mkTmpl tmpls)
-         config = (def { wpConfEndpoint = "http://localhost:5555/wp-json/wp/v2"
-                       , wpConfCacheBehavior = NoCache
-                       , wpConfExtraFields = jacobinFields
-                       , wpConfLogger = Just print
-                       })
+  makeSnaplet "app" "App." Nothing $ do
+    h <- nestSnaplet "" heist $ heistInit ""
+    addConfig h $ set scTemplateLocations (return templates) mempty
+    r <- nestSnaplet "" redis redisDBInitConf
+    w <- nestSnaplet "" wordpress $ initWordpress' config h r wordpress
+    return $ App h r w
+  where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
+                               in ([T.encodeUtf8 name], DocumentFile doc Nothing)
+        templates = return $ M.fromList (map mkTmpl tmpls)
+        config = (def { wpConfEndpoint = "http://localhost:5555/wp-json"
+                      , wpConfCacheBehavior = NoCache
+                      , wpConfExtraFields = jacobinFields
+                      , wpConfLogger = Nothing
+                      })
 
 renderingApp :: [(Text, Text)] -> Text -> SnapletInit App App
 renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
@@ -112,24 +109,22 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
         config = (def { wpConfEndpoint = ""
                       , wpConfRequester = Just $ Requester recordingRequester
                       , wpConfCacheBehavior = NoCache})
-        recordingRequester "/terms/tag" [] =
+        recordingRequester "/taxonomies/post_tag/terms" [] =
           return $ enc $ [object [ "ID" .= (177 :: Int)
                                  , "slug" .= ("home-featured" :: Text)
-                                 , "meta" .= object ["links" .= object ["self" .= ("/177" :: Text)]]
                                  ]
                          ,object [ "ID" .= (160 :: Int)
                                  , "slug" .= ("featured-global" :: Text)
-                                 , "meta" .= object ["links" .= object ["self" .= ("/160" :: Text)]]
                                  ]
                          ]
-        recordingRequester "/terms/category" [] =
+        recordingRequester "/taxonomies/category/terms" [] =
           return $ enc $ [object [ "ID" .= (159 :: Int)
                                  , "slug" .= ("bookmarx" :: Text)
                                  , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
                                  ]
                          ]
         recordingRequester url params = do
-          modifyMVar_ record $ (return . (++ [mkUrlUnescape url params]))
+          modifyMVar_ record $ (return . (<> [mkUrlUnescape url params]))
           return ""
         mkUrlUnescape url params = (url <> "?" <> (T.intercalate "&" $ map (\(k, v) -> k <> "=" <> v) params))
 
@@ -150,7 +145,7 @@ cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
 shouldRenderTo :: (Text, Text) -> Text -> Spec
 shouldRenderTo (tags, response) match =
   snap (route []) (renderingApp [("test", tags)] response) $
-    it (T.unpack $ tags ++ " should render to match " ++ match) $
+    it (T.unpack $ tags <> " should render to match " <> match) $
       do t <- eval (do st <- getHeistState
                        builder <- (fst . fromJust) $ renderTemplate st "test"
                        return $ T.decodeUtf8 $ toByteString builder)
@@ -164,7 +159,7 @@ clearRedisCache = runRedisDB redis $ rdelstar "wordpress:*"
 
 article1 :: Value
 article1 = object [ "ID" .= ("1" :: Text)
-                  , "title" .= object ["rendered" .= ("Foo bar" :: Text)]
+                  , "title" .= ("Foo bar" :: Text)
                   , "excerpt" .= ("summary" :: Text)
                   ]
 
@@ -222,12 +217,12 @@ main = hspec $ do
            >>= shouldEqual Nothing
     it "should find post aggregates in cache" $
       do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
-         eval (with wordpress $ wpCacheSet' key ("[" ++ enc article1 ++ "]"))
+         eval (with wordpress $ wpCacheSet' key ("[" <> enc article1 <> "]"))
          eval (with wordpress $ wpCacheGet' key)
-           >>= shouldEqual (Just $ "[" ++ enc article1 ++ "]")
+           >>= shouldEqual (Just $ "[" <> enc article1 <> "]")
     it "should not find post aggregates after expire handler is called" $
       do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
-         eval (with wordpress $ wpCacheSet' key ("[" ++ enc article1 ++ "]"))
+         eval (with wordpress $ wpCacheSet' key ("[" <> enc article1 <> "]"))
          eval (with wordpress $ wpExpirePost' (PostByPermalinkKey "2000" "1" "the-article"))
          eval (with wordpress $ wpCacheGet' key)
            >>= shouldEqual Nothing
@@ -303,19 +298,56 @@ main = hspec $ do
   describe "live tests (which require running wordpress server)" $
     snap (route
             [("/2014/10/a-first-post", render "single")
+            ,("/many", render "many")
+            ,("/many2", render "many2")
+            ,("/many3", render "many3")
+            ,("/page1", render "page1")
+            ,("/page2", render "page2")
+            ,("/num1", render "num1")
+            ,("/num2", render "num2")
+            ,("/num3", render "num3")
+            ,("/tag1", render "tag1")
+            ,("/tag2", render "tag2")
+            ,("/tag3", render "tag3")
+            ,("/tag4", render "tag4")
+            ,("/tag5", render "tag5")
+            ,("/tag6", render "tag6")
+            ,("/tag7", render "tag7")
+            ,("/cat1", render "cat1")
+            ,("/cat2", render "cat2")
+            ,("/cat3", render "cat3")
+            ,("/fields", render "fields")
             ,("/2014/10/a-second-post/", render "author-date")
         ])
      (localApp [("single", "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>")
-                ,("author-date", "<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
-                ,("fields", "<wp><wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
-                ,("extra-fields", "<wp><wpPosts limit=1 categories=\"-bookmarx\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpMagFeatured><wpUrl/></wpMagFeatured></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
-                ]
+               ,("many", "<wpPosts limit=2><wpTitle/></wpPosts>")
+               ,("many1", "<wpPosts><wpTitle/></wpPosts>")
+               ,("many2", "<wpPosts offset=1 limit=1><wpTitle/></wpPosts>")
+               ,("many3", "<wpPosts offset=0 limit=1><wpTitle/></wpPosts>")
+               ,("page1", "<wpPosts limit=10 page=1><wpTitle/></wpPosts>")
+               ,("page2", "<wpPosts limit=10 page=2><wpTitle/></wpPosts>")
+               ,("num1", "<wpPosts num=2><wpTitle/></wpPosts>")
+               ,("num2", "<wpPosts num=2 page=2 limit=1><wpTitle/></wpPosts>")
+               ,("num3", "<wpPosts num=1 page=3><wpTitle/></wpPosts>")
+               ,("tag1", "<wpPosts tags=\"tag1\" limit=10><wpTitle/></wpPosts>")
+               ,("tag2", "<wpPosts limit=10><wpTitle/></wpPosts>")
+               ,("tag3", "<wpPosts tags=\"+tag1\" limit=10><wpTitle/></wpPosts>")
+               ,("tag4", "<wpPosts tags=\"-tag1\" limit=1><wpTitle/></wpPosts>")
+               ,("tag5", "<wpPosts tags=\"+tag1\" limit=1><wpTitle/></wpPosts>")
+               ,("tag6", "<wpPosts tags=\"+tag1,-tag2\" limit=1><wpTitle/></wpPosts>")
+               ,("tag7", "<wpPosts tags=\"+tag1,+tag2\" limit=1><wpTitle/></wpPosts>")
+               ,("cat1", "<wpPosts categories=\"cat1\" limit=10><wpTitle/></wpPosts>")
+               ,("cat2", "<wpPosts limit=10><wpTitle/></wpPosts>")
+               ,("cat3", "<wpPosts categories=\"-cat1\" limit=10><wpTitle/></wpPosts>")
+               ,("author-date", "<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
+               ,("fields", "<wp><wpPosts limit=1 categories=\"-cat1\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
+               ]
       ) $
       do it "should have title on page" $
            do r <- get "/2014/10/a-first-post"
               liftIO $ print r
               shouldHaveText "A first post" r
-         it "should not have most recent post's title" $
+         it "should be able to limit" $
            do p1 <- get "/many"
               get "/many1" >>= shouldNotEqual p1
          it "should be able to offset" $
@@ -355,9 +387,6 @@ main = hspec $ do
            do c1 <- get "/cat1"
               c2 <- get "/cat3"
               c1 `shouldNotEqual` c2
-         it "should be able to use extra fields set in application" $
-           do get "/fields" >>= shouldHaveText "https://"
-              get "/extra-fields" >>= shouldHaveText "https://"
 
 
 shouldQueryTo :: Text -> [Text] -> Spec

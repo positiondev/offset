@@ -51,7 +51,7 @@ instance (Functor m, Monad m) =>  Show (Field m) where
 
 postFields :: (Functor m, Monad m) => [Field m]
 postFields = [F "ID"
-             ,C "title" ["title", "rendered"]
+             ,F "title"
              ,F "status"
              ,F "type"
              ,N "author" [F "ID",F "name",F "first_name",F "last_name",F "description"]
