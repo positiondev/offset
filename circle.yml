@@ -10,11 +10,22 @@ dependencies:
     - wget https://github.com/commercialhaskell/stack/releases/download/v0.1.6.0/stack-0.1.6.0-linux-x86_64.tar.gz -O /tmp/stack.tar.gz
     - tar xvzf /tmp/stack.tar.gz -C /tmp
     - sudo mv /tmp/stack-0.1.6.0-linux-x86_64/stack /usr/bin/stack
+    - mkdir ~/.local/bin
+    - curl -o ~/.local/bin/wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+    - chmod +x ~/.local/bin/wp
   override:
     - stack setup
     - stack build --jobs=4
     - stack test --no-run-tests
 
 test:
+  pre:
+    - cd wp && wp core config --dbname=circle_test --dbuser=ubuntu --dbpass=
+    - cd wp && wp core install --admin_user=offset --admin_password=111 --url=localhost --title="Offset Test" --admin_email="dbp@positiondev.com"
   override:
+    - cd wp && wp server --port=5555 &
+    - cd wp && wp post delete 1 && wp post create --post_title='A first post' --post_status=publish --post_date='2014-10-01 07:00:00' --post_content="This is the content" --post_author=1 && wp post create --post_title='A second post' --post_status=publish --post_date='2014-10-02 07:00:00' --post_content="This is the second post content" --post_author=1 && wp post create --post_title='A third post' --post_status=publish --post_date='2014-10-10 07:00:00' --post_content="This is the third post content" --post_author=1 && wp post create --post_title='A fourth post' --post_status=publish --post_date='2014-10-15 07:00:00' --post_content="This is the fourth post content" --post_author=1
+    - cd wp && wp option update permalink_structure '/%year%/%monthnum%/%postname%/' && wp plugin activate --all
+    - cd wp && wp user update 1 --display_name="Ira Rubel" --first_name="Ira" --last_name="Rubel"
+    - cp wp && wp post term add 3 post_tag tag1 && wp post term add 4 post_tag tag1 && wp post term add 4 post_tag tag2 && wp post term add 5 post_tag tag1 && wp post term add 3 category cat1
     - stack test

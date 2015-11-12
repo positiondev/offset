@@ -31,11 +31,15 @@ $ wp core install --admin_user=offset --admin_password=111 --url=localhost --tit
 $ wp server --port=5555
 ```
 
-Now log in to the UI at `http://localhost:5555/wp-admin/` with user
-`offset` and password `111` and go and change the Permalink settings
-to anything but default. Some permalink is needed to make any of the
-requests work... Next go to the plugins section and activate both JSON
-Basic Authentication and WP REST API. To test that it is working,
+Set the permalink structure, activate the plugins, and set the name of the admin:
+
+```
+wp option update permalink_structure '/%year%/%monthnum%/%postname%/'
+wp plugin activate --all
+wp user update 1 --display_name="Ira Rubel" --first_name="Ira" --last_name="Rubel"
+```
+
+To test that it is working,
 run the following command (requires the `jq` utility, which you can
 install on macs with `brew install jq`):
 
@@ -54,18 +58,18 @@ wp post create --post_title='A first post' --post_status=publish --post_date='20
 wp post create --post_title='A second post' --post_status=publish --post_date='2014-10-02 07:00:00' --post_content="This is the second post content" --post_author=1
 wp post create --post_title='A third post' --post_status=publish --post_date='2014-10-10 07:00:00' --post_content="This is the third post content" --post_author=1
 wp post create --post_title='A fourth post' --post_status=publish --post_date='2014-10-15 07:00:00' --post_content="This is the fourth post content" --post_author=1
-
 ```
 
-Now go into the admin, and go to users, and set the first and last
-name of the admin `offset` to `Ira` and `Rubel`. Change "display name
-publically" to "Ira Rubel".
+Now set the tags and categories:
 
-Finally, set up the categories and tags. You unfortunately can't do
-that through the `wp` program yet. So create one category with slug,
-`cat1`, and add the first post to it. Then create two tags, `tag1` and
-`tag2`, and tag the first three posts with `tag1`, and the second post
-with `tag2`.
+```
+wp post term add 3 post_tag tag1
+wp post term add 4 post_tag tag1
+wp post term add 4 post_tag tag2
+wp post term add 5 post_tag tag1
+wp post term add 3 category cat1
+```
+
 
 
 **NOTE(dbp 2015-11-08):**
