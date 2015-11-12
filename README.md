@@ -63,11 +63,7 @@ wp post create --post_title='A fourth post' --post_status=publish --post_date='2
 Now set the tags and categories:
 
 ```
-wp post term add 3 post_tag tag1
-wp post term add 4 post_tag tag1
-wp post term add 4 post_tag tag2
-wp post term add 5 post_tag tag1
-wp post term add 3 category cat1
+python add_tags.py
 ```
 
 
