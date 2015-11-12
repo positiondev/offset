@@ -5,7 +5,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
@@ -13,6 +12,7 @@ module Web.Offset.Types where
 
 import           Control.Lens           hiding (children)
 import           Control.Monad          (mzero)
+import           Control.Monad.State
 import           Data.Aeson             (FromJSON, Value (..), parseJSON, (.:))
 import           Data.IntSet            (IntSet)
 import           Data.List              (intercalate)
@@ -20,7 +20,6 @@ import           Data.Maybe             (catMaybes, isJust)
 import           Data.Set               (Set)
 import           Data.Text              (Text)
 import qualified Data.Text              as T
-import           Snap
 
 import           Web.Offset.Cache.Types
 import           Web.Offset.Field
@@ -38,11 +37,13 @@ data Wordpress b =
                , cacheInternals     :: WordpressInt b
                }
 
-type WPLens b = Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))
+type WPLens b s m = (MonadIO m, MonadState s m) => Lens' s (Wordpress b)
+
+type UserPassword = (Text, Text)
 
 data WordpressConfig m =
      WordpressConfig { wpConfEndpoint      :: Text
-                     , wpConfRequester     :: Maybe Requester
+                     , wpConfRequester     :: Either UserPassword Requester
                      , wpConfCacheBehavior :: CacheBehavior
                      , wpConfExtraFields   :: [Field m]
                      , wpConfLogger        :: Maybe (Text -> IO ())

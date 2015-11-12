@@ -14,7 +14,6 @@ import           Data.Text               (Text)
 import qualified Data.Text               as T
 import           Data.Time.Clock         (UTCTime, diffUTCTime, getCurrentTime)
 import           Database.Redis          (Redis)
-import           Snap
 
 import           Web.Offset.Cache.Redis
 import           Web.Offset.Cache.Types

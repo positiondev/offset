@@ -12,10 +12,9 @@ import qualified Data.Map                as Map
 import           Data.Monoid
 import qualified Database.Redis          as R
 import           Heist
-import           Snap                    hiding (path, rqURI)
-import           Snap.Snaplet.Heist      (Heist, addConfig)
-import           Snap.Snaplet.RedisDB    (RedisDB)
-import qualified Snap.Snaplet.RedisDB    as RDB
+import Control.Monad.State
+import Data.Text (Text)
+import Heist.Compiled
 
 import           Web.Offset.Cache
 import           Web.Offset.Cache.Types
@@ -25,20 +24,38 @@ import           Web.Offset.Splices
 import           Web.Offset.Types
 
 instance Default (WordpressConfig m) where
-  def = WordpressConfig "http://127.0.0.1:8080/wp-json" Nothing (CacheSeconds 600) [] Nothing
+  def = WordpressConfig "http://127.0.0.1:8080/wp-json" (Left ("offset", "111")) (CacheSeconds 600) [] Nothing
 
-initWordpress :: Snaplet (Heist b)
-              -> Snaplet RedisDB
-              -> WPLens b
-              -> SnapletInit b (Wordpress b)
-initWordpress = initWordpress' def
-
-initWordpress' :: WordpressConfig (Handler b b)
-               -> Snaplet (Heist b)
-               -> Snaplet RedisDB
-               -> WPLens b
-               -> SnapletInit b (Wordpress b)
-initWordpress' wpconf heist redis wpLens =
+initWordpress :: (MonadIO m, MonadState s m) =>
+                 WordpressConfig m
+              -> R.Connection
+              -> m Text
+              -> WPLens b s m
+              -> IO (Wordpress b, Splices (Splice m))
+initWordpress wpconf redis getURI wpLens = do
+  let rrunRedis = R.runRedis redis
+  let logf = wpLogInt $ wpConfLogger wpconf
+  let wpReq = case wpConfRequester wpconf of
+                Left (u,p) -> wreqRequester logf u p
+                Right r -> r
+  active <- newMVar Map.empty
+  let wpInt = WordpressInt{ wpRequest = wpRequestInt wpReq (wpConfEndpoint wpconf)
+                          , wpCacheSet = wpCacheSetInt rrunRedis (wpConfCacheBehavior wpconf)
+                          , wpCacheGet = wpCacheGetInt rrunRedis (wpConfCacheBehavior wpconf)
+                          , startReqMutex = startReqMutexInt active
+                          , stopReqMutex = stopReqMutexInt active }
+  let wp = Wordpress{ requestPostSet = Nothing
+                    , wpExpireAggregates = wpExpireAggregatesInt rrunRedis
+                    , wpExpirePost = wpExpirePostInt rrunRedis
+                    , cachingGet = cachingGetInt wpInt
+                    , cachingGetRetry = cachingGetRetryInt wpInt
+                    , cachingGetError = cachingGetErrorInt wpInt
+                    , cacheInternals = wpInt
+                    , wpLogger = logf
+                    }
+  let extraFields = wpConfExtraFields wpconf
+  return (wp, wordpressSplices wp extraFields getURI wpLens)
+{-
   makeSnaplet "wordpress" "" Nothing $
     do conf <- getSnapletUserConfig
        let logf = wpLogInt $ wpConfLogger wpconf
@@ -66,3 +83,4 @@ initWordpress' wpconf heist redis wpLens =
        let extraFields = wpConfExtraFields wpconf
        addConfig heist $ set scCompiledSplices (wordpressSplices wp extraFields wpLens) mempty
        return wp
+-}

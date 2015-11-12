@@ -13,7 +13,6 @@ import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Lazy           as TL
 import qualified Data.Text.Lazy.Encoding  as TL
-import qualified Snap                     as SNAP
 
 readSafe :: Read a => Text -> Maybe a
 readSafe = fmap fst . listToMaybe . reads . T.unpack
@@ -68,6 +67,3 @@ concurrently [a] =
 concurrently (a:as) =
   do (r1, rs) <- CC.concurrently a (concurrently as)
      return (r1:rs)
-
-rqURI :: SNAP.Request -> Text
-rqURI = T.decodeUtf8 . SNAP.rqURI

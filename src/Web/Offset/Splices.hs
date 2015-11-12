@@ -5,6 +5,7 @@
 
 module Web.Offset.Splices where
 
+import Control.Monad.State
 import           Control.Applicative     ((<|>))
 import           Control.Lens            hiding (children)
 import           Control.Monad           (void)
@@ -25,7 +26,6 @@ import qualified Data.Vector             as V
 import           Heist
 import           Heist.Compiled
 import           Heist.Compiled.LowLevel
-import           Snap                    hiding (path, rqURI)
 import qualified Text.XmlHtml            as X
 
 import           Web.Offset.Field
@@ -34,20 +34,23 @@ import           Web.Offset.Queries
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
-wordpressSplices :: Wordpress b
-                 -> [Field (Handler b b)]
-                 -> WPLens b
-                 -> Splices (Splice (Handler b b))
-wordpressSplices wp extraFields wpLens =
+wordpressSplices :: (MonadState s m, MonadIO m) =>
+                    Wordpress b
+                 -> [Field m]
+                 -> m Text
+                 -> WPLens b s m
+                 -> Splices (Splice m)
+wordpressSplices wp extraFields getURI wpLens =
   do "wpPosts" ## wpPostsSplice wp extraFields wpLens
-     "wpPostByPermalink" ## wpPostByPermalinkSplice extraFields wpLens
+     "wpPostByPermalink" ## wpPostByPermalinkSplice extraFields getURI wpLens
      "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
      "wp" ## wpPrefetch wp
 
-wpPostsSplice :: Wordpress b
-              -> [Field (Handler b b)]
-              -> WPLens b
-              -> Splice (Handler b b)
+wpPostsSplice :: (MonadState s m, MonadIO m) =>
+                 Wordpress b
+              -> [Field m]
+              -> WPLens b s m
+              -> Splice m
 wpPostsSplice wp extraFields wpLens =
   do promise <- newEmptyPromise
      outputChildren <- manyWithSplices runChildren (postSplices extraFields)
@@ -60,7 +63,7 @@ wpPostsSplice wp extraFields wpLens =
        do res <- liftIO $ cachingGetRetry wp wpKey
           case (decode res) of
             Just posts -> do let postsW = extractPostIds posts
-                             Wordpress{..} <- lift (use (wpLens . snapletValue))
+                             Wordpress{..} <- lift (use wpLens)
                              let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet $ postsW
                              lift $ addPostIds wpLens (map fst postsND)
                              putPromise promise (map snd postsND)
@@ -70,30 +73,33 @@ wpPostsSplice wp extraFields wpLens =
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
 
-wpPostByPermalinkSplice :: [Field (Handler b b)]
-                        -> WPLens b
-                        -> Splice (Handler b b)
-wpPostByPermalinkSplice extraFields wpLens =
+wpPostByPermalinkSplice :: (MonadState s m, MonadIO m) =>
+                           [Field m]
+                        -> m Text
+                        -> WPLens b s m
+                     -> Splice m
+wpPostByPermalinkSplice extraFields getURI wpLens =
   do promise <- newEmptyPromise
      outputChildren <- withSplices runChildren (postSplices extraFields) (getPromise promise)
      return $ yieldRuntime $
-       do mperma <- (parsePermalink . rqURI) <$> lift getRequest
+       do mperma <- parsePermalink <$> lift getURI
           case mperma of
             Nothing -> codeGen (yieldPureText "")
             Just (year, month, slug) ->
-              do res <- lift $ with wpLens $ wpGetPost (PostByPermalinkKey year month slug)
+              do res <- lift $ wpGetPost wpLens (PostByPermalinkKey year month slug)
                  case res of
                    Just post -> do putPromise promise post
                                    codeGen outputChildren
                    _ -> codeGen (yieldPureText "")
 
-wpNoPostDuplicatesSplice :: WPLens b
-                         -> Splice (Handler b b)
+wpNoPostDuplicatesSplice :: (MonadState s m, MonadIO m) =>
+                            WPLens b s m
+                         -> Splice m
 wpNoPostDuplicatesSplice wpLens =
   return $ yieldRuntime $
-    do w@Wordpress{..} <- lift $ use (wpLens . snapletValue)
+    do w@Wordpress{..} <- lift $ use wpLens
        case requestPostSet of
-         Nothing -> lift $ assign (wpLens . snapletValue)
+         Nothing -> lift $ assign wpLens
                                   w{requestPostSet = (Just IntSet.empty)}
          Just _ -> return ()
        codeGen $ yieldPureText ""
@@ -151,8 +157,9 @@ mkPostsQuery l n o p ts cs =
               }
 
 
-wpPrefetch :: Wordpress b
-           -> Splice (Handler b b)
+wpPrefetch :: (MonadState s m, MonadIO m) =>
+              Wordpress b
+           -> Splice m
 wpPrefetch wp =
   do n <- getParamNode
      childrenRes <- runChildren
@@ -199,9 +206,9 @@ parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
                            ,T.reverse $ T.pack htnom
                            ,T.reverse $ T.pack guls)
 
-wpGetPost :: WPKey -> Handler b (Wordpress b) (Maybe Object)
-wpGetPost wpKey =
-  do wp <- view snapletValue <$> getSnapletState
+wpGetPost :: (MonadState s m, MonadIO m) => WPLens b s m -> WPKey -> m (Maybe Object)
+wpGetPost wpLens wpKey =
+  do wp <- use wpLens
      liftIO $ getPost wp wpKey
 
 getPost :: Wordpress b -> WPKey -> IO (Maybe Object)
@@ -221,8 +228,8 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
         f (False, rest) next = (False, T.snoc rest next)
 
 -- Move this into Init.hs (should retrieve from Wordpress data structure)
-addPostIds :: WPLens b -> [Int] -> Handler b b ()
+addPostIds :: (MonadState s m, MonadIO m) => WPLens b s m -> [Int] -> m ()
 addPostIds wpLens ids =
-  do w@Wordpress{..} <- use (wpLens . snapletValue)
-     assign (wpLens . snapletValue)
+  do w@Wordpress{..} <- use wpLens
+     assign wpLens
             w{requestPostSet = ((`IntSet.union` (IntSet.fromList ids)) <$> requestPostSet) }

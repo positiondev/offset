@@ -37,9 +37,6 @@ library
                      , heist >= 0.14
                      , map-syntax
                      , lens
-                     , snap
-                     , snap-core
-                     , snaplet-redis
                      , text
                      , bytestring
                      , wreq >= 0.3
@@ -47,8 +44,6 @@ library
                      , time
                      , xmlhtml >= 0.2.3.2
                      , async
-                     , hspec >= 2
-                     , hspec-snap
                      , mtl
                      , either
                      , unordered-containers

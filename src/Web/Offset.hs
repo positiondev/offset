@@ -14,7 +14,6 @@ module Web.Offset (
  , Requester(..)
  , CacheBehavior(..)
  , initWordpress
- , initWordpress'
  , wpGetPost
  , getPost
  , WPKey(..)

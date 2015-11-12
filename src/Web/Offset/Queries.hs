@@ -5,7 +5,6 @@ module Web.Offset.Queries where
 
 import           Data.Monoid
 import           Data.Text        (Text)
-import           Snap             hiding (path, rqURI)
 
 import           Web.Offset.Types
 import           Web.Offset.Utils
