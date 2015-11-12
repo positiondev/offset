@@ -15,19 +15,19 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
-                  Snap.Snaplet.Wordpress
-                , Snap.Snaplet.Wordpress.Internal
-                , Snap.Snaplet.Wordpress.Types
-                , Snap.Snaplet.Wordpress.Field
-                , Snap.Snaplet.Wordpress.Init
-                , Snap.Snaplet.Wordpress.Splices
-                , Snap.Snaplet.Wordpress.Queries
-                , Snap.Snaplet.Wordpress.HTTP
-                , Snap.Snaplet.Wordpress.Cache
-                , Snap.Snaplet.Wordpress.Cache.Types
-                , Snap.Snaplet.Wordpress.Cache.Redis
-                , Snap.Snaplet.Wordpress.Posts
-                , Snap.Snaplet.Wordpress.Utils
+                  Web.Offset
+                , Web.Offset.Internal
+                , Web.Offset.Types
+                , Web.Offset.Field
+                , Web.Offset.Init
+                , Web.Offset.Splices
+                , Web.Offset.Queries
+                , Web.Offset.HTTP
+                , Web.Offset.Cache
+                , Web.Offset.Cache.Types
+                , Web.Offset.Cache.Redis
+                , Web.Offset.Posts
+                , Web.Offset.Utils
   -- other-extensions:
   build-depends:       aeson
                      , base < 4.9

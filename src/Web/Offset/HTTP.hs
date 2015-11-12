@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Snap.Snaplet.Wordpress.HTTP where
+module Web.Offset.HTTP where
 
 import           Control.Lens
 import           Data.Monoid

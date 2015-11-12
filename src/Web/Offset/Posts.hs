@@ -7,14 +7,14 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
-module Snap.Snaplet.Wordpress.Posts where
+module Web.Offset.Posts where
 
 import           Data.Aeson
-import qualified Data.HashMap.Strict          as M
-import           Data.Maybe                   (fromMaybe)
+import qualified Data.HashMap.Strict as M
+import           Data.Maybe          (fromMaybe)
 import           Data.Ratio
 
-import           Snap.Snaplet.Wordpress.Utils
+import           Web.Offset.Utils
 
 extractPostId :: Object -> (Int, Object)
 extractPostId p = let i = M.lookup "ID" p

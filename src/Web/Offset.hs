@@ -8,7 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
-module Snap.Snaplet.Wordpress (
+module Web.Offset (
    Wordpress(..)
  , WordpressConfig(..)
  , Requester(..)
@@ -28,9 +28,9 @@ module Snap.Snaplet.Wordpress (
  , mergeFields
  ) where
 
-import           Snap.Snaplet.Wordpress.Cache.Types
-import           Snap.Snaplet.Wordpress.Field
-import           Snap.Snaplet.Wordpress.HTTP
-import           Snap.Snaplet.Wordpress.Init
-import           Snap.Snaplet.Wordpress.Splices
-import           Snap.Snaplet.Wordpress.Types
+import           Web.Offset.Cache.Types
+import           Web.Offset.Field
+import           Web.Offset.HTTP
+import           Web.Offset.Init
+import           Web.Offset.Splices
+import           Web.Offset.Types

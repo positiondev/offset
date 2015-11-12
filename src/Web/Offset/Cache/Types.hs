@@ -2,7 +2,7 @@
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-module Snap.Snaplet.Wordpress.Cache.Types where
+module Web.Offset.Cache.Types where
 
 import           Database.Redis (Redis)
 

@@ -9,24 +9,23 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
-module Snap.Snaplet.Wordpress.Types where
+module Web.Offset.Types where
 
-import           Control.Lens                       hiding (children)
-import           Control.Monad                      (mzero)
-import           Data.Aeson                         (FromJSON, Value (..),
-                                                     parseJSON, (.:))
-import           Data.IntSet                        (IntSet)
-import           Data.List                          (intercalate)
-import           Data.Maybe                         (catMaybes, isJust)
-import           Data.Set                           (Set)
-import           Data.Text                          (Text)
-import qualified Data.Text                          as T
+import           Control.Lens           hiding (children)
+import           Control.Monad          (mzero)
+import           Data.Aeson             (FromJSON, Value (..), parseJSON, (.:))
+import           Data.IntSet            (IntSet)
+import           Data.List              (intercalate)
+import           Data.Maybe             (catMaybes, isJust)
+import           Data.Set               (Set)
+import           Data.Text              (Text)
+import qualified Data.Text              as T
 import           Snap
 
-import           Snap.Snaplet.Wordpress.Cache.Types
-import           Snap.Snaplet.Wordpress.Field
-import           Snap.Snaplet.Wordpress.HTTP
-import           Snap.Snaplet.Wordpress.Utils
+import           Web.Offset.Cache.Types
+import           Web.Offset.Field
+import           Web.Offset.HTTP
+import           Web.Offset.Utils
 
 data Wordpress b =
      Wordpress { requestPostSet     :: Maybe IntSet

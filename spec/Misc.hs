@@ -4,10 +4,10 @@
 module Misc where
 
 import           Data.Monoid
-import           Data.Text              (Text)
-import qualified Data.Text              as T
-import           Snap.Snaplet.Wordpress
+import           Data.Text   (Text)
+import qualified Data.Text   as T
 import           Test.Hspec
+import           Web.Offset
 
 shouldTransformTo :: Text -> Text -> Spec
 shouldTransformTo from to =

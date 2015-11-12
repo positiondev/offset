@@ -9,15 +9,15 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
-module Snap.Snaplet.Wordpress.Internal where
+module Web.Offset.Internal where
 
-import           Data.Monoid                  ((<>))
-import qualified Data.Set                     as Set
-import           Data.Text                    (Text)
+import           Data.Monoid      ((<>))
+import qualified Data.Set         as Set
+import           Data.Text        (Text)
 
-import           Snap.Snaplet.Wordpress.HTTP
-import           Snap.Snaplet.Wordpress.Types
-import           Snap.Snaplet.Wordpress.Utils
+import           Web.Offset.HTTP
+import           Web.Offset.Types
+import           Web.Offset.Utils
 
 wpRequestInt :: Requester -> Text -> WPKey -> IO Text
 wpRequestInt runHTTP endpt key =

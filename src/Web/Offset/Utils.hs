@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Snap.Snaplet.Wordpress.Utils where
+module Web.Offset.Utils where
 
 import           Control.Concurrent       as CC
 import qualified Control.Concurrent.Async as CC

@@ -1,12 +1,12 @@
-module Snap.Snaplet.Wordpress.Cache.Redis where
+module Web.Offset.Cache.Redis where
 
-import           Control.Applicative  ((<$>))
-import           Control.Monad        (join)
-import           Data.Either          (isRight)
-import           Data.Text            (Text)
-import qualified Data.Text.Encoding   as T
-import           Database.Redis       (Redis)
-import qualified Database.Redis       as R
+import           Control.Applicative ((<$>))
+import           Control.Monad       (join)
+import           Data.Either         (isRight)
+import           Data.Text           (Text)
+import qualified Data.Text.Encoding  as T
+import           Database.Redis      (Redis)
+import qualified Database.Redis      as R
 
 rsetex :: Text -> Int -> Text -> Redis Bool
 rsetex k n v = isRight <$> R.setex (T.encodeUtf8 k) (toInteger n) (T.encodeUtf8 v)

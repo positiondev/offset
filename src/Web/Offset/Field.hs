@@ -2,7 +2,7 @@
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-module Snap.Snaplet.Wordpress.Field where
+module Web.Offset.Field where
 
 import           Control.Applicative ((<$>))
 import           Data.Monoid         ((<>))

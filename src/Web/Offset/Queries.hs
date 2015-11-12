@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-module Snap.Snaplet.Wordpress.Queries where
+module Web.Offset.Queries where
 
 import           Data.Monoid
-import           Data.Text                          (Text)
-import           Snap                               hiding (path, rqURI)
+import           Data.Text        (Text)
+import           Snap             hiding (path, rqURI)
 
-import           Snap.Snaplet.Wordpress.Types
-import           Snap.Snaplet.Wordpress.Utils
+import           Web.Offset.Types
+import           Web.Offset.Utils
 
 lookupTaxDict :: WPKey -> Wordpress b -> IO (TaxSpec a -> TaxSpecId a)
 lookupTaxDict key@(TaxDictKey resName) Wordpress{..} =

@@ -2,25 +2,24 @@
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-module Snap.Snaplet.Wordpress.Cache where
+module Web.Offset.Cache where
 
 import           Control.Concurrent.MVar
-import           Control.Monad                      (void)
-import           Data.Map                           (Map)
-import qualified Data.Map                           as Map
-import           Data.Monoid                        ((<>))
-import qualified Data.Set                           as Set
-import           Data.Text                          (Text)
-import qualified Data.Text                          as T
-import           Data.Time.Clock                    (UTCTime, diffUTCTime,
-                                                     getCurrentTime)
-import           Database.Redis                     (Redis)
+import           Control.Monad           (void)
+import           Data.Map                (Map)
+import qualified Data.Map                as Map
+import           Data.Monoid             ((<>))
+import qualified Data.Set                as Set
+import           Data.Text               (Text)
+import qualified Data.Text               as T
+import           Data.Time.Clock         (UTCTime, diffUTCTime, getCurrentTime)
+import           Database.Redis          (Redis)
 import           Snap
 
-import           Snap.Snaplet.Wordpress.Cache.Redis
-import           Snap.Snaplet.Wordpress.Cache.Types
-import           Snap.Snaplet.Wordpress.Types
-import           Snap.Snaplet.Wordpress.Utils
+import           Web.Offset.Cache.Redis
+import           Web.Offset.Cache.Types
+import           Web.Offset.Types
+import           Web.Offset.Utils
 
 startReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO Bool
 startReqMutexInt activeMV wpKey =
