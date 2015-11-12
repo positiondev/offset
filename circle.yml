@@ -25,8 +25,8 @@ test:
     - cd wp && wp core config --dbname=circle_test --dbuser=ubuntu --dbpass=
     - cd wp && wp core install --admin_user=offset --admin_password=111 --url=localhost --title="Offset Test" --admin_email="dbp@positiondev.com"
   override:
-    - cd wp && wp server --port=5555
-      background: true
+    - cd wp && wp server --port=5555:
+         background: true
     - sleep 5
     - cd wp && wp post delete 1 && wp post create --post_title='A first post' --post_status=publish --post_date='2014-10-01 07:00:00' --post_content="This is the content" --post_author=1 && wp post create --post_title='A second post' --post_status=publish --post_date='2014-10-02 07:00:00' --post_content="This is the second post content" --post_author=1 && wp post create --post_title='A third post' --post_status=publish --post_date='2014-10-10 07:00:00' --post_content="This is the third post content" --post_author=1 && wp post create --post_title='A fourth post' --post_status=publish --post_date='2014-10-15 07:00:00' --post_content="This is the fourth post content" --post_author=1
     - cd wp && wp option update permalink_structure '/%year%/%monthnum%/%postname%/' && wp plugin activate --all
