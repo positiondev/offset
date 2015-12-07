@@ -148,18 +148,6 @@ cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
 -- Section 2: Test suite against application.           --
 ----------------------------------------------------------
 
-shouldRenderTo :: (Text, Text) -> Text -> Spec
-shouldRenderTo (tags, response) match =
-  snap (route []) (renderingApp [("test", tags)] response) $
-    it (T.unpack $ tags <> " should render to match " <> match) $
-      do t <- eval (do st <- getHeistState
-                       builder <- (fst . fromJust) $ renderTemplate st "test"
-                       return $ T.decodeUtf8 $ toByteString builder)
-         setResult $
-           if match == t
-             then Success
-             else Fail (show t <> " didn't match " <> show match)
-
 clearRedisCache :: Handler App App Bool
 clearRedisCache = runRedisDB redis $ rdelstar "wordpress:*"
 
@@ -185,19 +173,12 @@ main = hspec $ do
       `shouldRenderTo` "Foo barFoo bar"
     ("<wp><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/></wp>", enc [article1])
       `shouldRenderTo` "Foo barFoo bar"
-{-  describe "<wpPostByPermalink>" $ do
-    shouldRenderAtUrl "/2009/10/the-post/"
-                      "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
-                      "The post"
-    shouldRenderAtUrl "/posts/2009/10/the-post/"
-                      "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
-                      "The post"
-    shouldRenderAtUrl "/posts/2009/10/the-post"
-                      "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
-                      "The post"
-    shouldRenderAtUrl "/2009/10/the-post/"
-                      "<wp><wpPostByPermalink><wpTitle/>: <wpExcerpt/></wpPostByPermalink></wp>"
-                      "The post: summary" -}
+  describe "<wpPostByPermalink>" $ do
+    shouldQueryAtUrl "/2009/10/the-post/"
+                     "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
+                     ["/posts?filter[year]=2009&filter[monthnum]=10&filter[name]=the-post"]
+    shouldRenderAtUrl "/2009/10/the-post/" ("<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>", enc [article1]) "Foo bar"
+    shouldRenderAtUrl "/2009/10/the-post/" ("<wp><wpNoPostDuplicates/><wpPostByPermalink><wpTitle/></wpPostByPermalink><wpPosts limit=1><wpTitle/></wpPosts></wp>", enc [article1]) "Foo bar"
 {-    describe "should grab post from cache if it's there" $
       let (Object a2) = article2 in
       shouldRenderAtUrlPreCache
@@ -394,6 +375,25 @@ main = hspec $ do
               c1 `shouldNotEqual` c2
 
 
+shouldRenderTo :: (Text, Text) -> Text -> Spec
+shouldRenderTo (tags, response) match =
+  snap (route []) (renderingApp [("test", tags)] response) $
+    it (T.unpack $ tags <> " should render to match " <> match) $
+      do t <- eval (do st <- getHeistState
+                       builder <- (fst . fromJust) $ renderTemplate st "test"
+                       return $ T.decodeUtf8 $ toByteString builder)
+         setResult $
+           if match == t
+             then Success
+             else Fail (show t <> " didn't match " <> show match)
+
+shouldRenderAtUrl :: Text -> (Text, Text) -> Text -> Spec
+shouldRenderAtUrl url (tags, response) match =
+  snap (route [(T.encodeUtf8 url, render "test")]) (renderingApp [("test", tags)] response) $
+    it (T.unpack $ tags <> " should render to match " <> match) $
+       get url >>= shouldHaveText match
+
+
 shouldQueryTo :: Text -> [Text] -> Spec
 shouldQueryTo hQuery wpQuery = do
   record <- runIO $ newMVar []
@@ -402,6 +402,15 @@ shouldQueryTo hQuery wpQuery = do
       eval $ render "x"
       x <- liftIO $ tryTakeMVar record
       x `shouldEqual` Just wpQuery
+
+shouldQueryAtUrl :: Text -> Text -> [Text] -> Spec
+shouldQueryAtUrl url tmpl urls = do
+  record <- runIO $ newMVar []
+  snap (route [(T.encodeUtf8 url,render "x")]) (queryingApp [("x", tmpl)] record) $
+    it (T.unpack $ "At " <> url <> ", " <> tmpl <> " should query to " <> T.pack (show urls)) $ do
+      get url
+      x <- liftIO $ tryTakeMVar record
+      x `shouldEqual` Just urls
 
 getWordpress :: Handler b v v
 getWordpress = view snapletValue <$> getSnapletState

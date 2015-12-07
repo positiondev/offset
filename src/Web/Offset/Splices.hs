@@ -8,7 +8,7 @@ module Web.Offset.Splices where
 import Control.Monad.State
 import           Control.Applicative     ((<|>))
 import           Control.Lens            hiding (children)
-import           Control.Monad           (void)
+import           Control.Monad           (void, sequence)
 import           Control.Monad.Trans     (lift, liftIO)
 import           Data.Aeson              hiding (decode, encode)
 import qualified Data.Attoparsec.Text    as A
@@ -55,13 +55,16 @@ wpPostsSplice wp extraFields wpLens =
   do promise <- newEmptyPromise
      outputChildren <- manyWithSplices runChildren (postSplices extraFields)
                                                    (getPromise promise)
-     postsQuery <- parseQueryNode <$> getParamNode
+     n <- getParamNode
+     attrs' <- runAttributesRaw (X.elementAttrs n)
      tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
      catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
-     let wpKey = mkWPKey tagDict catDict postsQuery
      return $ yieldRuntime $
-       do res <- liftIO $ cachingGetRetry wp wpKey
-          case (decode res) of
+       do attrs <- attrs'
+          let postsQuery = parseQueryNode attrs
+          let wpKey = mkWPKey tagDict catDict postsQuery
+          res <- liftIO $ cachingGetRetry wp wpKey
+          case decode res of
             Just posts -> do let postsW = extractPostIds posts
                              Wordpress{..} <- lift (use wpLens)
                              let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet $ postsW
@@ -135,14 +138,14 @@ postSplices extra = mconcat (map buildSplice (mergeFields postFields extra))
 
 -- * -- Internal -- * --
 
-parseQueryNode :: X.Node -> WPQuery
-parseQueryNode n =
-  mkPostsQuery (readSafe =<< X.getAttribute "limit" n)
-               (readSafe =<< X.getAttribute "num" n)
-               (readSafe =<< X.getAttribute "offset" n)
-               (readSafe =<< X.getAttribute "page" n)
-               (readSafe =<< X.getAttribute "tags" n)
-               (readSafe =<< X.getAttribute "categories" n)
+parseQueryNode :: [(Text, Text)] -> WPQuery
+parseQueryNode attrs =
+  mkPostsQuery (readSafe =<< lookup "limit" attrs)
+               (readSafe =<< lookup "num" attrs)
+               (readSafe =<< lookup "offset" attrs)
+               (readSafe =<< lookup "page" attrs)
+               (readSafe =<< lookup "tags" attrs)
+               (readSafe =<< lookup "categories" attrs)
 
 mkPostsQuery :: Maybe Int -> Maybe Int -> Maybe Int -> Maybe Int
        -> Maybe (TaxSpecList TagType) -> Maybe (TaxSpecList CatType)
@@ -165,21 +168,25 @@ wpPrefetch wp =
      childrenRes <- runChildren
      tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
      catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
-     let wpKeys = findPrefetchables tagDict catDict n
+     wpKeys' <- findPrefetchables tagDict catDict n
      return $ yieldRuntime $
-       do void $ liftIO $ concurrently $ map (cachingGet wp) wpKeys
+       do wpKeys <- sequence wpKeys'
+          void $ liftIO $ concurrently $ map (cachingGet wp) wpKeys
           codeGen childrenRes
 
-findPrefetchables :: (TaxSpec TagType -> TaxSpecId TagType)
+findPrefetchables :: (MonadState s m, MonadIO m) =>
+       (TaxSpec TagType -> TaxSpecId TagType)
     -> (TaxSpec CatType -> TaxSpecId CatType)
     -> X.Node
-    -> [WPKey]
-findPrefetchables tdict cdict e@(X.Element "wpPosts" _ children) =
-  concat (map (findPrefetchables tdict cdict) children) <>
-    [mkWPKey tdict cdict $ parseQueryNode e]
+    -> HeistT m IO [RuntimeSplice m WPKey]
+findPrefetchables tdict cdict e@(X.Element "wpPosts" attrs' children) =
+  do attrs <- runAttributesRaw attrs'
+     rest <- mapM (findPrefetchables tdict cdict) children
+     return $ [mkWPKey tdict cdict . parseQueryNode <$> attrs] <> concat rest
 findPrefetchables tdict cdict (X.Element _ _ children) =
-  concat (map (findPrefetchables tdict cdict) children)
-findPrefetchables _ _ _ = []
+  do rest <- mapM (findPrefetchables tdict cdict) children
+     return $ concat rest
+findPrefetchables _ _ _ = return []
 
 mkWPKey :: (TaxSpec TagType -> TaxSpecId TagType)
     -> (TaxSpec CatType -> TaxSpecId CatType)
