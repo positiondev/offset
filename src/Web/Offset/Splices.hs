@@ -200,6 +200,11 @@ findPrefetchables tdict cdict e@(X.Element "wpPosts" attrs' children) =
   do attrs <- runAttributesRaw attrs'
      rest <- mapM (findPrefetchables tdict cdict) children
      return $ [mkWPKey tdict cdict . parseQueryNode <$> attrs] <> concat rest
+findPrefetchables tdict cdict e@(X.Element "wpPage" attrs' _) =
+  case lookup "name" attrs' of
+    Nothing -> return []
+    Just _ -> do attrs <- runAttributesRaw attrs'
+                 return [PageKey . fromJust . lookup "name" <$> attrs]
 findPrefetchables tdict cdict (X.Element _ _ children) =
   do rest <- mapM (findPrefetchables tdict cdict) children
      return $ concat rest
