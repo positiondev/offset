@@ -43,6 +43,7 @@ wordpressSplices :: (MonadState s m, MonadIO m) =>
 wordpressSplices wp extraFields getURI wpLens =
   do "wpPosts" ## wpPostsSplice wp extraFields wpLens
      "wpPostByPermalink" ## wpPostByPermalinkSplice extraFields getURI wpLens
+     "wpPage" ## wpPageSplice wpLens
      "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
      "wp" ## wpPrefetch wp
 
@@ -107,6 +108,21 @@ wpNoPostDuplicatesSplice wpLens =
                                   w{requestPostSet = (Just IntSet.empty)}
          Just _ -> return ()
        codeGen $ yieldPureText ""
+
+wpPageSplice :: (MonadState s m, MonadIO m) =>
+                WPLens b s m
+             -> Splice m
+wpPageSplice wpLens =
+  do n <- getParamNode
+     case X.getAttribute "name" n of
+       Nothing -> return (yieldPureText "")
+       Just slug ->
+         return $ yieldRuntimeText $ do res <- lift $ wpGetPost wpLens (PageKey slug)
+                                        case res of
+                                          Just page -> case M.lookup "content" page of
+                                                         Just (String c) -> return c
+                                                         _ -> return ""
+                                          _ -> return ""
 
 postSplices :: (Functor m, Monad m) => [Field m] -> Splices (RuntimeSplice m Object -> Splice m)
 postSplices extra = mconcat (map buildSplice (mergeFields postFields extra))

@@ -93,6 +93,7 @@ formatKey = format
         format (PostsKey filters) =
           ns "posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
         format (PostKey n) = ns "post:" <> tshow n
+        format (PageKey s) = ns "page:" <> s
         format (AuthorKey n) = ns "author:" <> tshow n
         format (TaxDictKey t) = ns "tax_dict:" <> t
         ns k = "wordpress:" <> k

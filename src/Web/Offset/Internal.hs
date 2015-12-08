@@ -29,6 +29,7 @@ wpRequestInt runHTTP endpt key =
                   ,("filter[name]", slug)]
    PostsKey{} -> req "/posts" (buildParams key)
    PostKey i -> req ("/posts/" <> tshow i) []
+   PageKey s -> req "/posts" [("type", "page"),("filter[name]", s)]
    AuthorKey i -> req ("/users/" <> tshow i) []
   where req path params = (unRequester runHTTP) (endpt <> path) params
 

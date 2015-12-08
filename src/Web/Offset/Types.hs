@@ -94,6 +94,7 @@ instance Show Filter where
 data WPKey = PostKey Int
            | PostByPermalinkKey Year Month Slug
            | PostsKey (Set Filter)
+           | PageKey Text
            | AuthorKey Int
            | TaxDictKey Text
            deriving (Eq, Show, Ord)
