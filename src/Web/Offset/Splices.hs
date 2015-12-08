@@ -91,7 +91,8 @@ wpPostByPermalinkSplice extraFields getURI wpLens =
             Just (year, month, slug) ->
               do res <- lift $ wpGetPost wpLens (PostByPermalinkKey year month slug)
                  case res of
-                   Just post -> do putPromise promise post
+                   Just post -> do lift $ addPostIds wpLens [fst (extractPostId post)]
+                                   putPromise promise post
                                    codeGen outputChildren
                    _ -> codeGen (yieldPureText "")
 
