@@ -44,7 +44,7 @@ run the following command (requires the `jq` utility, which you can
 install on macs with `brew install jq`):
 
 ```
-curl http://localhost:5555/wp-json/wp/v2/ | jq
+curl http://localhost:5555/wp-json/ | jq
 ```
 
 Which should print out a bunch of json.
