@@ -133,7 +133,7 @@ postSplices extra = mconcat (map buildSplice (mergeFields postFields extra))
         buildSplice (N n fs) = transformName n ## \o ->
                                  withSplices runChildren
                                                 (mconcat $ map buildSplice fs)
-                                                (unObj . fromJust . M.lookup n <$> o)
+                                                (unObj . M.lookup n <$> o)
         buildSplice (C n path) =
           transformName n ## bindLater $ \o -> return (textSplice (getText (last path) . traverseObject (init path)) o)
         buildSplice (CN n path fs) =
@@ -143,11 +143,13 @@ postSplices extra = mconcat (map buildSplice (mergeFields postFields extra))
         buildSplice (M n fs) = transformName n ## \o ->
                                  manyWithSplices runChildren
                                                     (mconcat $ map buildSplice fs)
-                                                    (unArray . fromJust . M.lookup n <$> o)
-        unObj (Object o) = o
-        unArray (Array v) = map unObj $ V.toList v
+                                                    (unArray . M.lookup n <$> o)
+        unObj (Just (Object o)) = o
+        unObj _ = M.empty
+        unArray (Just (Array v)) = map (unObj . Just) $ V.toList v
+        unArray _ = []
         traverseObject [] o = o
-        traverseObject (x:xs) o = traverseObject xs (unObj . fromJust . M.lookup x $ o)
+        traverseObject (x:xs) o = traverseObject xs (unObj . M.lookup x $ o)
         getText n o = case M.lookup n o of
                         Just (String t) -> t
                         Just (Number i) -> T.pack $ show i
