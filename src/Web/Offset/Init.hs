@@ -39,6 +39,9 @@ initWordpress wpconf redis getURI wpLens = do
                 Left (u,p) -> wreqRequester logf u p
                 Right r -> r
   active <- newMVar Map.empty
+  -- NOTE(dbp 2015-12-17): At init, we want to get new tag/category lookups.
+  wpExpirePostInt rrunRedis (TaxDictKey "post_tag")
+  wpExpirePostInt rrunRedis (TaxDictKey "category")
   let wpInt = WordpressInt{ wpRequest = wpRequestInt wpReq (wpConfEndpoint wpconf)
                           , wpCacheSet = wpCacheSetInt rrunRedis (wpConfCacheBehavior wpconf)
                           , wpCacheGet = wpCacheGetInt rrunRedis (wpConfCacheBehavior wpconf)
@@ -55,32 +58,3 @@ initWordpress wpconf redis getURI wpLens = do
                     }
   let extraFields = wpConfExtraFields wpconf
   return (wp, wordpressSplices wp extraFields getURI wpLens)
-{-
-  makeSnaplet "wordpress" "" Nothing $
-    do conf <- getSnapletUserConfig
-       let logf = wpLogInt $ wpConfLogger wpconf
-       wpReq <- case wpConfRequester wpconf of
-                Nothing -> do u <- liftIO $ C.require conf "username"
-                              p <- liftIO $ C.require conf "password"
-                              return $ wreqRequester logf u p
-                Just r -> return r
-       active <- liftIO $ newMVar Map.empty
-       let rrunRedis = R.runRedis $ view (snapletValue . RDB.redisConnection) redis
-       let wpInt = WordpressInt{ wpRequest = wpRequestInt wpReq (wpConfEndpoint wpconf)
-                               , wpCacheSet = wpCacheSetInt rrunRedis (wpConfCacheBehavior wpconf)
-                               , wpCacheGet = wpCacheGetInt rrunRedis (wpConfCacheBehavior wpconf)
-                               , startReqMutex = startReqMutexInt active
-                               , stopReqMutex = stopReqMutexInt active }
-       let wp = Wordpress{ requestPostSet = Nothing
-                         , wpExpireAggregates = wpExpireAggregatesInt rrunRedis
-                         , wpExpirePost = wpExpirePostInt rrunRedis
-                         , cachingGet = cachingGetInt wpInt
-                         , cachingGetRetry = cachingGetRetryInt wpInt
-                         , cachingGetError = cachingGetErrorInt wpInt
-                         , cacheInternals = wpInt
-                         , wpLogger = logf
-                         }
-       let extraFields = wpConfExtraFields wpconf
-       addConfig heist $ set scCompiledSplices (wordpressSplices wp extraFields wpLens) mempty
-       return wp
--}
