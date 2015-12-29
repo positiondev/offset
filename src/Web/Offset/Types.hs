@@ -17,6 +17,7 @@ import           Data.Aeson             (FromJSON, Value (..), parseJSON, (.:))
 import           Data.IntSet            (IntSet)
 import           Data.List              (intercalate)
 import           Data.Maybe             (catMaybes, isJust)
+import           Data.Monoid            ((<>))
 import           Data.Set               (Set)
 import           Data.Text              (Text)
 import qualified Data.Text              as T
@@ -83,6 +84,7 @@ data Filter = TagFilter (TaxSpecId TagType)
             | CatFilter (TaxSpecId CatType)
             | NumFilter Int
             | OffsetFilter Int
+            | UserFilter Text
             deriving (Eq, Ord)
 
 instance Show Filter where
@@ -90,6 +92,7 @@ instance Show Filter where
   show (CatFilter t) = "cat_" ++ show t
   show (NumFilter n) = "num_" ++ show n
   show (OffsetFilter n) = "offset_" ++ show n
+  show (UserFilter u) = T.unpack $ "user_" <> u
 
 data WPKey = PostKey Int
            | PostByPermalinkKey Year Month Slug
@@ -133,4 +136,6 @@ data WPQuery = WPPostsQuery{ qlimit  :: Int
                            , qoffset :: Int
                            , qpage   :: Int
                            , qtags   :: TaxSpecList TagType
-                           , qcats   :: TaxSpecList CatType} deriving (Show)
+                           , qcats   :: TaxSpecList CatType
+                           , quser   :: Maybe Text
+                           } deriving (Show)

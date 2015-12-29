@@ -54,7 +54,7 @@ postFields = [F "ID"
              ,F "title"
              ,F "status"
              ,F "type"
-             ,N "author" [F "ID",F "name",F "first_name",F "last_name",F "description"]
+             ,N "author" [F "ID",F "name",F "first_name",F "last_name",F "description", F "username"]
              ,F "content"
              ,P "date" dateSplice
              ,F "slug"

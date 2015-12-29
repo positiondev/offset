@@ -1,11 +1,9 @@
-{-# LANGUAGE EmptyDataDecls        #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE ImpredicativeTypes    #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
@@ -31,7 +29,7 @@ wpRequestInt runHTTP endpt key =
    PostKey i -> req ("/posts/" <> tshow i) []
    PageKey s -> req "/posts" [("type", "page"),("filter[name]", s)]
    AuthorKey i -> req ("/users/" <> tshow i) []
-  where req path params = (unRequester runHTTP) (endpt <> path) params
+  where req path = unRequester runHTTP (endpt <> path)
 
 buildParams :: WPKey -> [(Text, Text)]
 buildParams (PostsKey filters) = params
@@ -42,6 +40,7 @@ buildParams (PostsKey filters) = params
         mkFilter (CatFilter (TaxMinusId i)) = ("filter[category__not_in]", tshow i)
         mkFilter (NumFilter num) = ("filter[posts_per_page]", tshow num)
         mkFilter (OffsetFilter offset) = ("filter[offset]", tshow offset)
+        mkFilter (UserFilter user) = ("filter[author_name]", user)
 
 wpLogInt :: Maybe (Text -> IO ()) -> Text -> IO ()
 wpLogInt logger msg = case logger of

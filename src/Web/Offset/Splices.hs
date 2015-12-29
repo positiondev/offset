@@ -165,17 +165,20 @@ parseQueryNode attrs =
                (readSafe =<< lookup "page" attrs)
                (readSafe =<< lookup "tags" attrs)
                (readSafe =<< lookup "categories" attrs)
+               (lookup "user" attrs)
 
 mkPostsQuery :: Maybe Int -> Maybe Int -> Maybe Int -> Maybe Int
        -> Maybe (TaxSpecList TagType) -> Maybe (TaxSpecList CatType)
+       -> Maybe Text
        -> WPQuery
-mkPostsQuery l n o p ts cs =
+mkPostsQuery l n o p ts cs us =
   WPPostsQuery{ qlimit = fromMaybe 20 l
               , qnum = fromMaybe 20 n
               , qoffset = fromMaybe 0 o
               , qpage = fromMaybe 1 p
               , qtags = fromMaybe (TaxSpecList []) ts
               , qcats = fromMaybe (TaxSpecList []) cs
+              , quser = us
               }
 
 
@@ -222,7 +225,9 @@ mkWPKey tagDict catDict WPPostsQuery{..} =
       tags = map tagDict $ unTaxSpecList qtags
       cats = map catDict $ unTaxSpecList qcats
   in PostsKey (Set.fromList $ [ NumFilter qnum , OffsetFilter offset]
-               ++ map TagFilter tags ++ map CatFilter cats)
+               ++ map TagFilter tags ++ map CatFilter cats ++ userFilter quser)
+  where userFilter Nothing = []
+        userFilter (Just u) = [UserFilter u]
 
 parsePermalink :: Text -> Maybe (Text, Text, Text)
 parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
