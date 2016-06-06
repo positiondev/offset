@@ -6,34 +6,34 @@
 
 module Main where
 
-import           Prelude                     hiding ((++))
+import           Prelude                  hiding ((++))
 
 import           Blaze.ByteString.Builder
 import           Control.Concurrent.MVar
-import           Control.Lens                hiding ((.=))
-import           Control.Monad               (void)
-import           Control.Monad.Trans         (liftIO)
-import           Data.Aeson                  hiding (Success)
+import           Control.Lens             hiding ((.=))
+import           Control.Monad            (void)
+import           Control.Monad.Trans      (liftIO)
+import           Data.Aeson               hiding (Success)
 import           Data.Default
-import qualified Data.HashMap.Strict         as M
+import qualified Data.HashMap.Strict      as M
 import           Data.Maybe
 import           Data.Monoid
-import qualified Data.Set                    as Set
-import           Data.Text                   (Text)
-import qualified Data.Text                   as T
-import qualified Data.Text.Encoding          as T
-import qualified Data.Text.Lazy              as TL
-import qualified Data.Text.Lazy.Encoding     as TL
+import qualified Data.Set                 as Set
+import           Data.Text                (Text)
+import qualified Data.Text                as T
+import qualified Data.Text.Encoding       as T
+import qualified Data.Text.Lazy           as TL
+import qualified Data.Text.Lazy.Encoding  as TL
 import           Heist
-import           Heist.Compiled
+import           Heist.Interpreted
 import qualified Misc
-import           Snap                        hiding (get)
-import           Snap.Snaplet.Heist.Compiled
+import           Snap                     hiding (get)
+import           Snap.Snaplet.Heist
 import           Snap.Snaplet.RedisDB
 import           Test.Hspec
-import           Test.Hspec.Core.Spec        (Result (..))
+import           Test.Hspec.Core.Spec     (Result (..))
 import           Test.Hspec.Snap
-import qualified Text.XmlHtml                as X
+import qualified Text.XmlHtml             as X
 
 import           Web.Offset
 import           Web.Offset.Cache.Redis
@@ -73,7 +73,7 @@ localApp tmpls =
     addConfig h $ set scTemplateLocations (return templates) mempty
     r <- nestSnaplet "" redis redisDBInitConf
     (w,splices) <- liftIO $ initWordpress config (view (snapletValue . redisConnection) r) (T.decodeUtf8 . rqURI <$> getRequest) wordpress
-    addConfig h $ set scCompiledSplices splices mempty
+    addConfig h $ set scInterpretedSplices splices mempty
     return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
@@ -90,7 +90,7 @@ renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
   addConfig h $ set scTemplateLocations (return templates) mempty
   r <- nestSnaplet "" redis redisDBInitConf
   (w,splices) <- liftIO $ initWordpress config (view (snapletValue . redisConnection) r) (T.decodeUtf8 . rqURI <$> getRequest) wordpress
-  addConfig h $ set scCompiledSplices splices mempty
+  addConfig h $ set scInterpretedSplices splices mempty
   return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
@@ -106,7 +106,7 @@ queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." N
   addConfig h $ set scTemplateLocations (return templates) mempty
   r <- nestSnaplet "" redis redisDBInitConf
   (w,splices) <- liftIO $ initWordpress config (view (snapletValue . redisConnection) r) (T.decodeUtf8 . rqURI <$> getRequest) wordpress
-  addConfig h $ set scCompiledSplices splices mempty
+  addConfig h $ set scInterpretedSplices splices mempty
   return $ App h r w
   where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
                                in ([T.encodeUtf8 name], DocumentFile doc Nothing)
@@ -138,7 +138,7 @@ cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
   h <- nestSnaplet "" heist $ heistInit "templates"
   r <- nestSnaplet "" redis redisDBInitConf
   (w,splices) <- liftIO $ initWordpress config (view (snapletValue . redisConnection) r) (T.decodeUtf8 . rqURI <$> getRequest) wordpress
-  addConfig h $ set scCompiledSplices splices mempty
+  addConfig h $ set scInterpretedSplices splices mempty
   return $ App h r w
   where config = (def { wpConfEndpoint = ""
                       , wpConfRequester = Right $ Requester (\_ _ -> return "")
@@ -380,7 +380,8 @@ shouldRenderTo (tags, response) match =
   snap (route []) (renderingApp [("test", tags)] response) $
     it (T.unpack $ tags <> " should render to match " <> match) $
       do t <- eval (do st <- getHeistState
-                       builder <- (fst . fromJust) $ renderTemplate st "test"
+                       res <- renderTemplate st "test"
+                       let builder = fst . fromJust $ res
                        return $ T.decodeUtf8 $ toByteString builder)
          setResult $
            if match == t

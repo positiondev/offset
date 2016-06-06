@@ -24,8 +24,7 @@ import           Data.Text               (Text)
 import qualified Data.Text               as T
 import qualified Data.Vector             as V
 import           Heist
-import           Heist.Compiled
-import           Heist.Compiled.LowLevel
+import           Heist.Interpreted
 import qualified Text.XmlHtml            as X
 
 import           Web.Offset.Field
@@ -53,26 +52,21 @@ wpPostsSplice :: (MonadState s m, MonadIO m) =>
               -> WPLens b s m
               -> Splice m
 wpPostsSplice wp extraFields wpLens =
-  do promise <- newEmptyPromise
-     outputChildren <- manyWithSplices runChildren (postSplices extraFields)
-                                                   (getPromise promise)
-     n <- getParamNode
-     attrs' <- runAttributesRaw (X.elementAttrs n)
-     tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
-     catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
-     return $ yieldRuntime $
-       do attrs <- attrs'
-          let postsQuery = parseQueryNode attrs
-          let wpKey = mkWPKey tagDict catDict postsQuery
-          res <- liftIO $ cachingGetRetry wp wpKey
-          case decode res of
-            Just posts -> do let postsW = extractPostIds posts
-                             Wordpress{..} <- lift (use wpLens)
-                             let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet $ postsW
-                             lift $ addPostIds wpLens (map fst postsND)
-                             putPromise promise (map snd postsND)
-                             codeGen outputChildren
-            Nothing -> codeGen (yieldPureText "")
+  do n <- getParamNode
+     attrs <- runAttributes (X.elementAttrs n)
+     tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
+     catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
+     let postsQuery = parseQueryNode attrs
+     let wpKey = mkWPKey tagDict catDict postsQuery
+     res <- liftIO $ cachingGetRetry wp wpKey
+     case decode res of
+       Just posts -> do let postsW = extractPostIds posts
+                        Wordpress{..} <- lift (use wpLens)
+                        let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet $ postsW
+                        lift $ addPostIds wpLens (map fst postsND)
+                        mapSplices (runChildrenWith . postSplices extraFields)
+                                   (map snd postsND)
+       Nothing -> return []
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
@@ -83,31 +77,26 @@ wpPostByPermalinkSplice :: (MonadState s m, MonadIO m) =>
                         -> WPLens b s m
                      -> Splice m
 wpPostByPermalinkSplice extraFields getURI wpLens =
-  do promise <- newEmptyPromise
-     outputChildren <- withSplices runChildren (postSplices extraFields) (getPromise promise)
-     return $ yieldRuntime $
-       do mperma <- parsePermalink <$> lift getURI
-          case mperma of
-            Nothing -> codeGen (yieldPureText "")
-            Just (year, month, slug) ->
-              do res <- lift $ wpGetPost wpLens (PostByPermalinkKey year month slug)
-                 case res of
-                   Just post -> do lift $ addPostIds wpLens [fst (extractPostId post)]
-                                   putPromise promise post
-                                   codeGen outputChildren
-                   _ -> codeGen (yieldPureText "")
+  do mperma <- parsePermalink <$> lift getURI
+     case mperma of
+       Nothing -> return []
+       Just (year, month, slug) ->
+         do res <- lift $ wpGetPost wpLens (PostByPermalinkKey year month slug)
+            case res of
+              Just post -> do lift $ addPostIds wpLens [fst (extractPostId post)]
+                              runChildrenWith (postSplices extraFields post)
+              _ -> return []
 
 wpNoPostDuplicatesSplice :: (MonadState s m, MonadIO m) =>
                             WPLens b s m
                          -> Splice m
 wpNoPostDuplicatesSplice wpLens =
-  return $ yieldRuntime $
-    do w@Wordpress{..} <- lift $ use wpLens
-       case requestPostSet of
-         Nothing -> lift $ assign wpLens
-                                  w{requestPostSet = (Just IntSet.empty)}
-         Just _ -> return ()
-       codeGen $ yieldPureText ""
+  do w@Wordpress{..} <- lift $ use wpLens
+     case requestPostSet of
+       Nothing -> lift $ assign wpLens
+                                w{requestPostSet = (Just IntSet.empty)}
+       Just _ -> return ()
+     return []
 
 wpPageSplice :: (MonadState s m, MonadIO m) =>
                 WPLens b s m
@@ -115,41 +104,39 @@ wpPageSplice :: (MonadState s m, MonadIO m) =>
 wpPageSplice wpLens =
   do n <- getParamNode
      case X.getAttribute "name" n of
-       Nothing -> return (yieldPureText "")
+       Nothing -> return []
        Just slug ->
-         return $ yieldRuntimeText $ do res <- lift $ wpGetPost wpLens (PageKey slug)
-                                        case res of
-                                          Just page -> case M.lookup "content" page of
-                                                         Just (String c) -> return c
-                                                         _ -> return ""
-                                          _ -> return ""
+         do res <- lift $ wpGetPost wpLens (PageKey slug)
+            return [X.TextNode $ case res of
+                                   Just page -> case M.lookup "content" page of
+                                                  Just (String c) -> c
+                                                  _ ->  ""
+                                   _ -> ""]
 
-postSplices :: (Functor m, Monad m) => [Field m] -> Splices (RuntimeSplice m Object -> Splice m)
-postSplices extra = mconcat (map buildSplice (mergeFields postFields extra))
-  where buildSplice (F n) =
-          transformName n ## pureSplice . textSplice $ getText n
-        buildSplice (P n splice) =
-          transformName n ## \o -> splice (getText n <$> o)
-        buildSplice (N n fs) = transformName n ## \o ->
-                                 withSplices runChildren
-                                                (mconcat $ map buildSplice fs)
-                                                (unObj . M.lookup n <$> o)
-        buildSplice (C n path) =
-          transformName n ## bindLater $ \o -> return (textSplice (getText (last path) . traverseObject (init path)) o)
-        buildSplice (CN n path fs) =
-          transformName n ## \o -> withSplices runChildren
-                                               (mconcat $ map buildSplice fs)
-                                               (traverseObject path <$> o)
-        buildSplice (M n fs) = transformName n ## \o ->
-                                 manyWithSplices runChildren
-                                                    (mconcat $ map buildSplice fs)
-                                                    (unArray . M.lookup n <$> o)
+postSplices :: (Functor m, Monad m) => [Field m] -> Object -> Splices (Splice m)
+postSplices extra object = mconcat (map (buildSplice object) (mergeFields postFields extra))
+  where buildSplice o (F n) =
+          transformName n ## textSplice $ getText n o
+        buildSplice o (P n splice) =
+          transformName n ## splice $ getText n o
+        buildSplice o (N n fs) =
+          transformName n ## runChildrenWith
+                                (mconcat $ map (buildSplice (unObj . M.lookup n $ o)) fs)
+        buildSplice o (C n path) =
+          transformName n ## textSplice (getText (last path) . traverseObject (init path) $ o)
+        buildSplice o (CN n path fs) =
+          transformName n ## runChildrenWith
+                               (mconcat $ map (buildSplice (traverseObject path o)) fs)
+        buildSplice o (M n fs) =
+          transformName n ##
+            mapSplices (runChildrenWith . (\oinner -> mconcat . map (buildSplice oinner) $ fs))
+                       (unArray . M.lookup n $ o)
+
         unObj (Just (Object o)) = o
         unObj _ = M.empty
         unArray (Just (Array v)) = map (unObj . Just) $ V.toList v
         unArray _ = []
-        traverseObject [] o = o
-        traverseObject (x:xs) o = traverseObject xs (unObj . M.lookup x $ o)
+        traverseObject pth o = foldl (\o x -> unObj . M.lookup x $ o) o pth
         getText n o = case M.lookup n o of
                         Just (String t) -> t
                         Just (Number i) -> T.pack $ show i
@@ -187,29 +174,26 @@ wpPrefetch :: (MonadState s m, MonadIO m) =>
            -> Splice m
 wpPrefetch wp =
   do n <- getParamNode
-     childrenRes <- runChildren
-     tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
-     catDict <- lift $ lookupTaxDict (TaxDictKey "category") wp
-     wpKeys' <- findPrefetchables tagDict catDict n
-     return $ yieldRuntime $
-       do wpKeys <- sequence wpKeys'
-          void $ liftIO $ concurrently $ map (cachingGet wp) wpKeys
-          codeGen childrenRes
+     tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
+     catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
+     wpKeys <- findPrefetchables tagDict catDict n
+     void $ liftIO $ concurrently $ map (cachingGet wp) wpKeys
+     runChildren
 
 findPrefetchables :: (MonadState s m, MonadIO m) =>
        (TaxSpec TagType -> TaxSpecId TagType)
     -> (TaxSpec CatType -> TaxSpecId CatType)
     -> X.Node
-    -> HeistT m IO [RuntimeSplice m WPKey]
+    -> HeistT m m [WPKey]
 findPrefetchables tdict cdict e@(X.Element "wpPosts" attrs' children) =
-  do attrs <- runAttributesRaw attrs'
+  do attrs <- runAttributes attrs'
      rest <- mapM (findPrefetchables tdict cdict) children
-     return $ [mkWPKey tdict cdict . parseQueryNode <$> attrs] <> concat rest
+     return $ [mkWPKey tdict cdict . parseQueryNode $ attrs] <> concat rest
 findPrefetchables tdict cdict e@(X.Element "wpPage" attrs' _) =
   case lookup "name" attrs' of
     Nothing -> return []
-    Just _ -> do attrs <- runAttributesRaw attrs'
-                 return [PageKey . fromJust . lookup "name" <$> attrs]
+    Just _ -> do attrs <- runAttributes attrs'
+                 return [PageKey . fromJust . lookup "name" $ attrs]
 findPrefetchables tdict cdict (X.Element _ _ children) =
   do rest <- mapM (findPrefetchables tdict cdict) children
      return $ concat rest
@@ -248,7 +232,7 @@ wpGetPost wpLens wpKey =
      liftIO $ getPost wp wpKey
 
 getPost :: Wordpress b -> WPKey -> IO (Maybe Object)
-getPost Wordpress{..} wpKey = do decodePost <$> cachingGetRetry wpKey
+getPost Wordpress{..} wpKey = decodePost <$> cachingGetRetry wpKey
   where decodePost :: Text -> Maybe Object
         decodePost t =
           do post' <- decodeJson t

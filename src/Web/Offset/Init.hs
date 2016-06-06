@@ -14,7 +14,7 @@ import qualified Database.Redis          as R
 import           Heist
 import Control.Monad.State
 import Data.Text (Text)
-import Heist.Compiled
+import Heist.Interpreted
 
 import           Web.Offset.Cache
 import           Web.Offset.Cache.Types

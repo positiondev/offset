@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE RecordWildCards   #-}
 
 module Web.Offset.Field where
 
@@ -9,11 +8,11 @@ import           Data.Monoid         ((<>))
 import           Data.Text           (Text)
 import qualified Data.Text           as T
 import           Heist
-import           Heist.Compiled
+import           Heist.Interpreted
 
 -- TODO(dbp 2014-10-14): date should be parsed and nested.
 data Field m = F Text -- A single flat field
-             | P Text (RuntimeSplice m Text -> Splice m) -- A customly parsed flat field
+             | P Text (Text -> Splice m) -- A customly parsed flat field
              | N Text [Field m] -- A nested object field
              | C Text [Text] -- A nested text field that is found by following the specified path
              | CN Text [Text] [Field m] -- A nested set of fields that is found by follwing the specified path
@@ -75,14 +74,11 @@ postFields = [F "ID"
                         ,M "post_tag" [F "ID", F "name", F "slug", F "count"]]
              ]
 
-dateSplice :: (Functor m, Monad m) => RuntimeSplice m Text -> Splice m
-dateSplice d = withSplices runChildren splices (parseDate <$> d)
-  where splices = do "wpYear" ## pureSplice $ textSplice fst3
-                     "wpMonth" ## pureSplice $ textSplice snd3
-                     "wpDay" ## pureSplice $ textSplice trd3
-        parseDate :: Text -> (Text,Text,Text)
+dateSplice :: (Functor m, Monad m) => Text -> Splice m
+dateSplice date = runChildrenWith (let (y,m,d) = parseDate date in
+                                   do "wpYear" ## textSplice y
+                                      "wpMonth" ## textSplice m
+                                      "wpDay" ## textSplice d)
+  where parseDate :: Text -> (Text,Text,Text)
         parseDate = tuplify . T.splitOn "-" . T.takeWhile (/= 'T')
         tuplify (y:m:d:_) = (y,m,d)
-        fst3 (a,_,_) = a
-        snd3 (_,a,_) = a
-        trd3 (_,_,a) = a
