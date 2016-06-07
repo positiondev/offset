@@ -4,14 +4,16 @@
 module Web.Offset.Queries where
 
 import           Data.Monoid
-import           Data.Text        (Text)
+import           Data.Text              (Text)
 
+import           Web.Offset.Cache
+import           Web.Offset.Cache.Types
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
 lookupTaxDict :: WPKey -> Wordpress b -> IO (TaxSpec a -> TaxSpecId a)
-lookupTaxDict key@(TaxDictKey resName) Wordpress{..} =
-  do res <- decodeJsonErr <$> cachingGetError key
+lookupTaxDict key@(TaxDictKey resName) wp@Wordpress{..} =
+  do res <- decodeJsonErr <$> cachingGetErrorInt (cacheInternals { wpCacheSet = wpCacheSetInt (runRedis cacheInternals) (CacheSeconds (12 * 60 * 60))}) key
      return (getSpecId $ TaxDict res resName)
 
 getSpecId :: TaxDict a -> TaxSpec a -> TaxSpecId a

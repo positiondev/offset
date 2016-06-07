@@ -56,6 +56,7 @@ data WordpressInt b =
                   , startReqMutex :: WPKey -> IO Bool
                   , wpRequest     :: WPKey -> IO Text
                   , stopReqMutex  :: WPKey -> IO ()
+                  , runRedis      :: RunRedis
                   }
 
 data TaxSpec a = TaxPlus Text | TaxMinus Text deriving (Eq, Ord)

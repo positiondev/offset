@@ -39,14 +39,13 @@ initWordpress wpconf redis getURI wpLens = do
                 Left (u,p) -> wreqRequester logf u p
                 Right r -> r
   active <- newMVar Map.empty
-  -- NOTE(dbp 2015-12-17): At init, we want to get new tag/category lookups.
-  wpExpirePostInt rrunRedis (TaxDictKey "post_tag")
-  wpExpirePostInt rrunRedis (TaxDictKey "category")
   let wpInt = WordpressInt{ wpRequest = wpRequestInt wpReq (wpConfEndpoint wpconf)
                           , wpCacheSet = wpCacheSetInt rrunRedis (wpConfCacheBehavior wpconf)
                           , wpCacheGet = wpCacheGetInt rrunRedis (wpConfCacheBehavior wpconf)
                           , startReqMutex = startReqMutexInt active
-                          , stopReqMutex = stopReqMutexInt active }
+                          , stopReqMutex = stopReqMutexInt active
+                          , runRedis = rrunRedis
+                          }
   let wp = Wordpress{ requestPostSet = Nothing
                     , wpExpireAggregates = wpExpireAggregatesInt rrunRedis
                     , wpExpirePost = wpExpirePostInt rrunRedis
