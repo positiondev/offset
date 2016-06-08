@@ -13,8 +13,11 @@ import           Web.Offset.Utils
 
 lookupTaxDict :: WPKey -> Wordpress b -> IO (TaxSpec a -> TaxSpecId a)
 lookupTaxDict key@(TaxDictKey resName) wp@Wordpress{..} =
-  do res <- decodeJsonErr <$> cachingGetErrorInt (cacheInternals { wpCacheSet = wpCacheSetInt (runRedis cacheInternals) (CacheSeconds (12 * 60 * 60))}) key
-     return (getSpecId $ TaxDict res resName)
+  do resp <- cachingGetErrorInt (cacheInternals { wpCacheSet = wpCacheSetInt (runRedis cacheInternals) (CacheSeconds (12 * 60 * 60))}) key
+     case decodeJson resp of
+       Nothing -> do wpExpirePostInt (runRedis cacheInternals) key
+                     terror $ "Unparsable JSON: " <> resp
+       Just res -> return (getSpecId $ TaxDict res resName)
 
 getSpecId :: TaxDict a -> TaxSpec a -> TaxSpecId a
 getSpecId taxDict spec =

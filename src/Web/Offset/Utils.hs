@@ -32,11 +32,6 @@ decode = J.decodeStrict . T.encodeUtf8
 encode :: (ToJSON a) => a -> Text
 encode = TL.toStrict . TL.decodeUtf8 . J.encode
 
-decodeJsonErr :: FromJSON a => Text -> a
-decodeJsonErr res = case decode res of
-                      Nothing -> terror $ "Unparsable JSON: " <> res
-                      Just val -> val
-
 decodeJson :: FromJSON a => Text -> Maybe a
 decodeJson res = decode res
 
