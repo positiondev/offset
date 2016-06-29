@@ -4,24 +4,26 @@
 module Web.Offset.Field where
 
 import           Control.Applicative ((<$>))
+import           Control.Monad.State
 import           Data.Monoid         ((<>))
 import           Data.Text           (Text)
 import qualified Data.Text           as T
 import           Heist
 import           Heist.Interpreted
+import           Larceny
 
 -- TODO(dbp 2014-10-14): date should be parsed and nested.
-data Field m = F Text -- A single flat field
-             | P Text (Text -> Splice m) -- A customly parsed flat field
-             | N Text [Field m] -- A nested object field
+data Field s = F Text -- A single flat field
+             | P Text (Text -> Fill s) -- A customly parsed flat field
+             | N Text [Field s] -- A nested object field
              | C Text [Text] -- A nested text field that is found by following the specified path
-             | CN Text [Text] [Field m] -- A nested set of fields that is found by follwing the specified path
-             | M Text [Field m] -- A list field, where each element is an object
+             | CN Text [Text] [Field s] -- A nested set of fields that is found by follwing the specified path
+             | M Text [Field s] -- A list field, where each element is an object
 
-mergeFields :: (Functor m, Monad m) => [Field m] -> [Field m] -> [Field m]
+mergeFields :: [Field s] -> [Field s] -> [Field s]
 mergeFields fo [] = fo
 mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
-  where overrideInList :: (Functor m, Monad m) => Bool -> Field m -> [Field m] -> [Field m]
+  where overrideInList :: Bool -> Field s -> [Field s] -> [Field s]
         overrideInList False fl [] = [fl]
         overrideInList True _ [] = []
         overrideInList v fl (m:ms) = (if matchesName m fl
@@ -40,7 +42,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
         mergeField (M _ left) (M nm right) = M nm (mergeFields left right)
         mergeField _ right = right
 
-instance (Functor m, Monad m) =>  Show (Field m) where
+instance Show (Field s) where
   show (F t) = "F(" <> T.unpack t <> ")"
   show (P t _) = "P(" <> T.unpack t <> ",{code})"
   show (N t n) = "N(" <> T.unpack t <> "," <> show n <> ")"
@@ -48,7 +50,7 @@ instance (Functor m, Monad m) =>  Show (Field m) where
   show (CN t p fs) = "C(" <> T.unpack t <> "," <> T.unpack (T.intercalate "/" p) <> ","<> show fs <> ")"
   show (M t m) = "M(" <> T.unpack t <> "," <> show m <> ")"
 
-postFields :: (Functor m, Monad m) => [Field m]
+postFields :: [Field s]
 postFields = [F "ID"
              ,F "title"
              ,F "status"
@@ -74,11 +76,12 @@ postFields = [F "ID"
                         ,M "post_tag" [F "ID", F "name", F "slug", F "count"]]
              ]
 
-dateSplice :: (Functor m, Monad m) => Text -> Splice m
-dateSplice date = runChildrenWith (let (y,m,d) = parseDate date in
-                                   do "wpYear" ## textSplice y
-                                      "wpMonth" ## textSplice m
-                                      "wpDay" ## textSplice d)
+dateSplice :: Text -> Fill s
+dateSplice date =
+  let (y,m,d) = parseDate date in
+  fill $ fills [( "wpYear", text y)
+               , ("wpMonth", text m)
+               , ("wpDay", text d)]
   where parseDate :: Text -> (Text,Text,Text)
         parseDate = tuplify . T.splitOn "-" . T.takeWhile (/= 'T')
         tuplify (y:m:d:_) = (y,m,d)

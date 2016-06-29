@@ -50,31 +50,6 @@ library
                      , containers
                      , vector
                      , attoparsec
+                     , larceny
   hs-source-dirs: src
   default-language:    Haskell2010
-
-Test-Suite test-offset
-    type:       exitcode-stdio-1.0
-    hs-source-dirs: spec
-    main-is: Main.hs
-    other-modules: Misc
-    build-depends:     base
-                     , heist
-                     , hspec-snap
-                     , hspec >= 2
-                     , hspec-core
-                     , snap
-                     , offset
-                     , blaze-builder
-                     , snaplet-redis
-                     , lens
-                     , data-default
-                     , text
-                     , xmlhtml
-                     , mtl
-                     , either
-                     , unordered-containers
-                     , aeson
-                     , containers
-                     , hedis
-    default-language: Haskell2010

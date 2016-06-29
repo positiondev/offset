@@ -2,6 +2,8 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Web.Offset.Splices where
 
@@ -26,6 +28,7 @@ import qualified Data.Vector             as V
 import           Heist
 import           Heist.Interpreted
 import qualified Text.XmlHtml            as X
+import           Larceny
 
 import           Web.Offset.Field
 import           Web.Offset.Posts
@@ -33,104 +36,102 @@ import           Web.Offset.Queries
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
-wordpressSplices :: (MonadState s m, MonadIO m) =>
-                    Wordpress b
-                 -> [Field m]
-                 -> m Text
-                 -> WPLens b s m
-                 -> Splices (Splice m)
-wordpressSplices wp extraFields getURI wpLens =
-  do "wpPosts" ## wpPostsSplice wp extraFields wpLens
-     "wpPostByPermalink" ## wpPostByPermalinkSplice extraFields getURI wpLens
-     "wpPage" ## wpPageSplice wpLens
-     "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
-     "wp" ## wpPrefetch wp
+wordpressFills ::   Wordpress b
+                 -> [Field s]
+                 -> StateT s IO Text
+                 -> WPLens b s
+                 -> Larceny.Substitutions s
+wordpressFills wp extraFields getURI wpLens =
+  fills [ ("wpPosts", wpPostsFills wp extraFields wpLens)
+        , ("wpPostByPermalink", wpPostByPermalinkSplice extraFields getURI wpLens)
+        , ("wpPage", wpPageSplice wpLens)
+        , ("wpNoPostDuplicates", wpNoPostDuplicatesSplice wpLens)
+        , ("wp", wpPrefetch wp) ]
 
-wpPostsSplice :: (MonadState s m, MonadIO m) =>
-                 Wordpress b
-              -> [Field m]
-              -> WPLens b s m
-              -> Splice m
-wpPostsSplice wp extraFields wpLens =
-  do n <- getParamNode
-     attrs <- runAttributes (X.elementAttrs n)
+wpPostsFills ::  Wordpress b
+              -> [Field s]
+              -> WPLens b s
+              -> Fill s
+wpPostsFills wp extraFields wpLens = \_m (pth, tpl) lib ->
+  do --n <- undefined--getParamNode
+     --attrs <- undefined --runAttributes (X.elementAttrs n)
      tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
      catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
-     let postsQuery = parseQueryNode attrs
+     let postsQuery = parseQueryNode [] -- attrs
      let wpKey = mkWPKey tagDict catDict postsQuery
      res <- liftIO $ cachingGetRetry wp wpKey
      case decode res of
        Just posts -> do let postsW = extractPostIds posts
-                        Wordpress{..} <- lift (use wpLens)
+                        Wordpress{..} <- undefined -- lift $ use wpLens
                         let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet $ postsW
-                        lift $ addPostIds wpLens (map fst postsND)
-                        mapSplices (runChildrenWith . postSplices extraFields)
-                                   (map snd postsND)
-       Nothing -> return []
+                        addPostIds wpLens (map fst postsND)
+                        T.concat <$>  mapM
+                          (\n -> runTemplate tpl pth (postSplices extraFields n) lib)
+                          (map snd postsND)
+       Nothing -> return ""
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
 
-wpPostByPermalinkSplice :: (MonadState s m, MonadIO m) =>
-                           [Field m]
-                        -> m Text
-                        -> WPLens b s m
-                     -> Splice m
-wpPostByPermalinkSplice extraFields getURI wpLens =
-  do mperma <- parsePermalink <$> lift getURI
+-- maybe done
+wpPostByPermalinkSplice :: [Field s]
+                        -> StateT s IO Text
+                        -> WPLens b s
+                        -> Fill s
+wpPostByPermalinkSplice extraFields getURI wpLens _m (pth, Template tpl) l =
+  do uri <- getURI
+     let mperma = parsePermalink uri
      case mperma of
-       Nothing -> return []
+       Nothing -> return ""
        Just (year, month, slug) ->
-         do res <- lift $ wpGetPost wpLens (PostByPermalinkKey year month slug)
+         do res <- wpGetPost wpLens (PostByPermalinkKey year month slug)
             case res of
-              Just post -> do lift $ addPostIds wpLens [fst (extractPostId post)]
-                              runChildrenWith (postSplices extraFields post)
-              _ -> return []
+              Just post -> do addPostIds wpLens [fst (extractPostId post)]
+                              tpl pth (postSplices extraFields post) l
+              _ -> return ""
 
-wpNoPostDuplicatesSplice :: (MonadState s m, MonadIO m) =>
-                            WPLens b s m
-                         -> Splice m
-wpNoPostDuplicatesSplice wpLens =
-  do w@Wordpress{..} <- lift $ use wpLens
+-- maybe done
+wpNoPostDuplicatesSplice :: WPLens b s -> Fill s
+wpNoPostDuplicatesSplice wpLens _m _t _l =
+  do w@Wordpress{..} <- use wpLens
      case requestPostSet of
-       Nothing -> lift $ assign wpLens
-                                w{requestPostSet = (Just IntSet.empty)}
+       Nothing -> assign wpLens
+                    w{requestPostSet = Just IntSet.empty}
        Just _ -> return ()
-     return []
+     return ""
 
-wpPageSplice :: (MonadState s m, MonadIO m) =>
-                WPLens b s m
-             -> Splice m
+-- maybe done
+wpPageSplice :: WPLens b s -> Fill s
 wpPageSplice wpLens =
-  do n <- getParamNode
-     case X.getAttribute "name" n of
-       Nothing -> return []
-       Just slug ->
-         do res <- lift $ wpGetPost wpLens (PageKey slug)
-            return [X.TextNode $ case res of
-                                   Just page -> case M.lookup "content" page of
-                                                  Just (String c) -> c
-                                                  _ ->  ""
-                                   _ -> ""]
+  useAttrs (a "name" pageFill)
+  where pageFill Nothing _ = text ""
+        pageFill (Just slug) _ = \_m _t _l ->
+         do res <- wpGetPost wpLens (PageKey slug)
+            return $ case res of
+                       Just page -> case M.lookup "content" page of
+                                      Just (String c) -> c
+                                      _ -> ""
+                       _ -> ""
 
-postSplices :: (Functor m, Monad m) => [Field m] -> Object -> Splices (Splice m)
-postSplices extra object = mconcat (map (buildSplice object) (mergeFields postFields extra))
+-- maybe done
+postSplices :: [Field s] -> Object -> Substitutions s
+postSplices extra object = fills (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
-          transformName n ## textSplice $ getText n o
-        buildSplice o (P n splice) =
-          transformName n ## splice $ getText n o
+          (transformName n, text $ getText n o)
+        buildSplice o (P n fill') =
+          (transformName n, fill' $ getText n o)
         buildSplice o (N n fs) =
-          transformName n ## runChildrenWith
-                                (mconcat $ map (buildSplice (unObj . M.lookup n $ o)) fs)
+          (transformName n, fill $ fills
+                            (map (buildSplice (unObj . M.lookup n $ o)) fs))
         buildSplice o (C n path) =
-          transformName n ## textSplice (getText (last path) . traverseObject (init path) $ o)
+          (transformName n, text (getText (last path) . traverseObject (init path) $ o))
         buildSplice o (CN n path fs) =
-          transformName n ## runChildrenWith
-                               (mconcat $ map (buildSplice (traverseObject path o)) fs)
+          (transformName n, fill $ fills
+                            (map (buildSplice (traverseObject path o)) fs))
         buildSplice o (M n fs) =
-          transformName n ##
-            mapSplices (runChildrenWith . (\oinner -> mconcat . map (buildSplice oinner) $ fs))
-                       (unArray . M.lookup n $ o)
+          (transformName n,
+            mapFills (\oinner -> fills $ map (buildSplice oinner) fs)
+                       (unArray . M.lookup n $ o))
 
         unObj (Just (Object o)) = o
         unObj _ = M.empty
@@ -168,36 +169,52 @@ mkPostsQuery l n o p ts cs us =
               , quser = us
               }
 
+wpPrefetch :: Wordpress b
+           -> Fill s
+wpPrefetch wp _m t@(p, tpl) l = do
+    tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
+    catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
+    --wpKeys <- liftIO $ findPrefetchables tagDict catDict t
+    --void $ liftIO $ concurrently $ map (cachingGet wp) wpKeys
+    Larceny.runTemplate tpl p (prefetchFills tagDict catDict) l
 
-wpPrefetch :: (MonadState s m, MonadIO m) =>
-              Wordpress b
-           -> Splice m
-wpPrefetch wp =
-  do n <- getParamNode
-     tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
-     catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
-     wpKeys <- findPrefetchables tagDict catDict n
-     void $ liftIO $ concurrently $ map (cachingGet wp) wpKeys
-     runChildren
+prefetchFills tdict cdict =
+  fills [ ("wpPosts", wpPostsPrefetch tdict cdict)
+        , ("wpPage", wpPagePrefetch tdict cdict) ]
 
-findPrefetchables :: (MonadState s m, MonadIO m) =>
-       (TaxSpec TagType -> TaxSpecId TagType)
-    -> (TaxSpec CatType -> TaxSpecId CatType)
-    -> X.Node
-    -> HeistT m m [WPKey]
-findPrefetchables tdict cdict e@(X.Element "wpPosts" attrs' children) =
-  do attrs <- runAttributes attrs'
-     rest <- mapM (findPrefetchables tdict cdict) children
-     return $ [mkWPKey tdict cdict . parseQueryNode $ attrs] <> concat rest
-findPrefetchables tdict cdict e@(X.Element "wpPage" attrs' _) =
+wpPostsPrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
+                -> (TaxSpec CatType -> TaxSpecId CatType)
+                -> Fill s
+wpPostsPrefetch tdict cdict =
+  \_ _ _ -> do liftIO $ putStrLn "found a post"
+               return ""
+
+
+wpPagePrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
+                -> (TaxSpec CatType -> TaxSpecId CatType)
+                -> Fill s
+wpPagePrefetch tdict cdict =
+  \_ _ _ -> do liftIO $ putStrLn "found a page"
+               return ""
+
+{--
+findPrefetchables :: (TaxSpec TagType -> TaxSpecId TagType)
+                  -> (TaxSpec CatType -> TaxSpecId CatType)
+                  -> (Path, Larceny.Template s)
+                  -> IO [WPKey]
+findPrefetchables tdict cdict tpl = -- wpPosts
+  do attrs <- undefined
+     rest <- findPrefetchables tdict cdict tpl
+     return $ [mkWPKey tdict cdict . parseQueryNode $ attrs] <> rest
+findPrefetchables tdict cdict _ = -- wpPage
   case lookup "name" attrs' of
     Nothing -> return []
-    Just _ -> do attrs <- runAttributes attrs'
+    Just _ -> do attrs <- undefined
                  return [PageKey . fromJust . lookup "name" $ attrs]
-findPrefetchables tdict cdict (X.Element _ _ children) =
+findPrefetchables tdict cdict tpl = -- other tags
   do rest <- mapM (findPrefetchables tdict cdict) children
      return $ concat rest
-findPrefetchables _ _ _ = return []
+findPrefetchables _ _ _ = return [] -- text or comment --}
 
 mkWPKey :: (TaxSpec TagType -> TaxSpecId TagType)
     -> (TaxSpec CatType -> TaxSpecId CatType)
@@ -226,7 +243,7 @@ parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
                            ,T.reverse $ T.pack htnom
                            ,T.reverse $ T.pack guls)
 
-wpGetPost :: (MonadState s m, MonadIO m) => WPLens b s m -> WPKey -> m (Maybe Object)
+wpGetPost :: (MonadState s m, MonadIO m) => WPLens b s -> WPKey -> m (Maybe Object)
 wpGetPost wpLens wpKey =
   do wp <- use wpLens
      liftIO $ getPost wp wpKey
@@ -248,8 +265,8 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
         f (False, rest) next = (False, T.snoc rest next)
 
 -- Move this into Init.hs (should retrieve from Wordpress data structure)
-addPostIds :: (MonadState s m, MonadIO m) => WPLens b s m -> [Int] -> m ()
+addPostIds :: (MonadState s m, MonadIO m) => WPLens b s -> [Int] -> m ()
 addPostIds wpLens ids =
   do w@Wordpress{..} <- use wpLens
      assign wpLens
-            w{requestPostSet = ((`IntSet.union` (IntSet.fromList ids)) <$> requestPostSet) }
+            w{requestPostSet = (`IntSet.union` IntSet.fromList ids) <$> requestPostSet }

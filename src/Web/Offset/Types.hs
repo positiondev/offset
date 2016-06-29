@@ -35,10 +35,10 @@ data Wordpress b =
                , cachingGetRetry    :: WPKey -> IO Text
                , cachingGetError    :: WPKey -> IO Text
                , wpLogger           :: Text -> IO ()
-               , cacheInternals     :: WordpressInt b
+               , cacheInternals     :: WordpressInt (StateT b IO Text)
                }
 
-type WPLens b s m = (MonadIO m, MonadState s m) => Lens' s (Wordpress b)
+type WPLens b s = Lens' s (Wordpress b)
 
 type UserPassword = (Text, Text)
 
