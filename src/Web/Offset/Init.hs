@@ -57,4 +57,4 @@ initWordpress wpconf redis getURI wpLens = do
                     , wpLogger = logf
                     }
   let extraFields = wpConfExtraFields wpconf
-  return (wp, wordpressFills wp extraFields getURI wpLens)
+  return (wp, wordpressSubs wp extraFields getURI wpLens)

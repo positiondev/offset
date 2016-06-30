@@ -1,9 +1,25 @@
-resolver: lts-3.10
-
+flags: {}
 packages:
 - '.'
+- 'example'
 - location:
-    git: https://github.com/dbp/snaplet-redis
-    commit: fe25d41fec273e2ec68d13e65faec1d2b3fa1348
+    git: https://github.com/positiondev/larceny.git
+    commit: e11848580cf5c759e61cce7d521edd0b8742fd32
   extra-dep: true
-extra-deps: []
+extra-deps:
+- aeson-0.11.0.0
+- base-orphans-0.5.4
+- conduit-extra-1.1.13.1
+- directory-1.2.6.3
+- fail-4.9.0.0
+- hspec-2.2.3
+- hspec-core-2.2.3
+- hspec-discover-2.2.3
+- text-1.2.2.0
+- vector-binary-instances-0.2.3.2
+- vector-th-unbox-0.2.1.6
+- cereal-text-0.1.0.2
+- digestive-functors-heist-0.8.6.2
+- logging-3.0.4
+- wai-session-clientsession-0.1
+resolver: lts-5.0

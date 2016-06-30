@@ -36,23 +36,23 @@ import           Web.Offset.Queries
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
-wordpressFills ::   Wordpress b
+wordpressSubs ::   Wordpress b
                  -> [Field s]
                  -> StateT s IO Text
                  -> WPLens b s
                  -> Larceny.Substitutions s
-wordpressFills wp extraFields getURI wpLens =
-  fills [ ("wpPosts", wpPostsFills wp extraFields wpLens)
-        , ("wpPostByPermalink", wpPostByPermalinkSplice extraFields getURI wpLens)
-        , ("wpPage", wpPageSplice wpLens)
-        , ("wpNoPostDuplicates", wpNoPostDuplicatesSplice wpLens)
-        , ("wp", wpPrefetch wp) ]
+wordpressSubs wp extraFields getURI wpLens =
+  fills [ ("wpPosts", wpPostsFill wp extraFields wpLens)
+        , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
+        , ("wpPage", wpPageFill wpLens)
+        , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
+        , ("wp", wpPrefetch wp extraFields getURI wpLens) ]
 
-wpPostsFills ::  Wordpress b
+wpPostsFill ::  Wordpress b
               -> [Field s]
               -> WPLens b s
               -> Fill s
-wpPostsFills wp extraFields wpLens = \_m (pth, tpl) lib ->
+wpPostsFill wp extraFields wpLens = \_m (pth, tpl) lib ->
   do --n <- undefined--getParamNode
      --attrs <- undefined --runAttributes (X.elementAttrs n)
      tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
@@ -62,11 +62,12 @@ wpPostsFills wp extraFields wpLens = \_m (pth, tpl) lib ->
      res <- liftIO $ cachingGetRetry wp wpKey
      case decode res of
        Just posts -> do let postsW = extractPostIds posts
-                        Wordpress{..} <- undefined -- lift $ use wpLens
-                        let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet $ postsW
+                        Wordpress{..} <- use wpLens
+                        let postsND = take (qlimit postsQuery)
+                                      . noDuplicates requestPostSet $ postsW
                         addPostIds wpLens (map fst postsND)
                         T.concat <$>  mapM
-                          (\n -> runTemplate tpl pth (postSplices extraFields n) lib)
+                          (\n -> runTemplate tpl pth (postSubs extraFields n) lib)
                           (map snd postsND)
        Nothing -> return ""
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
@@ -74,11 +75,11 @@ wpPostsFills wp extraFields wpLens = \_m (pth, tpl) lib ->
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
 
 -- maybe done
-wpPostByPermalinkSplice :: [Field s]
+wpPostByPermalinkFill :: [Field s]
                         -> StateT s IO Text
                         -> WPLens b s
                         -> Fill s
-wpPostByPermalinkSplice extraFields getURI wpLens _m (pth, Template tpl) l =
+wpPostByPermalinkFill extraFields getURI wpLens _m (pth, Template tpl) l =
   do uri <- getURI
      let mperma = parsePermalink uri
      case mperma of
@@ -87,12 +88,12 @@ wpPostByPermalinkSplice extraFields getURI wpLens _m (pth, Template tpl) l =
          do res <- wpGetPost wpLens (PostByPermalinkKey year month slug)
             case res of
               Just post -> do addPostIds wpLens [fst (extractPostId post)]
-                              tpl pth (postSplices extraFields post) l
+                              tpl pth (postSubs extraFields post) l
               _ -> return ""
 
 -- maybe done
-wpNoPostDuplicatesSplice :: WPLens b s -> Fill s
-wpNoPostDuplicatesSplice wpLens _m _t _l =
+wpNoPostDuplicatesFill :: WPLens b s -> Fill s
+wpNoPostDuplicatesFill wpLens _m _t _l =
   do w@Wordpress{..} <- use wpLens
      case requestPostSet of
        Nothing -> assign wpLens
@@ -101,8 +102,8 @@ wpNoPostDuplicatesSplice wpLens _m _t _l =
      return ""
 
 -- maybe done
-wpPageSplice :: WPLens b s -> Fill s
-wpPageSplice wpLens =
+wpPageFill :: WPLens b s -> Fill s
+wpPageFill wpLens =
   useAttrs (a "name" pageFill)
   where pageFill Nothing _ = text ""
         pageFill (Just slug) _ = \_m _t _l ->
@@ -114,8 +115,8 @@ wpPageSplice wpLens =
                        _ -> ""
 
 -- maybe done
-postSplices :: [Field s] -> Object -> Substitutions s
-postSplices extra object = fills (map (buildSplice object) (mergeFields postFields extra))
+postSubs :: [Field s] -> Object -> Substitutions s
+postSubs extra object = fills (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
           (transformName n, text $ getText n o)
         buildSplice o (P n fill') =
@@ -170,15 +171,20 @@ mkPostsQuery l n o p ts cs us =
               }
 
 wpPrefetch :: Wordpress b
+           -> [Field s]
+           -> StateT s IO Text
+           -> WPLens b s
            -> Fill s
-wpPrefetch wp _m t@(p, tpl) l = do
+wpPrefetch wp extra uri wpLens _m t@(p, tpl) l = do
+    Wordpress{..} <- use wpLens
     tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
     catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
     --wpKeys <- liftIO $ findPrefetchables tagDict catDict t
     --void $ liftIO $ concurrently $ map (cachingGet wp) wpKeys
-    Larceny.runTemplate tpl p (prefetchFills tagDict catDict) l
+    Larceny.runTemplate tpl p (prefetchSubs tagDict catDict) l
+    Larceny.runTemplate tpl p (wordpressSubs wp extra uri wpLens) l
 
-prefetchFills tdict cdict =
+prefetchSubs tdict cdict =
   fills [ ("wpPosts", wpPostsPrefetch tdict cdict)
         , ("wpPage", wpPagePrefetch tdict cdict) ]
 
