@@ -53,3 +53,38 @@ library
                      , larceny
   hs-source-dirs: src
   default-language:    Haskell2010
+
+Test-Suite test-offset
+    type:       exitcode-stdio-1.0
+    hs-source-dirs: spec, src
+    main-is: Main.hs
+    other-modules: Misc
+    build-depends:     base
+                     , aeson
+                     , async
+                     , attoparsec
+                     , base < 4.9
+                     , blaze-builder
+                     , bytestring
+                     , configurator
+                     , containers
+                     , data-default
+                     , either
+                     , fn
+                     , hedis
+                     , directory
+                     , dotenv
+                     , wai
+                     , hspec >= 2
+                     , hspec-core
+                     , larceny
+                     , lens
+                     , map-syntax
+                     , mtl
+                     , text
+                     , time
+                     , unordered-containers
+                     , vector
+                     , wreq >= 0.3
+                     , xmlhtml >= 0.2.3.2
+    default-language: Haskell2010

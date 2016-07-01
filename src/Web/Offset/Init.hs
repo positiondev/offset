@@ -13,8 +13,6 @@ import qualified Data.Map                as Map
 import           Data.Monoid
 import           Data.Text               (Text)
 import qualified Database.Redis          as R
-import           Heist
-import           Heist.Interpreted
 import           Larceny
 
 import           Web.Offset.Cache

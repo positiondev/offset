@@ -2,10 +2,7 @@ flags: {}
 packages:
 - '.'
 - 'example'
-- location:
-    git: https://github.com/positiondev/larceny.git
-    commit: e11848580cf5c759e61cce7d521edd0b8742fd32
-  extra-dep: true
+- '../larceny'
 extra-deps:
 - aeson-0.11.0.0
 - base-orphans-0.5.4

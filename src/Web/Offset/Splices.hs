@@ -7,15 +7,17 @@
 
 module Web.Offset.Splices where
 
-import Control.Monad.State
+import           Control.Monad.State
 import           Control.Applicative     ((<|>))
 import           Control.Lens            hiding (children)
+import           Control.Concurrent.MVar
 import           Control.Monad           (void, sequence)
 import           Control.Monad.Trans     (lift, liftIO)
 import           Data.Aeson              hiding (decode, encode)
 import qualified Data.Attoparsec.Text    as A
 import           Data.Char               (toUpper)
 import qualified Data.HashMap.Strict     as M
+import qualified Data.Map as Map
 import           Data.IntSet             (IntSet)
 import qualified Data.IntSet             as IntSet
 import           Data.Map.Syntax
@@ -25,8 +27,6 @@ import qualified Data.Set                as Set
 import           Data.Text               (Text)
 import qualified Data.Text               as T
 import qualified Data.Vector             as V
-import           Heist
-import           Heist.Interpreted
 import qualified Text.XmlHtml            as X
 import           Larceny
 
@@ -40,7 +40,7 @@ wordpressSubs ::   Wordpress b
                  -> [Field s]
                  -> StateT s IO Text
                  -> WPLens b s
-                 -> Larceny.Substitutions s
+                 -> Substitutions s
 wordpressSubs wp extraFields getURI wpLens =
   fills [ ("wpPosts", wpPostsFill wp extraFields wpLens)
         , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
@@ -48,16 +48,14 @@ wordpressSubs wp extraFields getURI wpLens =
         , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
         , ("wp", wpPrefetch wp extraFields getURI wpLens) ]
 
-wpPostsFill ::  Wordpress b
-              -> [Field s]
-              -> WPLens b s
-              -> Fill s
-wpPostsFill wp extraFields wpLens = \_m (pth, tpl) lib ->
-  do --n <- undefined--getParamNode
-     --attrs <- undefined --runAttributes (X.elementAttrs n)
-     tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
+wpPostsFill :: Wordpress b
+            -> [Field s]
+            -> WPLens b s
+            -> Fill s
+wpPostsFill wp extraFields wpLens = \attrs tpl lib ->
+  do tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
      catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
-     let postsQuery = parseQueryNode [] -- attrs
+     let postsQuery = parseQueryNode (Map.toList attrs)
      let wpKey = mkWPKey tagDict catDict postsQuery
      res <- liftIO $ cachingGetRetry wp wpKey
      case decode res of
@@ -66,13 +64,20 @@ wpPostsFill wp extraFields wpLens = \_m (pth, tpl) lib ->
                         let postsND = take (qlimit postsQuery)
                                       . noDuplicates requestPostSet $ postsW
                         addPostIds wpLens (map fst postsND)
-                        T.concat <$>  mapM
-                          (\n -> runTemplate tpl pth (postSubs extraFields n) lib)
-                          (map snd postsND)
+                        wpPostsHelper extraFields tpl lib (map snd postsND)
        Nothing -> return ""
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         noDuplicates Nothing = id
-        noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
+        noDuplicates (Just wpPostIdSet) = filter (\(wpId,_) -> IntSet.notMember wpId wpPostIdSet)
+
+wpPostsHelper :: [Field s]
+              -> (Path, Template s)
+              -> Library s
+              -> [Object]
+              -> StateT s IO Text
+wpPostsHelper extraFields (pth, tpl) lib postsND =
+   T.concat <$> mapM (\wpPost -> runTemplate tpl pth (postSubs extraFields wpPost) lib)
+                     postsND
 
 -- maybe done
 wpPostByPermalinkFill :: [Field s]
@@ -105,8 +110,8 @@ wpNoPostDuplicatesFill wpLens _m _t _l =
 wpPageFill :: WPLens b s -> Fill s
 wpPageFill wpLens =
   useAttrs (a "name" pageFill)
-  where pageFill Nothing _ = text ""
-        pageFill (Just slug) _ = \_m _t _l ->
+  where pageFill Nothing = text ""
+        pageFill (Just slug) = \_m _t _l ->
          do res <- wpGetPost wpLens (PageKey slug)
             return $ case res of
                        Just page -> case M.lookup "content" page of
@@ -179,48 +184,36 @@ wpPrefetch wp extra uri wpLens _m t@(p, tpl) l = do
     Wordpress{..} <- use wpLens
     tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
     catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
-    --wpKeys <- liftIO $ findPrefetchables tagDict catDict t
-    --void $ liftIO $ concurrently $ map (cachingGet wp) wpKeys
-    Larceny.runTemplate tpl p (prefetchSubs tagDict catDict) l
+    mKeys <- liftIO $ newMVar []
+    Larceny.runTemplate tpl p (prefetchSubs tagDict catDict mKeys) l
+    wpKeys <- liftIO $ readMVar mKeys
+    void $ liftIO $ concurrently $ map cachingGet wpKeys
     Larceny.runTemplate tpl p (wordpressSubs wp extra uri wpLens) l
 
-prefetchSubs tdict cdict =
-  fills [ ("wpPosts", wpPostsPrefetch tdict cdict)
-        , ("wpPage", wpPagePrefetch tdict cdict) ]
+prefetchSubs tdict cdict mkeys =
+  fills [ ("wpPosts", wpPostsPrefetch tdict cdict mkeys)
+        , ("wpPage", useAttrs (a"name" $ wpPagePrefetch tdict cdict mkeys)) ]
 
 wpPostsPrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
                 -> (TaxSpec CatType -> TaxSpecId CatType)
+                -> MVar [WPKey]
                 -> Fill s
-wpPostsPrefetch tdict cdict =
-  \_ _ _ -> do liftIO $ putStrLn "found a post"
-               return ""
-
+wpPostsPrefetch tdict cdict mKeys attrs _ _ =
+  do let key = mkWPKey tdict cdict . parseQueryNode $ Map.toList attrs
+     liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
+     liftIO $ putStrLn "prefetching posts"
+     return ""
 
 wpPagePrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
-                -> (TaxSpec CatType -> TaxSpecId CatType)
-                -> Fill s
-wpPagePrefetch tdict cdict =
-  \_ _ _ -> do liftIO $ putStrLn "found a page"
-               return ""
-
-{--
-findPrefetchables :: (TaxSpec TagType -> TaxSpecId TagType)
-                  -> (TaxSpec CatType -> TaxSpecId CatType)
-                  -> (Path, Larceny.Template s)
-                  -> IO [WPKey]
-findPrefetchables tdict cdict tpl = -- wpPosts
-  do attrs <- undefined
-     rest <- findPrefetchables tdict cdict tpl
-     return $ [mkWPKey tdict cdict . parseQueryNode $ attrs] <> rest
-findPrefetchables tdict cdict _ = -- wpPage
-  case lookup "name" attrs' of
-    Nothing -> return []
-    Just _ -> do attrs <- undefined
-                 return [PageKey . fromJust . lookup "name" $ attrs]
-findPrefetchables tdict cdict tpl = -- other tags
-  do rest <- mapM (findPrefetchables tdict cdict) children
-     return $ concat rest
-findPrefetchables _ _ _ = return [] -- text or comment --}
+               -> (TaxSpec CatType -> TaxSpecId CatType)
+               -> MVar [WPKey]
+               -> Text
+               -> Fill s
+wpPagePrefetch tdict cdict mKeys name _attrs _tpl _lib =
+  do let key = PageKey name
+     liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
+     liftIO $ putStrLn "found a page"
+     return ""
 
 mkWPKey :: (TaxSpec TagType -> TaxSpecId TagType)
     -> (TaxSpec CatType -> TaxSpecId CatType)

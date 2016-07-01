@@ -8,8 +8,6 @@ import           Control.Monad.State
 import           Data.Monoid         ((<>))
 import           Data.Text           (Text)
 import qualified Data.Text           as T
-import           Heist
-import           Heist.Interpreted
 import           Larceny
 
 -- TODO(dbp 2014-10-14): date should be parsed and nested.

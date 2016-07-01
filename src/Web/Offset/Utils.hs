@@ -33,7 +33,7 @@ encode :: (ToJSON a) => a -> Text
 encode = TL.toStrict . TL.decodeUtf8 . J.encode
 
 decodeJson :: FromJSON a => Text -> Maybe a
-decodeJson res = decode res
+decodeJson = decode
 
 -- * -- IO Utilities -- * --
 performOnJust :: (o -> IO ()) -> Maybe o -> IO ()

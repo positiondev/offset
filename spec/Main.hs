@@ -9,48 +9,56 @@ module Main where
 import           Prelude                  hiding ((++))
 
 import           Blaze.ByteString.Builder
+import           Configuration.Dotenv     (loadFile)
 import           Control.Concurrent.MVar
 import           Control.Lens             hiding ((.=))
-import           Control.Monad            (void)
+import           Control.Monad            (mplus, void, when)
+import           Control.Monad.State      (StateT, evalStateT, get)
 import           Control.Monad.Trans      (liftIO)
 import           Data.Aeson               hiding (Success)
 import           Data.Default
-import qualified Data.HashMap.Strict      as M
+import qualified Data.HashMap.Strict      as HM
+import qualified Data.Map                 as M
 import           Data.Maybe
 import           Data.Monoid
 import qualified Data.Set                 as Set
-import           Data.Text                (Text)
+import           Data.Text                (Text, pack, unpack)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Lazy           as TL
 import qualified Data.Text.Lazy.Encoding  as TL
-import           Heist
-import           Heist.Interpreted
+import qualified Database.Redis           as R
+import           Larceny
 import qualified Misc
-import           Snap                     hiding (get)
-import           Snap.Snaplet.Heist
-import           Snap.Snaplet.RedisDB
+import           Network.Wai              (Application, Response, pathInfo,
+                                           rawPathInfo)
+import           System.Directory         (doesFileExist)
+import           System.Environment       (lookupEnv)
 import           Test.Hspec
 import           Test.Hspec.Core.Spec     (Result (..))
-import           Test.Hspec.Snap
 import qualified Text.XmlHtml             as X
+import           Web.Fn
 
 import           Web.Offset
 import           Web.Offset.Cache.Redis
+import           Web.Offset.Splices       (wpPostsHelper)
 import           Web.Offset.Types
 
 ----------------------------------------------------------
 -- Section 1: Example application used for testing.     --
 ----------------------------------------------------------
 
-data App = App { _heist     :: Snaplet (Heist App)
-               , _redis     :: Snaplet RedisDB
-               , _wordpress :: Wordpress App }
+data Ctxt = Ctxt { _req       :: FnRequest
+                 , _redis     :: R.Connection
+                 , _wordpress :: Wordpress Ctxt
+                 , _subs      :: Substitutions Ctxt
+                 , _lib       :: Library Ctxt
+                 }
 
-makeLenses ''App
+makeLenses ''Ctxt
 
-instance HasHeist App where
-  heistLens = subSnaplet heist
+instance RequestContext Ctxt where
+  requestLens = req
 
 enc a = TL.toStrict . TL.decodeUtf8 . encode $ a
 
@@ -66,6 +74,74 @@ jacobinFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-feat
                                                                                          ,F "height"
                                                                                          ,F "url"]]]]]
 
+
+larcenyServe :: Ctxt ->
+                IO (Maybe Response)
+larcenyServe ctxt =
+  let p = pathInfo . fst $ getRequest ctxt in
+  mplus <$> renderLarceny ctxt (T.intercalate "/" p)
+        <*> renderLarceny ctxt (T.intercalate "/" (p <> ["index"]))
+
+renderLarceny :: Ctxt ->
+                 Text ->
+                 IO (Maybe Response)
+renderLarceny ctxt name =
+  do let tpl = (ctxt ^. lib) M.! [name]
+     t <- evalStateT (runTemplate tpl [name] (ctxt ^. subs) (ctxt ^. lib)) ctxt
+     okHtml t
+
+
+fauxRequester :: Text -> Text -> [(Text, Text)] -> IO Text
+fauxRequester _ "/taxonomies/post_tag/terms" [] =
+  return $ enc [object [ "ID" .= (177 :: Int)
+                                 , "slug" .= ("home-featured" :: Text)
+                                 ]
+                         ,object [ "ID" .= (160 :: Int)
+                                 , "slug" .= ("featured-global" :: Text)
+                                 ]
+                         ]
+fauxRequester _ "/taxonomies/category/terms" [] =
+          return $ enc [object [ "ID" .= (159 :: Int)
+                                 , "slug" .= ("bookmarx" :: Text)
+                                 , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
+                                 ]
+                         ]
+fauxRequester response rqPath rqParams = do
+  --modifyMVar_ record $ (return . (<> [mkUrlUnescape url params]))
+  return response
+mkUrlUnescape url params = (url <> "?" <> (T.intercalate "&" $ map (\(k, v) -> k <> "=" <> v) params))
+
+
+initializer response =
+  do  -- Load environment variables, or use defaults
+     let lookupWithDefault key def = pack <$> fromMaybe def <$> lookupEnv key
+     envExists <- doesFileExist ".env"
+     when envExists $ loadFile False ".env"
+
+     -- get redis connection information
+     rconn <- R.connect R.defaultConnectInfo
+
+     let wpconf = def { wpConfEndpoint = ""
+                      , wpConfLogger = Just (putStrLn . T.unpack)
+                      , wpConfRequester = Right $ Requester (fauxRequester response)
+                      , wpConfExtraFields = []
+                      , wpConfCacheBehavior = NoCache
+                   }
+     let getUri :: StateT Ctxt IO Text
+         getUri = do ctxt <- get
+                     return (T.decodeUtf8 . rawPathInfo . fst . getRequest $ ctxt)
+     (wp,wpSubs) <- initWordpress wpconf rconn getUri wordpress
+     let allSubs = wpSubs
+     let tpls = mempty --Larceny.loadTemplates "templates"
+     return (Ctxt defaultFnRequest rconn wp allSubs tpls)
+
+app :: (Ctxt -> IO Response) -> IO Application
+app site  =
+  do ctxt <- initializer "wow!"
+     return (toWAI ctxt site)
+
+
+{--
 localApp :: [(Text, Text)] -> SnapletInit App App
 localApp tmpls =
   makeSnaplet "app" "App." Nothing $ do
@@ -144,12 +220,15 @@ cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
                       , wpConfRequester = Right $ Requester (\_ _ -> return "")
                       , wpConfCacheBehavior = CacheSeconds 10})
 
+--}
+
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
 ----------------------------------------------------------
-
-clearRedisCache :: Handler App App Bool
-clearRedisCache = runRedisDB redis $ rdelstar "wordpress:*"
+{-
+clearRedisCache :: IO Bool
+clearRedisCache = runRedis $ rdelstar "wordpress:*"
+-}
 
 article1 :: Value
 article1 = object [ "ID" .= ("1" :: Text)
@@ -157,28 +236,70 @@ article1 = object [ "ID" .= ("1" :: Text)
                   , "excerpt" .= ("summary" :: Text)
                   ]
 
+unobj :: Value -> Object
+unobj (Object x) = x
+unobj _ = error "Not an object"
+
+shouldRender :: Text
+             -> Text
+             -> Expectation
+shouldRender t output = do
+  ctxt <- initializer $ enc [ article1 ]
+  let s = _subs ctxt
+  rendered <- evalStateT (runTemplate (toTpl t) [] s mempty) ctxt
+  rendered `shouldBeIgnoreWhitespace` output
+
+toTpl tpl = parse (TL.fromStrict tpl)
+
+shouldBeIgnoreWhitespace a b =
+  T.replace " " "" a `shouldBe` T.replace " " "" b
+{-
+shouldQueryTo :: Text -> [Text] -> Spec
+shouldQueryTo hQuery wpQuery = do
+  record <- runIO $ newMVar []
+  ctxt <- liftIO $ initializer [("x", hQuery)] record
+  it ("query from " <> T.unpack hQuery) $ do
+      let s = _subs ctxt
+      evalStateT (runTemplate (toTpl t) [] s mempty) ctxt
+      x <- liftIO $ tryTakeMVar record
+      x `shouldBe` Just wpQuery-}
+
 main :: IO ()
 main = hspec $ do
   Misc.tests
   describe "<wpPosts>" $ do
-    ("<wp><wpPosts><wpTitle/></wpPosts></wp>", enc [article1]) `shouldRenderTo` "Foo bar"
-    ("<wp><wpPosts><wpID/></wpPosts></wp>", enc [article1]) `shouldRenderTo` "1"
-    ("<wp><wpPosts><wpExcerpt/></wpPosts></wp>", enc [article1]) `shouldRenderTo` "summary"
+    ("<wpTitle/>", unobj article1)
+      `shouldRenderWpPostsTo` "Foo bar"
+    ("<wpID/>", unobj article1)
+      `shouldRenderWpPostsTo` "1"
+    ("<wpExcerpt/>", unobj article1)
+      `shouldRenderWpPostsTo` "summary"
+
   describe "<wpNoPostDuplicates/>" $ do
-    ("<wp><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts></wp>", enc [article1])
-      `shouldRenderTo` "Foo bar"
-    ("<wp><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts></wp>", enc [article1])
-      `shouldRenderTo` "Foo barFoo bar"
-    ("<wp><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts></wp>", enc [article1])
-      `shouldRenderTo` "Foo barFoo bar"
-    ("<wp><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/></wp>", enc [article1])
-      `shouldRenderTo` "Foo barFoo bar"
+    it "should not duplicate any posts after call to wpNoPostDuplicates" $
+      let tpl = "<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>"
+      in do
+        ctxt <- initializer $ enc [article1]
+        let subs = _subs ctxt
+        rendered <- evalStateT (runTemplate (toTpl tpl) [] subs mempty) ctxt
+        rendered `shouldBeIgnoreWhitespace` "Foo bar"
+    it "should ignore duplicates if they were rendered before wpNoPostDuplicates" $ do
+      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts>"
+        `shouldRender` "Foo barFoo bar"
+      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>"
+        `shouldRender` "Foo barFoo bar"
+    it "should have no effect if it's at the end of the template" $
+      "<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>"
+        `shouldRender` "Foo barFoo bar"
+
+      {-
   describe "<wpPostByPermalink>" $ do
     shouldQueryAtUrl "/2009/10/the-post/"
                      "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
                      ["/posts?filter[year]=2009&filter[monthnum]=10&filter[name]=the-post"]
     shouldRenderAtUrl "/2009/10/the-post/" ("<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>", enc [article1]) "Foo bar"
-    shouldRenderAtUrl "/2009/10/the-post/" ("<wp><wpNoPostDuplicates/><wpPostByPermalink><wpTitle/></wpPostByPermalink><wpPosts limit=1><wpTitle/></wpPosts></wp>", enc [article1]) "Foo bar"
+    shouldRenderAtUrl "/2009/10/the-post/" ("<wp><wpNoPostDuplicates/><wpPostByPermalink><wpTitle/></wpPostByPermalink><wpPosts limit=1><wpTitle/></wpPosts></wp>", enc [article1]) "Foo bar" -}
+
 {-    describe "should grab post from cache if it's there" $
       let (Object a2) = article2 in
       shouldRenderAtUrlPreCache
@@ -187,6 +308,8 @@ main = hspec $ do
         "/2001/10/the-post/"
         "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
         "The post" -}
+
+{-
   describe "caching" $ snap (route []) cachingApp $ afterEval (void clearRedisCache) $ do
     it "should find nothing for a non-existent post" $ do
       p <- eval (wpCacheGet' wordpress (PostByPermalinkKey "2000" "1" "the-article"))
@@ -229,8 +352,8 @@ main = hspec $ do
     it "should be able to cache and retrieve post" $
       do let key = (PostKey 200)
          eval (wpCacheSet' wordpress key (enc article1))
-         eval (wpCacheGet' wordpress key) >>= shouldEqual (Just (enc article1))
-
+         eval (wpCacheGet' wordpress key) >>= shouldEqual (Just (enc article1))-}
+{-
   describe "generate queries from <wpPosts>" $ do
     shouldQueryTo
       "<wpPosts></wpPosts>"
@@ -279,9 +402,9 @@ main = hspec $ do
       ["/posts?filter[category__not_in]=159&filter[offset]=0&filter[posts_per_page]=20"]
     shouldQueryTo
       "<wp><div><wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts></div></wp>"
-      (replicate 2 "/posts?filter[category__in]=159&filter[offset]=0&filter[posts_per_page]=20")
+      (replicate 2 "/posts?filter[category__in]=159&filter[offset]=0&filter[posts_per_page]=20") -}
 
-
+{-
   describe "live tests (which require running wordpress server)" $
     snap (route
             [("/2014/10/a-first-post", render "single")
@@ -373,21 +496,27 @@ main = hspec $ do
            do c1 <- get "/cat1"
               c2 <- get "/cat3"
               c1 `shouldNotEqual` c2
+-}
 
 
-shouldRenderTo :: (Text, Text) -> Text -> Spec
-shouldRenderTo (tags, response) match =
-  snap (route []) (renderingApp [("test", tags)] response) $
-    it (T.unpack $ tags <> " should render to match " <> match) $
-      do t <- eval (do st <- getHeistState
-                       res <- renderTemplate st "test"
-                       let builder = fst . fromJust $ res
-                       return $ T.decodeUtf8 $ toByteString builder)
-         setResult $
-           if match == t
-             then Success
-             else Fail (show t <> " didn't match " <> show match)
+shouldRenderWpPostsTo :: (Text, Object) -> Text -> Spec
+shouldRenderWpPostsTo (tags, jsonResponse) match =
+  it (T.unpack $ tags <> " should render to " <> match) $ do
+    rendered <- liftIO $ evalStateT (wpPostsHelper [] ([], parse (TL.fromStrict tags)) mempty [jsonResponse]) ()
+    rendered `shouldBe` match
 
+shouldRenderDef :: (Text, Substitutions (), Library ()) -> Text -> Expectation
+shouldRenderDef (t', s, l) output = do
+    rendered <- evalStateT (runTemplate (parse (TL.fromStrict t')) ["default"] s l) ()
+    T.replace " " "" rendered `shouldBe`
+      T.replace " " "" output
+
+shouldRenderContaining :: ([Text], Text, Substitutions (), Library ()) -> Text -> Expectation
+shouldRenderContaining (pth, t, s, l) excerpt = do
+  rendered <- evalStateT (runTemplate (parse (TL.fromStrict t)) pth s l) ()
+  (excerpt `T.isInfixOf` rendered) `shouldBe` True
+
+{-
 shouldRenderAtUrl :: Text -> (Text, Text) -> Text -> Spec
 shouldRenderAtUrl url (tags, response) match =
   snap (route [(T.encodeUtf8 url, render "test")]) (renderingApp [("test", tags)] response) $
@@ -415,6 +544,7 @@ shouldQueryAtUrl url tmpl urls = do
 
 getWordpress :: Handler b v v
 getWordpress = view snapletValue <$> getSnapletState
+-}
 
 wpCacheGet' wpLens wpKey = do
   WordpressInt{..} <- cacheInternals <$> use wpLens

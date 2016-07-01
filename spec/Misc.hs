@@ -3,9 +3,10 @@
 
 module Misc where
 
+import           Control.Monad.State
 import           Data.Monoid
-import           Data.Text   (Text)
-import qualified Data.Text   as T
+import           Data.Text           (Text)
+import qualified Data.Text           as T
 import           Test.Hspec
 import           Web.Offset
 
@@ -15,7 +16,7 @@ shouldTransformTo from to =
 
 -- NOTE(dbp 2014-11-07): We define equality that is 'good enough' for testing.
 -- In truth, our definition is wrong because of the functions inside of 'P' variants.
-instance (Functor m, Monad m) =>  Eq (Field m) where
+instance Eq (Field s) where
   F t1 == F t2 = t1 == t2
   P t1 _ == P t2 _ = t1 == t2
   N t1 n1 == N t2 n2 = t1 == t2 && n1 == n2
@@ -24,25 +25,25 @@ instance (Functor m, Monad m) =>  Eq (Field m) where
 tests = do
   describe "mergeFields" $ do
     it "should be able to right-bias merge two Field trees" $
-      mergeFields [F "ID", F "status"] ([P "status" undefined] :: [Field IO])
+      mergeFields [F "ID", F "status"] ([P "status" undefined] :: [Field (StateT () IO Text)])
         `shouldBe` [F "ID", P "status" undefined]
     it "should be able to override nested fields" $
-      mergeFields [N "status" [F "foo"]] ([N "status" [P "foo" undefined]] :: [Field IO])
+      mergeFields [N "status" [F "foo"]] ([N "status" [P "foo" undefined]] :: [Field (StateT () IO Text)])
         `shouldBe` [N "status" [P "foo" undefined]]
     it "should be able to override nested fields, but not lose unaffected ones" $
-      mergeFields [N "status" [F "foo", F "bar"]] ([N "status" [M "foo" []]] :: [Field IO])
+      mergeFields [N "status" [F "foo", F "bar"]] ([N "status" [M "foo" []]] :: [Field (StateT () IO Text)])
         `shouldBe` [N "status" [M "foo" [], F "bar"]]
     it "should not change order of fields in left" $
-      mergeFields [F "ID", F "status"] ([F "status", F "ID"] :: [Field IO])
+      mergeFields [F "ID", F "status"] ([F "status", F "ID"] :: [Field (StateT () IO Text)])
         `shouldBe` [F "ID", F "status"]
     it "should be able to override nested with flat" $
-      mergeFields [N "status" [F "foo", F "bar"]] ([F "status"] :: [Field IO])
+      mergeFields [N "status" [F "foo", F "bar"]] ([F "status"] :: [Field (StateT () IO Text)])
         `shouldBe` [F "status"]
     it "should be able to override flat with nested" $
-      mergeFields ([F "status"] :: [Field IO]) [N "status" [F "foo", F "bar"]]
+      mergeFields ([F "status"] :: [Field (StateT () IO Text)]) [N "status" [F "foo", F "bar"]]
         `shouldBe` [N "status" [F "foo", F "bar"]]
     it "should be able to add to elements nested" $
-      mergeFields ([N "featured_image" [N "attachment_meta" [F "standard"]]] :: [Field IO])
+      mergeFields ([N "featured_image" [N "attachment_meta" [F "standard"]]] :: [Field (StateT () IO Text)])
                   [N "featured_image" [N "attachment_meta" [F "mag-featured"]]]
         `shouldBe` [N "featured_image" [N "attachment_meta" [F "standard"
                                                             ,F "mag-featured"]]]
