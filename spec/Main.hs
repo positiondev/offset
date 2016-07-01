@@ -109,6 +109,26 @@ fauxRequester _ "/taxonomies/category/terms" [] =
 fauxRequester response rqPath rqParams = do
   --modifyMVar_ record $ (return . (<> [mkUrlUnescape url params]))
   return response
+
+
+fauxRequester2 :: MVar [Text] -> Text -> [(Text, Text)] -> IO Text
+fauxRequester2 _  "/taxonomies/post_tag/terms" [] =
+  return $ enc [object [ "ID" .= (177 :: Int)
+                                 , "slug" .= ("home-featured" :: Text)
+                                 ]
+                         ,object [ "ID" .= (160 :: Int)
+                                 , "slug" .= ("featured-global" :: Text)
+                                 ]
+                         ]
+fauxRequester2 _ "/taxonomies/category/terms" [] =
+          return $ enc [object [ "ID" .= (159 :: Int)
+                                 , "slug" .= ("bookmarx" :: Text)
+                                 , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
+                                 ]
+                         ]
+fauxRequester2 record rqPath rqParams = do
+  modifyMVar_ record $ (return . (<> [mkUrlUnescape rqPath rqParams]))
+  return ""
 mkUrlUnescape url params = (url <> "?" <> (T.intercalate "&" $ map (\(k, v) -> k <> "=" <> v) params))
 
 
@@ -124,6 +144,30 @@ initializer response =
      let wpconf = def { wpConfEndpoint = ""
                       , wpConfLogger = Just (putStrLn . T.unpack)
                       , wpConfRequester = Right $ Requester (fauxRequester response)
+                      , wpConfExtraFields = []
+                      , wpConfCacheBehavior = NoCache
+                   }
+     let getUri :: StateT Ctxt IO Text
+         getUri = do ctxt <- get
+                     return (T.decodeUtf8 . rawPathInfo . fst . getRequest $ ctxt)
+     (wp,wpSubs) <- initWordpress wpconf rconn getUri wordpress
+     let allSubs = wpSubs
+     let tpls = mempty --Larceny.loadTemplates "templates"
+     return (Ctxt defaultFnRequest rconn wp allSubs tpls)
+
+
+initializer2 record =
+  do  -- Load environment variables, or use defaults
+     let lookupWithDefault key def = pack <$> fromMaybe def <$> lookupEnv key
+     envExists <- doesFileExist ".env"
+     when envExists $ loadFile False ".env"
+
+     -- get redis connection information
+     rconn <- R.connect R.defaultConnectInfo
+
+     let wpconf = def { wpConfEndpoint = ""
+                      , wpConfLogger = Just (putStrLn . T.unpack)
+                      , wpConfRequester = Right $ Requester (fauxRequester2 record)
                       , wpConfExtraFields = []
                       , wpConfCacheBehavior = NoCache
                    }
@@ -253,16 +297,16 @@ toTpl tpl = parse (TL.fromStrict tpl)
 
 shouldBeIgnoreWhitespace a b =
   T.replace " " "" a `shouldBe` T.replace " " "" b
-{-
+
 shouldQueryTo :: Text -> [Text] -> Spec
-shouldQueryTo hQuery wpQuery = do
-  record <- runIO $ newMVar []
-  ctxt <- liftIO $ initializer [("x", hQuery)] record
+shouldQueryTo hQuery wpQuery =
   it ("query from " <> T.unpack hQuery) $ do
+      record <- liftIO $ newMVar []
+      ctxt <- liftIO $ initializer2 record
       let s = _subs ctxt
-      evalStateT (runTemplate (toTpl t) [] s mempty) ctxt
+      evalStateT (runTemplate (toTpl hQuery) [] s mempty) ctxt
       x <- liftIO $ tryTakeMVar record
-      x `shouldBe` Just wpQuery-}
+      x `shouldBe` Just wpQuery
 
 main :: IO ()
 main = hspec $ do
@@ -353,7 +397,7 @@ main = hspec $ do
       do let key = (PostKey 200)
          eval (wpCacheSet' wordpress key (enc article1))
          eval (wpCacheGet' wordpress key) >>= shouldEqual (Just (enc article1))-}
-{-
+
   describe "generate queries from <wpPosts>" $ do
     shouldQueryTo
       "<wpPosts></wpPosts>"
@@ -402,7 +446,7 @@ main = hspec $ do
       ["/posts?filter[category__not_in]=159&filter[offset]=0&filter[posts_per_page]=20"]
     shouldQueryTo
       "<wp><div><wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts></div></wp>"
-      (replicate 2 "/posts?filter[category__in]=159&filter[offset]=0&filter[posts_per_page]=20") -}
+      (replicate 2 "/posts?filter[category__in]=159&filter[offset]=0&filter[posts_per_page]=20")
 
 {-
   describe "live tests (which require running wordpress server)" $
