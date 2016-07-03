@@ -77,9 +77,9 @@ postFields = [F "ID"
 dateSplice :: Text -> Fill s
 dateSplice date =
   let (y,m,d) = parseDate date in
-  fill $ fills [( "wpYear", text y)
-               , ("wpMonth", text m)
-               , ("wpDay", text d)]
+  fill $ subs [( "wpYear", text y)
+              , ("wpMonth", text m)
+              , ("wpDay", text d)]
   where parseDate :: Text -> (Text,Text,Text)
         parseDate = tuplify . T.splitOn "-" . T.takeWhile (/= 'T')
         tuplify (y:m:d:_) = (y,m,d)

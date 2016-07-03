@@ -42,7 +42,7 @@ wordpressSubs ::   Wordpress b
                  -> WPLens b s
                  -> Substitutions s
 wordpressSubs wp extraFields getURI wpLens =
-  fills [ ("wpPosts", wpPostsFill wp extraFields wpLens)
+  subs [ ("wpPosts", wpPostsFill wp extraFields wpLens)
         , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
         , ("wpPage", wpPageFill wpLens)
         , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
@@ -121,22 +121,22 @@ wpPageFill wpLens =
 
 -- maybe done
 postSubs :: [Field s] -> Object -> Substitutions s
-postSubs extra object = fills (map (buildSplice object) (mergeFields postFields extra))
+postSubs extra object = subs (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
           (transformName n, text $ getText n o)
         buildSplice o (P n fill') =
           (transformName n, fill' $ getText n o)
         buildSplice o (N n fs) =
-          (transformName n, fill $ fills
+          (transformName n, fill $ subs
                             (map (buildSplice (unObj . M.lookup n $ o)) fs))
         buildSplice o (C n path) =
           (transformName n, text (getText (last path) . traverseObject (init path) $ o))
         buildSplice o (CN n path fs) =
-          (transformName n, fill $ fills
+          (transformName n, fill $ subs
                             (map (buildSplice (traverseObject path o)) fs))
         buildSplice o (M n fs) =
           (transformName n,
-            mapFills (\oinner -> fills $ map (buildSplice oinner) fs)
+            mapSubs (\oinner -> subs $ map (buildSplice oinner) fs)
                        (unArray . M.lookup n $ o))
 
         unObj (Just (Object o)) = o
@@ -191,7 +191,7 @@ wpPrefetch wp extra uri wpLens _m t@(p, tpl) l = do
     Larceny.runTemplate tpl p (wordpressSubs wp extra uri wpLens) l
 
 prefetchSubs tdict cdict mkeys =
-  fills [ ("wpPosts", wpPostsPrefetch tdict cdict mkeys)
+  subs [ ("wpPosts", wpPostsPrefetch tdict cdict mkeys)
         , ("wpPage", useAttrs (a"name" $ wpPagePrefetch tdict cdict mkeys)) ]
 
 wpPostsPrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
@@ -201,7 +201,6 @@ wpPostsPrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
 wpPostsPrefetch tdict cdict mKeys attrs _ _ =
   do let key = mkWPKey tdict cdict . parseQueryNode $ Map.toList attrs
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
-     liftIO $ putStrLn "prefetching posts"
      return ""
 
 wpPagePrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
@@ -212,7 +211,6 @@ wpPagePrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
 wpPagePrefetch tdict cdict mKeys name _attrs _tpl _lib =
   do let key = PageKey name
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
-     liftIO $ putStrLn "found a page"
      return ""
 
 mkWPKey :: (TaxSpec TagType -> TaxSpecId TagType)
