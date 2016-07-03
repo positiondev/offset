@@ -13,7 +13,8 @@ import           Configuration.Dotenv     (loadFile)
 import           Control.Concurrent.MVar
 import           Control.Lens             hiding ((.=))
 import           Control.Monad            (mplus, void, when)
-import           Control.Monad.State      (StateT, evalStateT, get)
+import           Control.Monad.State      (StateT, evalStateT)
+import qualified Control.Monad.State      as S
 import           Control.Monad.Trans      (liftIO)
 import           Data.Aeson               hiding (Success)
 import           Data.Default
@@ -30,7 +31,8 @@ import qualified Data.Text.Lazy.Encoding  as TL
 import qualified Database.Redis           as R
 import           Larceny
 import qualified Misc
-import           Network.Wai              (Application, Response, pathInfo,
+import           Network.Wai              (Application, Response,
+                                           defaultRequest, pathInfo,
                                            rawPathInfo)
 import           System.Directory         (doesFileExist)
 import           System.Environment       (lookupEnv)
@@ -51,7 +53,7 @@ import           Web.Offset.Types
 data Ctxt = Ctxt { _req       :: FnRequest
                  , _redis     :: R.Connection
                  , _wordpress :: Wordpress Ctxt
-                 , _subs      :: Substitutions Ctxt
+                 , _wpsubs    :: Substitutions Ctxt
                  , _lib       :: Library Ctxt
                  }
 
@@ -75,10 +77,41 @@ jacobinFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-feat
                                                                                          ,F "url"]]]]]
 
 
+site :: Ctxt -> IO Response
+site ctxt =
+  route ctxt [ anything ==> larcenyServe ]
+    `fallthrough` notFoundText "Page not found."
+
+tplLibrary :: Library Ctxt
+tplLibrary =
+  M.fromList [(["single"], parse "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>")
+             ,(["many"], parse "<wpPosts limit=2><wpTitle/></wpPosts>")
+             ,(["many1"], parse "<wpPosts><wpTitle/></wpPosts>")
+             ,(["many2"], parse "<wpPosts offset=1 limit=1><wpTitle/></wpPosts>")
+             ,(["many3"], parse "<wpPosts offset=0 limit=1><wpTitle/></wpPosts>")
+             ,(["page1"], parse "<wpPosts limit=10 page=1><wpTitle/></wpPosts>")
+             ,(["page2"], parse "<wpPosts limit=10 page=2><wpTitle/></wpPosts>")
+             ,(["num1"], parse "<wpPosts num=2><wpTitle/></wpPosts>")
+             ,(["num2"], parse "<wpPosts num=2 page=2 limit=1><wpTitle/></wpPosts>")
+             ,(["num3"], parse "<wpPosts num=1 page=3><wpTitle/></wpPosts>")
+             ,(["tag1"], parse "<wpPosts tags=\"tag1\" limit=10><wpTitle/></wpPosts>")
+             ,(["tag2"], parse "<wpPosts limit=10><wpTitle/></wpPosts>")
+             ,(["tag3"], parse "<wpPosts tags=\"+tag1\" limit=10><wpTitle/></wpPosts>")
+             ,(["tag4"], parse "<wpPosts tags=\"-tag1\" limit=1><wpTitle/></wpPosts>")
+             ,(["tag5"], parse "<wpPosts tags=\"+tag1\" limit=1><wpTitle/></wpPosts>")
+             ,(["tag6"], parse "<wpPosts tags=\"+tag1,-tag2\" limit=1><wpTitle/></wpPosts>")
+             ,(["tag7"], parse "<wpPosts tags=\"+tag1,+tag2\" limit=1><wpTitle/></wpPosts>")
+             ,(["cat1"], parse "<wpPosts categories=\"cat1\" limit=10><wpTitle/></wpPosts>")
+             ,(["cat2"], parse "<wpPosts limit=10><wpTitle/></wpPosts>")
+             ,(["cat3"], parse "<wpPosts categories=\"-cat1\" limit=10><wpTitle/></wpPosts>")
+             ,(["author-date"], parse "Hello<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
+             ,(["fields"], parse "<wp><wpPosts limit=1 categories=\"-cat1\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
+               ]
+
 larcenyServe :: Ctxt ->
                 IO (Maybe Response)
-larcenyServe ctxt =
-  let p = pathInfo . fst $ getRequest ctxt in
+larcenyServe ctxt = do
+  let p = pathInfo . fst $ getRequest ctxt
   mplus <$> renderLarceny ctxt (T.intercalate "/" p)
         <*> renderLarceny ctxt (T.intercalate "/" (p <> ["index"]))
 
@@ -86,10 +119,23 @@ renderLarceny :: Ctxt ->
                  Text ->
                  IO (Maybe Response)
 renderLarceny ctxt name =
-  do let tpl = (ctxt ^. lib) M.! [name]
-     t <- evalStateT (runTemplate tpl [name] (ctxt ^. subs) (ctxt ^. lib)) ctxt
-     okHtml t
+  do let tpl = M.lookup [name] tplLibrary
+     case tpl of
+       Just t -> do
+         rendered <- evalStateT (runTemplate t [name] (ctxt ^. wpsubs) tplLibrary) ctxt
+         okHtml rendered
+       _ -> return Nothing
 
+renderLarceny2 :: Ctxt ->
+                  Text ->
+                  IO (Maybe Text)
+renderLarceny2 ctxt name =
+  do let tpl = M.lookup [name] tplLibrary
+     case tpl of
+       Just t -> do
+         rendered <- evalStateT (runTemplate t [name] (ctxt ^. wpsubs) tplLibrary) ctxt
+         return $ Just rendered
+       _ -> return Nothing
 
 fauxRequester :: Text -> Text -> [(Text, Text)] -> IO Text
 fauxRequester _ "/taxonomies/post_tag/terms" [] =
@@ -106,7 +152,7 @@ fauxRequester _ "/taxonomies/category/terms" [] =
                                  , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
                                  ]
                          ]
-fauxRequester response rqPath rqParams = do
+fauxRequester response rqPath rqParams =
   --modifyMVar_ record $ (return . (<> [mkUrlUnescape url params]))
   return response
 
@@ -148,7 +194,7 @@ initializer response =
                       , wpConfCacheBehavior = NoCache
                    }
      let getUri :: StateT Ctxt IO Text
-         getUri = do ctxt <- get
+         getUri = do ctxt <- S.get
                      return (T.decodeUtf8 . rawPathInfo . fst . getRequest $ ctxt)
      (wp,wpSubs) <- initWordpress wpconf rconn getUri wordpress
      let allSubs = wpSubs
@@ -156,7 +202,7 @@ initializer response =
      return (Ctxt defaultFnRequest rconn wp allSubs tpls)
 
 
-initializer2 record =
+initializer2 record cache =
   do  -- Load environment variables, or use defaults
      let lookupWithDefault key def = pack <$> fromMaybe def <$> lookupEnv key
      envExists <- doesFileExist ".env"
@@ -169,90 +215,40 @@ initializer2 record =
                       , wpConfLogger = Just (putStrLn . T.unpack)
                       , wpConfRequester = Right $ Requester (fauxRequester2 record)
                       , wpConfExtraFields = []
-                      , wpConfCacheBehavior = NoCache
+                      , wpConfCacheBehavior = if cache then CacheSeconds 60 else NoCache
                    }
      let getUri :: StateT Ctxt IO Text
-         getUri = do ctxt <- get
+         getUri = do ctxt <- S.get
                      return (T.decodeUtf8 . rawPathInfo . fst . getRequest $ ctxt)
      (wp,wpSubs) <- initWordpress wpconf rconn getUri wordpress
      let allSubs = wpSubs
      let tpls = mempty --Larceny.loadTemplates "templates"
      return (Ctxt defaultFnRequest rconn wp allSubs tpls)
 
+initializer3 :: IO Ctxt
+initializer3 =
+  do rconn <- R.connect R.defaultConnectInfo
+     let wpconf = def { wpConfEndpoint = "http://127.0.0.1:5555/wp-json"
+                      , wpConfLogger = Nothing
+                      , wpConfRequester = Left ("offset", "111")
+                      , wpConfExtraFields = []
+                      , wpConfCacheBehavior = NoCache
+                   }
+     let getUri :: StateT Ctxt IO Text
+         getUri = do ctxt <- S.get
+                     return (T.decodeUtf8 . rawPathInfo . fst . getRequest $ ctxt)
+     (wp,wpSubs) <- initWordpress wpconf rconn getUri wordpress
+     return (Ctxt defaultFnRequest rconn wp wpSubs tplLibrary)
+
 app :: (Ctxt -> IO Response) -> IO Application
 app site  =
   do ctxt <- initializer "wow!"
      return (toWAI ctxt site)
 
+app' :: Ctxt -> IO Application
+app' ctxt = app site
 
-{--
-localApp :: [(Text, Text)] -> SnapletInit App App
-localApp tmpls =
-  makeSnaplet "app" "App." Nothing $ do
-    h <- nestSnaplet "" heist $ heistInit ""
-    addConfig h $ set scTemplateLocations (return templates) mempty
-    r <- nestSnaplet "" redis redisDBInitConf
-    (w,splices) <- liftIO $ initWordpress config (view (snapletValue . redisConnection) r) (T.decodeUtf8 . rqURI <$> getRequest) wordpress
-    addConfig h $ set scInterpretedSplices splices mempty
-    return $ App h r w
-  where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
-                               in ([T.encodeUtf8 name], DocumentFile doc Nothing)
-        templates = return $ M.fromList (map mkTmpl tmpls)
-        config = (def { wpConfEndpoint = "http://localhost:5555/wp-json"
-                      , wpConfCacheBehavior = NoCache
-                      , wpConfExtraFields = jacobinFields
-                      , wpConfLogger = Nothing
-                      })
-
-renderingApp :: [(Text, Text)] -> Text -> SnapletInit App App
-renderingApp tmpls response = makeSnaplet "app" "App." Nothing $ do
-  h <- nestSnaplet "" heist $ heistInit ""
-  addConfig h $ set scTemplateLocations (return templates) mempty
-  r <- nestSnaplet "" redis redisDBInitConf
-  (w,splices) <- liftIO $ initWordpress config (view (snapletValue . redisConnection) r) (T.decodeUtf8 . rqURI <$> getRequest) wordpress
-  addConfig h $ set scInterpretedSplices splices mempty
-  return $ App h r w
-  where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
-                               in ([T.encodeUtf8 name], DocumentFile doc Nothing)
-        templates = return $ M.fromList (map mkTmpl tmpls)
-        config = (def { wpConfEndpoint = ""
-                      , wpConfRequester = Right $ Requester (\_ _ -> return response)
-                      , wpConfCacheBehavior = NoCache
-                      , wpConfExtraFields = jacobinFields})
-
-queryingApp :: [(Text, Text)] -> MVar [Text] -> SnapletInit App App
-queryingApp tmpls record = makeSnaplet "app" "An snaplet example application." Nothing $ do
-  h <- nestSnaplet "" heist $ heistInit "templates"
-  addConfig h $ set scTemplateLocations (return templates) mempty
-  r <- nestSnaplet "" redis redisDBInitConf
-  (w,splices) <- liftIO $ initWordpress config (view (snapletValue . redisConnection) r) (T.decodeUtf8 . rqURI <$> getRequest) wordpress
-  addConfig h $ set scInterpretedSplices splices mempty
-  return $ App h r w
-  where mkTmpl (name, html) = let (Right doc) = X.parseHTML "" (T.encodeUtf8 html)
-                               in ([T.encodeUtf8 name], DocumentFile doc Nothing)
-        templates = return $ M.fromList (map mkTmpl tmpls)
-        config = (def { wpConfEndpoint = ""
-                      , wpConfRequester = Right $ Requester recordingRequester
-                      , wpConfCacheBehavior = NoCache})
-        recordingRequester "/taxonomies/post_tag/terms" [] =
-          return $ enc $ [object [ "ID" .= (177 :: Int)
-                                 , "slug" .= ("home-featured" :: Text)
-                                 ]
-                         ,object [ "ID" .= (160 :: Int)
-                                 , "slug" .= ("featured-global" :: Text)
-                                 ]
-                         ]
-        recordingRequester "/taxonomies/category/terms" [] =
-          return $ enc $ [object [ "ID" .= (159 :: Int)
-                                 , "slug" .= ("bookmarx" :: Text)
-                                 , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
-                                 ]
-                         ]
-        recordingRequester url params = do
-          modifyMVar_ record $ (return . (<> [mkUrlUnescape url params]))
-          return ""
-        mkUrlUnescape url params = (url <> "?" <> (T.intercalate "&" $ map (\(k, v) -> k <> "=" <> v) params))
-
+{-
 cachingApp :: SnapletInit App App
 cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
   h <- nestSnaplet "" heist $ heistInit "templates"
@@ -269,10 +265,9 @@ cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
 ----------------------------------------------------------
-{-
-clearRedisCache :: IO Bool
-clearRedisCache = runRedis $ rdelstar "wordpress:*"
--}
+
+clearRedisCache :: Ctxt -> IO Bool
+clearRedisCache ctxt = R.runRedis (_redis ctxt) (rdelstar "wordpress:*")
 
 article1 :: Value
 article1 = object [ "ID" .= ("1" :: Text)
@@ -289,24 +284,81 @@ shouldRender :: Text
              -> Expectation
 shouldRender t output = do
   ctxt <- initializer $ enc [ article1 ]
-  let s = _subs ctxt
+  let s = _wpsubs ctxt
   rendered <- evalStateT (runTemplate (toTpl t) [] s mempty) ctxt
   rendered `shouldBeIgnoreWhitespace` output
+
+type TemplateName = Text
+type TemplateText = Text
+
+shouldRender' :: TemplateName
+              -> Text
+              -> Expectation
+shouldRender' name output = do
+  ctxt <- initializer3
+  rendered <- renderLarceny2 ctxt name
+  rendered `shouldMaybeIgnoreWhitespace` Just output
+
+shouldNotRenderTheSameAs :: (TemplateName, Ctxt)
+                         -> TemplateName
+                         -> Expectation
+shouldNotRenderTheSameAs (name1, ctxt) name2 = do
+  rendered1 <- renderLarceny2 ctxt name1
+  rendered2 <- renderLarceny2 ctxt name2
+  rendered1 `shouldMaybeNotIgnoreWhitespace` rendered2
+
+shouldRenderTheSameAs :: (TemplateName, Ctxt)
+                      -> TemplateName
+                      -> Expectation
+shouldRenderTheSameAs (name1, ctxt) name2 = do
+  rendered1 <- renderLarceny2 ctxt name1
+  rendered2 <- renderLarceny2 ctxt name2
+  rendered1 `shouldMaybeIgnoreWhitespace` rendered2
 
 toTpl tpl = parse (TL.fromStrict tpl)
 
 shouldBeIgnoreWhitespace a b =
   T.replace " " "" a `shouldBe` T.replace " " "" b
 
+shouldMaybeIgnoreWhitespace a b =
+  T.replace " " "" <$> a `shouldBe` T.replace " " "" <$> b
+
+shouldMaybeNotIgnoreWhitespace a b =
+  T.replace " " "" <$> a `shouldNotBe` T.replace " " "" <$> b
+
 shouldQueryTo :: Text -> [Text] -> Spec
 shouldQueryTo hQuery wpQuery =
   it ("query from " <> T.unpack hQuery) $ do
       record <- liftIO $ newMVar []
-      ctxt <- liftIO $ initializer2 record
-      let s = _subs ctxt
+      ctxt <- liftIO $ initializer2 record False
+      let s = _wpsubs ctxt
       evalStateT (runTemplate (toTpl hQuery) [] s mempty) ctxt
       x <- liftIO $ tryTakeMVar record
       x `shouldBe` Just wpQuery
+
+shouldRenderAtUrl' :: (Text, Text) -> Text -> Expectation
+shouldRenderAtUrl' (url, t) match = do
+    ctxt <- initializer $ enc [ article1 ]
+    let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 url }
+    let ctxt' = setRequest ctxt
+                 $ (\(x,y) -> (requestWithUrl, y)) defaultFnRequest
+    let s = _wpsubs ctxt
+    rendered <- evalStateT (runTemplate (toTpl t) [] s mempty) ctxt'
+    match `shouldBe` rendered
+
+shouldQueryAtUrl :: (Text, Text) -> [Text] -> Spec
+shouldQueryAtUrl (url, hQuery) wpQuery =
+  it ("query from " <> T.unpack hQuery) $ do
+      record <- liftIO $ newMVar []
+      let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 url }
+      ctxt <- liftIO $ initializer2 record True
+      let ctxt' = setRequest ctxt
+            $ (\(x,y) -> (requestWithUrl, y)) defaultFnRequest
+      let s = _wpsubs ctxt'
+      evalStateT (runTemplate (toTpl hQuery) [] s mempty) ctxt'
+      x <- liftIO $ tryTakeMVar record
+      x `shouldBe` Just wpQuery
+
 
 main :: IO ()
 main = hspec $ do
@@ -324,25 +376,22 @@ main = hspec $ do
       let tpl = "<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>"
       in do
         ctxt <- initializer $ enc [article1]
-        let subs = _subs ctxt
+        let subs = _wpsubs ctxt
         rendered <- evalStateT (runTemplate (toTpl tpl) [] subs mempty) ctxt
         rendered `shouldBeIgnoreWhitespace` "Foo bar"
     it "should ignore duplicates if they were rendered before wpNoPostDuplicates" $ do
-      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts>"
-        `shouldRender` "Foo barFoo bar"
-      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>"
-        `shouldRender` "Foo barFoo bar"
+      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo barFoo bar"
+      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo barFoo bar"
     it "should have no effect if it's at the end of the template" $
-      "<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>"
-        `shouldRender` "Foo barFoo bar"
+      "<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>" `shouldRender` "Foo barFoo bar"
 
-      {-
   describe "<wpPostByPermalink>" $ do
-    shouldQueryAtUrl "/2009/10/the-post/"
-                     "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
-                     ["/posts?filter[year]=2009&filter[monthnum]=10&filter[name]=the-post"]
-    shouldRenderAtUrl "/2009/10/the-post/" ("<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>", enc [article1]) "Foo bar"
-    shouldRenderAtUrl "/2009/10/the-post/" ("<wp><wpNoPostDuplicates/><wpPostByPermalink><wpTitle/></wpPostByPermalink><wpPosts limit=1><wpTitle/></wpPosts></wp>", enc [article1]) "Foo bar" -}
+    ("/2009/10/the-post/",
+     "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>")
+      `shouldQueryAtUrl`
+      ["/posts?filter[year]=2009&filter[monthnum]=10&filter[name]=the-post"]
+    it "should render stuff" $
+      ("/2009/10/the-post/", "<wp><wpNoPostDuplicates/><wpPostByPermalink><wpTitle/></wpPostByPermalink><wpPosts limit=1><wpTitle/></wpPosts></wp>") `shouldRenderAtUrl'` "Foo bar"
 
 {-    describe "should grab post from cache if it's there" $
       let (Object a2) = article2 in
@@ -448,100 +497,40 @@ main = hspec $ do
       "<wp><div><wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts></div></wp>"
       (replicate 2 "/posts?filter[category__in]=159&filter[offset]=0&filter[posts_per_page]=20")
 
-{-
-  describe "live tests (which require running wordpress server)" $
-    snap (route
-            [("/2014/10/a-first-post", render "single")
-            ,("/many", render "many")
-            ,("/many2", render "many2")
-            ,("/many3", render "many3")
-            ,("/page1", render "page1")
-            ,("/page2", render "page2")
-            ,("/num1", render "num1")
-            ,("/num2", render "num2")
-            ,("/num3", render "num3")
-            ,("/tag1", render "tag1")
-            ,("/tag2", render "tag2")
-            ,("/tag3", render "tag3")
-            ,("/tag4", render "tag4")
-            ,("/tag5", render "tag5")
-            ,("/tag6", render "tag6")
-            ,("/tag7", render "tag7")
-            ,("/cat1", render "cat1")
-            ,("/cat2", render "cat2")
-            ,("/cat3", render "cat3")
-            ,("/fields", render "fields")
-            ,("/2014/10/a-second-post/", render "author-date")
-        ])
-     (localApp [("single", "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>")
-               ,("many", "<wpPosts limit=2><wpTitle/></wpPosts>")
-               ,("many1", "<wpPosts><wpTitle/></wpPosts>")
-               ,("many2", "<wpPosts offset=1 limit=1><wpTitle/></wpPosts>")
-               ,("many3", "<wpPosts offset=0 limit=1><wpTitle/></wpPosts>")
-               ,("page1", "<wpPosts limit=10 page=1><wpTitle/></wpPosts>")
-               ,("page2", "<wpPosts limit=10 page=2><wpTitle/></wpPosts>")
-               ,("num1", "<wpPosts num=2><wpTitle/></wpPosts>")
-               ,("num2", "<wpPosts num=2 page=2 limit=1><wpTitle/></wpPosts>")
-               ,("num3", "<wpPosts num=1 page=3><wpTitle/></wpPosts>")
-               ,("tag1", "<wpPosts tags=\"tag1\" limit=10><wpTitle/></wpPosts>")
-               ,("tag2", "<wpPosts limit=10><wpTitle/></wpPosts>")
-               ,("tag3", "<wpPosts tags=\"+tag1\" limit=10><wpTitle/></wpPosts>")
-               ,("tag4", "<wpPosts tags=\"-tag1\" limit=1><wpTitle/></wpPosts>")
-               ,("tag5", "<wpPosts tags=\"+tag1\" limit=1><wpTitle/></wpPosts>")
-               ,("tag6", "<wpPosts tags=\"+tag1,-tag2\" limit=1><wpTitle/></wpPosts>")
-               ,("tag7", "<wpPosts tags=\"+tag1,+tag2\" limit=1><wpTitle/></wpPosts>")
-               ,("cat1", "<wpPosts categories=\"cat1\" limit=10><wpTitle/></wpPosts>")
-               ,("cat2", "<wpPosts limit=10><wpTitle/></wpPosts>")
-               ,("cat3", "<wpPosts categories=\"-cat1\" limit=10><wpTitle/></wpPosts>")
-               ,("author-date", "<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
-               ,("fields", "<wp><wpPosts limit=1 categories=\"-cat1\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
-               ]
-      ) $
-      do it "should have title on page" $
-           do r <- get "/2014/10/a-first-post"
-              shouldHaveText "A first post" r
-         it "should be able to limit" $
-           do p1 <- get "/many"
-              get "/many1" >>= shouldNotEqual p1
-         it "should be able to offset" $
-           do res <- get "/many2"
-              res2 <- get "/many3"
-              res `shouldNotEqual` res2
-         it "should be able to get page 2" $
-           do p1 <- get "/page1"
-              get "/page2" >>= shouldNotEqual p1
-         it "should be able to use page, num, and limit" $
-           do p1 <- get "/num1"
-              p2 <- get "/num2"
-              p3 <- get "/num3"
-              p1 `shouldNotEqual` p2
-              p2 `shouldEqual` p3
-         it "should be able to restrict based on tags" $
-           do p1 <- get "/tag1"
-              get "/tag2" >>= shouldNotEqual p1
-         it "should be able to say +tag instead of tag" $
-           do p1 <- get "/tag1"
-              get "/tag3" >>= shouldEqual p1
-         it "should be able to say -tag to NOT match a tag" $
-           do p1 <- get "/tag4"
-              get "/tag5" >>= shouldNotEqual p1
-         it "should be able to have multiple tag queries" $
-           do p1 <- get "/tag6"
-              get "/tag7" >>= shouldNotEqual p1
-         it "should be able to get nested attribute author name" $
-           get "/2014/10/a-second-post/" >>= shouldHaveText "Ira Rubel"
-         it "should be able to get customly parsed attribute date" $
-           get "/2014/10/a-second-post/" >>= shouldHaveText "2014/10"
-         it "should be able to restrict based on category" $
-           do c1 <- get "/cat1"
-              c2 <- get "/cat2"
-              c1 `shouldNotEqual` c2
-         it "should be able to make negative category queries" $
-           do c1 <- get "/cat1"
-              c2 <- get "/cat3"
-              c1 `shouldNotEqual` c2
--}
 
+  describe "live tests (which require running wordpress server)" $ do
+    ctxt <- runIO initializer3
+    runIO $ clearRedisCache ctxt
+    do it "should have title on page" $
+         ("single", "/2014/10/a-first-post", ctxt)
+         `shouldRenderAtUrlContaining` "A first post"
+       it "should be able to limit" $
+         ("many", ctxt) `shouldNotRenderTheSameAs` "many1"
+       it "should be able to offset" $
+         ("many2", ctxt) `shouldNotRenderTheSameAs` "many3"
+       it "should be able to get page 2" $
+         ("page1", ctxt) `shouldNotRenderTheSameAs` "page2"
+       it "should be able to use page, num, and limit" $ do
+         ("num1", ctxt) `shouldNotRenderTheSameAs` "num2"
+         ("num2", ctxt) `shouldRenderTheSameAs` "num3"
+       it "should be able to restrict based on tags" $
+         ("tag1", ctxt) `shouldNotRenderTheSameAs` "tag2"
+       it "should be able to say +tag instead of tag" $
+         ("tag1", ctxt) `shouldRenderTheSameAs` "tag3"
+       it "should be able to say -tag to NOT match a tag" $
+         ("/tag4", ctxt) `shouldNotRenderTheSameAs` "tag5"
+       it "should be able to have multiple tag queries" $
+         ("/tag6", ctxt) `shouldNotRenderTheSameAs` "tag7"
+       it "should be able to get nested attribute author name" $
+         ("author-date", "/2014/10/a-second-post/", ctxt)
+           `shouldRenderAtUrlContaining` "Ira Rubel"
+       it "should be able to get customly parsed attribute date" $
+         ("author-date", "/2014/10/a-second-post/", ctxt)
+           `shouldRenderAtUrlContaining` "2014/10"
+       it "should be able to restrict based on category" $
+         ("cat1", ctxt) `shouldNotRenderTheSameAs` "cat2"
+       it "should be able to make negative category queries" $
+         ("cat1", ctxt) `shouldNotRenderTheSameAs` "cat3"
 
 shouldRenderWpPostsTo :: (Text, Object) -> Text -> Spec
 shouldRenderWpPostsTo (tags, jsonResponse) match =
@@ -549,47 +538,21 @@ shouldRenderWpPostsTo (tags, jsonResponse) match =
     rendered <- liftIO $ evalStateT (wpPostsHelper [] ([], parse (TL.fromStrict tags)) mempty [jsonResponse]) ()
     rendered `shouldBe` match
 
-shouldRenderDef :: (Text, Substitutions (), Library ()) -> Text -> Expectation
-shouldRenderDef (t', s, l) output = do
-    rendered <- evalStateT (runTemplate (parse (TL.fromStrict t')) ["default"] s l) ()
-    T.replace " " "" rendered `shouldBe`
-      T.replace " " "" output
-
 shouldRenderContaining :: ([Text], Text, Substitutions (), Library ()) -> Text -> Expectation
 shouldRenderContaining (pth, t, s, l) excerpt = do
   rendered <- evalStateT (runTemplate (parse (TL.fromStrict t)) pth s l) ()
   (excerpt `T.isInfixOf` rendered) `shouldBe` True
 
-{-
-shouldRenderAtUrl :: Text -> (Text, Text) -> Text -> Spec
-shouldRenderAtUrl url (tags, response) match =
-  snap (route [(T.encodeUtf8 url, render "test")]) (renderingApp [("test", tags)] response) $
-    it (T.unpack $ tags <> " should render to match " <> match) $
-       get url >>= shouldHaveText match
-
-
-shouldQueryTo :: Text -> [Text] -> Spec
-shouldQueryTo hQuery wpQuery = do
-  record <- runIO $ newMVar []
-  snap (route []) (queryingApp [("x", hQuery)] record) $
-    it ("query from " <> T.unpack hQuery) $ do
-      eval $ render "x"
-      x <- liftIO $ tryTakeMVar record
-      x `shouldEqual` Just wpQuery
-
-shouldQueryAtUrl :: Text -> Text -> [Text] -> Spec
-shouldQueryAtUrl url tmpl urls = do
-  record <- runIO $ newMVar []
-  snap (route [(T.encodeUtf8 url,render "x")]) (queryingApp [("x", tmpl)] record) $
-    it (T.unpack $ "At " <> url <> ", " <> tmpl <> " should query to " <> T.pack (show urls)) $ do
-      get url
-      x <- liftIO $ tryTakeMVar record
-      x `shouldEqual` Just urls
-
-getWordpress :: Handler b v v
-getWordpress = view snapletValue <$> getSnapletState
--}
-
+shouldRenderAtUrlContaining :: (Text, Text, Ctxt) -> Text -> Expectation
+shouldRenderAtUrlContaining (template, url, ctxt) match = do
+    let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 url }
+    let ctxt' = setRequest ctxt
+                 $ (\(x,y) -> (requestWithUrl, y)) defaultFnRequest
+    let s = _wpsubs ctxt
+    rendered <- renderLarceny2 ctxt' template
+    let rendered' = fromMaybe "" rendered
+    (match `T.isInfixOf` rendered') `shouldBe` True
+    
 wpCacheGet' wpLens wpKey = do
   WordpressInt{..} <- cacheInternals <$> use wpLens
   liftIO $ wpCacheGet wpKey
