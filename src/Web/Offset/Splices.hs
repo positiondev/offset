@@ -52,7 +52,7 @@ wpPostsFill :: Wordpress b
             -> [Field s]
             -> WPLens b s
             -> Fill s
-wpPostsFill wp extraFields wpLens = \attrs tpl lib ->
+wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
   do tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
      catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
      let postsQuery = parseQueryNode (Map.toList attrs)
@@ -64,41 +64,35 @@ wpPostsFill wp extraFields wpLens = \attrs tpl lib ->
                         let postsND = take (qlimit postsQuery)
                                       . noDuplicates requestPostSet $ postsW
                         addPostIds wpLens (map fst postsND)
-                        wpPostsHelper extraFields tpl lib (map snd postsND)
+                        unFill (wpPostsHelper extraFields (map snd postsND)) mempty tpl lib
        Nothing -> return ""
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         noDuplicates Nothing = id
         noDuplicates (Just wpPostIdSet) = filter (\(wpId,_) -> IntSet.notMember wpId wpPostIdSet)
 
 wpPostsHelper :: [Field s]
-              -> (Path, Template s)
-              -> Library s
               -> [Object]
-              -> StateT s IO Text
-wpPostsHelper extraFields (pth, tpl) lib postsND =
-   T.concat <$> mapM (\wpPost -> runTemplate tpl pth (postSubs extraFields wpPost) lib)
-                     postsND
+              -> Fill s
+wpPostsHelper extraFields postsND = mapSubs (postSubs extraFields) postsND
 
--- maybe done
 wpPostByPermalinkFill :: [Field s]
-                        -> StateT s IO Text
-                        -> WPLens b s
-                        -> Fill s
-wpPostByPermalinkFill extraFields getURI wpLens _m (pth, Template tpl) l =
+                      -> StateT s IO Text
+                      -> WPLens b s
+                      -> Fill s
+wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
   do uri <- getURI
      let mperma = parsePermalink uri
      case mperma of
-       Nothing -> return ""
+       Nothing -> return Nothing
        Just (year, month, slug) ->
          do res <- wpGetPost wpLens (PostByPermalinkKey year month slug)
             case res of
               Just post -> do addPostIds wpLens [fst (extractPostId post)]
-                              tpl pth (postSubs extraFields post) l
-              _ -> return ""
+                              return $ Just (postSubs extraFields post)
+              _ -> return Nothing
 
--- maybe done
 wpNoPostDuplicatesFill :: WPLens b s -> Fill s
-wpNoPostDuplicatesFill wpLens _m _t _l =
+wpNoPostDuplicatesFill wpLens = textFill' $
   do w@Wordpress{..} <- use wpLens
      case requestPostSet of
        Nothing -> assign wpLens
@@ -106,12 +100,11 @@ wpNoPostDuplicatesFill wpLens _m _t _l =
        Just _ -> return ()
      return ""
 
--- maybe done
 wpPageFill :: WPLens b s -> Fill s
 wpPageFill wpLens =
   useAttrs (a "name" pageFill)
-  where pageFill Nothing = text ""
-        pageFill (Just slug) = \_m _t _l ->
+  where pageFill Nothing = textFill ""
+        pageFill (Just slug) = textFill' $
          do res <- wpGetPost wpLens (PageKey slug)
             return $ case res of
                        Just page -> case M.lookup "content" page of
@@ -119,25 +112,24 @@ wpPageFill wpLens =
                                       _ -> ""
                        _ -> ""
 
--- maybe done
 postSubs :: [Field s] -> Object -> Substitutions s
 postSubs extra object = subs (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
-          (transformName n, text $ getText n o)
+          (transformName n, textFill $ getText n o)
         buildSplice o (P n fill') =
           (transformName n, fill' $ getText n o)
         buildSplice o (N n fs) =
-          (transformName n, fill $ subs
+          (transformName n, fillChildrenWith $ subs
                             (map (buildSplice (unObj . M.lookup n $ o)) fs))
         buildSplice o (C n path) =
-          (transformName n, text (getText (last path) . traverseObject (init path) $ o))
+          (transformName n, textFill (getText (last path) . traverseObject (init path) $ o))
         buildSplice o (CN n path fs) =
-          (transformName n, fill $ subs
+          (transformName n, fillChildrenWith $ subs
                             (map (buildSplice (traverseObject path o)) fs))
         buildSplice o (M n fs) =
           (transformName n,
             mapSubs (\oinner -> subs $ map (buildSplice oinner) fs)
-                       (unArray . M.lookup n $ o))
+                    (unArray . M.lookup n $ o))
 
         unObj (Just (Object o)) = o
         unObj _ = M.empty
@@ -180,7 +172,7 @@ wpPrefetch :: Wordpress b
            -> StateT s IO Text
            -> WPLens b s
            -> Fill s
-wpPrefetch wp extra uri wpLens _m t@(p, tpl) l = do
+wpPrefetch wp extra uri wpLens = Fill $ \ _m t@(p, tpl) l -> do
     Wordpress{..} <- use wpLens
     tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
     catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
@@ -198,7 +190,7 @@ wpPostsPrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
                 -> (TaxSpec CatType -> TaxSpecId CatType)
                 -> MVar [WPKey]
                 -> Fill s
-wpPostsPrefetch tdict cdict mKeys attrs _ _ =
+wpPostsPrefetch tdict cdict mKeys = Fill $ \attrs _ _ ->
   do let key = mkWPKey tdict cdict . parseQueryNode $ Map.toList attrs
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""
@@ -208,7 +200,7 @@ wpPagePrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
                -> MVar [WPKey]
                -> Text
                -> Fill s
-wpPagePrefetch tdict cdict mKeys name _attrs _tpl _lib =
+wpPagePrefetch tdict cdict mKeys name = textFill' $
   do let key = PageKey name
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""
@@ -267,3 +259,5 @@ addPostIds wpLens ids =
   do w@Wordpress{..} <- use wpLens
      assign wpLens
             w{requestPostSet = (`IntSet.union` IntSet.fromList ids) <$> requestPostSet }
+
+{-# ANN module ("HLint: ignore Eta reduce" :: String) #-}
