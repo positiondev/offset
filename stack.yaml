@@ -1,7 +1,6 @@
 flags: {}
 packages:
 - '.'
-- example
 - location: ../larceny
   extra-dep: true
 - location: ../hspec-fn

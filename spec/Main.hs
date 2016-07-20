@@ -160,19 +160,8 @@ initializer requester cache endpoint =
 initFauxRequestNoCache =
   initializer (Right $ Requester (fauxRequester Nothing)) NoCache ""
 
-{-
-cachingApp :: SnapletInit App App
-cachingApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
-  h <- nestSnaplet "" heist $ heistInit "templates"
-  r <- nestSnaplet "" redis redisDBInitConf
-  (w,splices) <- liftIO $ initWordpress config (view (snapletValue . redisConnection) r) (T.decodeUtf8 . rqURI <$> getRequest) wordpress
-  addConfig h $ set scInterpretedSplices splices mempty
-  return $ App h r w
-  where config = (def { wpConfEndpoint = ""
-                      , wpConfRequester = Right $ Requester (\_ _ -> return "")
-                      , wpConfCacheBehavior = CacheSeconds 10})
-
---}
+initNoRequestWithCache =
+  initializer (Right $ Requester (\_ _ -> return "" )) (CacheSeconds 60) ""
 
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
@@ -249,82 +238,88 @@ larcenyFillTests = do
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Foo bar"
 
-{-
-
 -- Caching tests
 
-
-wpCacheGet' wpLens wpKey = do
-  WordpressInt{..} <- cacheInternals <$> use wpLens
+wpCacheGet' wordpress wpKey = do
+  let WordpressInt{..} = cacheInternals wordpress
   liftIO $ wpCacheGet wpKey
 
-wpCacheSet' wpLens wpKey o = do
-  WordpressInt{..} <- cacheInternals <$> use wpLens
+wpCacheSet'' wordpress wpKey o = do
+  let WordpressInt{..} = cacheInternals wordpress
+  wpCacheSet wpKey o
+
+wpCacheSet' wordpress wpKey o = do
+  let WordpressInt{..} = cacheInternals wordpress
   liftIO $ wpCacheSet wpKey o
 
-wpExpireAggregates' wpLens = do
-  Wordpress{..} <- use wpLens
+wpExpireAggregates' wordpress = do
+  let Wordpress{..} = wordpress
   liftIO wpExpireAggregates
 
-wpExpirePost' wpLens k = do
-  Wordpress{..} <- use wpLens
+wpExpirePost' wordpress k = do
+  let Wordpress{..} = wordpress
   liftIO $ wpExpirePost k
 
-
 cacheTests = do
-  describe "should grab post from cache if it's there" $
-      let (Object a2) = article2 in
-      shouldRenderAtUrlPreCache
-        (void $ with wordpress $ cacheSet (Just 10) (PostByPermalinkKey "2001" "10" "the-post")
-                                            (enc a2))
-        "/2001/10/the-post/"
-        "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>"
-        "The post" -}
+  describe "should grab post from cache if it's there" $ do
+      it "should do a thing" $ do
+        let (Object a2) = article2
+        ctxt <- liftIO initNoRequestWithCache
+        wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2001" "10" "the-post")
+                                        (enc a2)
+        ("single", "/2001/10/the-post/", ctxt) `shouldRenderAtUrlContaining` "The post"
 
-{-
-  describe "caching" $ snap (route []) cachingApp $ afterEval (void clearRedisCache) $ do
+  describe "caching" $ do
     it "should find nothing for a non-existent post" $ do
-      p <- eval (wpCacheGet' wordpress (PostByPermalinkKey "2000" "1" "the-article"))
-      p `shouldEqual` Nothing
+      ctxt <- initNoRequestWithCache
+      p <- wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+      p `shouldBe` Nothing
     it "should find something if there is a post in cache" $ do
-      eval (wpCacheSet' wordpress (PostByPermalinkKey "2000" "1" "the-article")
-                                  (enc article1))
-      p <- eval (wpCacheGet' wordpress (PostByPermalinkKey "2000" "1" "the-article"))
-      p `shouldEqual` (Just $ enc article1)
-    it "should not find single post after expire handler is called" $
-      do eval (wpCacheSet' wordpress (PostByPermalinkKey "2000" "1" "the-article")
-                                     (enc article1))
-         eval (wpExpirePost' wordpress (PostByPermalinkKey "2000" "1" "the-article"))
-         eval (wpCacheGet' wordpress (PostByPermalinkKey "2000" "1" "the-article"))
-           >>= shouldEqual Nothing
+      ctxt <- initNoRequestWithCache
+      wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+                                  (enc article1)
+      p <- wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+      p `shouldBe` (Just $ enc article1)
+    it "should not find single post after expire handler is called" $ do
+         ctxt <- initNoRequestWithCache
+         wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+                                     (enc article1)
+         wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+           >>= shouldBe Nothing
     it "should find post aggregates in cache" $
-      do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
-         eval (wpCacheSet' wordpress key ("[" <> enc article1 <> "]"))
-         eval (wpCacheGet' wordpress key)
-           >>= shouldEqual (Just $ "[" <> enc article1 <> "]")
+      do ctxt <- initNoRequestWithCache
+         let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
+         wpCacheSet' (view wordpress ctxt) key ("[" <> enc article1 <> "]")
+         wpCacheGet' (view wordpress ctxt) key
+           >>= shouldBe (Just $ "[" <> enc article1 <> "]")
     it "should not find post aggregates after expire handler is called" $
-      do let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
-         eval (wpCacheSet' wordpress key ("[" <> enc article1 <> "]"))
-         eval (wpExpirePost' wordpress (PostByPermalinkKey "2000" "1" "the-article"))
-         eval (wpCacheGet' wordpress key)
-           >>= shouldEqual Nothing
+      do ctxt <- initNoRequestWithCache
+         let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
+         wpCacheSet' (view wordpress ctxt) key ("[" <> enc article1 <> "]")
+         wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         wpCacheGet' (view wordpress ctxt) key
+           >>= shouldBe Nothing
     it "should find single post after expiring aggregates" $
-      do eval (wpCacheSet' wordpress (PostByPermalinkKey "2000" "1" "the-article")
-                          (enc article1))
-         eval (wpExpireAggregates' wordpress)
-         eval (wpCacheGet' wordpress (PostByPermalinkKey "2000" "1" "the-article"))
-           >>= shouldNotEqual Nothing
+      do ctxt <- initNoRequestWithCache
+         wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+                          (enc article1)
+         wpExpireAggregates' (view wordpress ctxt)
+         wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+           >>= shouldNotBe Nothing
     it "should find a different single post after expiring another" $
-      do let key1 = (PostByPermalinkKey "2000" "1" "the-article")
+      do ctxt <- initNoRequestWithCache
+         let key1 = (PostByPermalinkKey "2000" "1" "the-article")
              key2 = (PostByPermalinkKey "2001" "2" "another-article")
-         eval (wpCacheSet' wordpress key1 (enc article1))
-         eval (wpCacheSet' wordpress key2 (enc article2))
-         eval (wpExpirePost' wordpress (PostByPermalinkKey "2000" "1" "the-article"))
-         eval (wpCacheGet' wordpress key2) >>= shouldEqual (Just (enc article2))
+         wpCacheSet' (view wordpress ctxt) key1 (enc article1)
+         wpCacheSet' (view wordpress ctxt) key2 (enc article2)
+         wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         wpCacheGet' (view wordpress ctxt) key2 >>= shouldBe (Just (enc article2))
     it "should be able to cache and retrieve post" $
-      do let key = (PostKey 200)
-         eval (wpCacheSet' wordpress key (enc article1))
-         eval (wpCacheGet' wordpress key) >>= shouldEqual (Just (enc article1))-}
+      do ctxt <- initNoRequestWithCache
+         let key = (PostKey 200)
+         wpCacheSet' (view wordpress ctxt) key (enc article1)
+         wpCacheGet' (view wordpress ctxt) key >>= shouldBe (Just (enc article1))
 
 shouldQueryTo :: TemplateText -> [Text] -> Spec
 shouldQueryTo hQuery wpQuery =
