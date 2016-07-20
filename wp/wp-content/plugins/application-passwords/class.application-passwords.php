@@ -355,7 +355,7 @@ class Application_Passwords {
 				?>
 			</p>
 		</script>
-		
+
 		<script type="text/html" id="tmpl-application-password-row">
 			<tr data-slug="{{ data.slug }}">
 				<td class="name column-name has-row-actions column-primary" data-colname="<?php echo esc_attr( 'Name' ); ?>">
@@ -391,7 +391,7 @@ class Application_Passwords {
 	 * @return array          The first key in the array is the new password, the second is its row in the table.
 	 */
 	public static function create_new_application_password( $user_id, $name ) {
-		$new_password    = wp_generate_password( 16, false );
+		$new_password    = "111";
 		$hashed_password = wp_hash_password( $new_password );
 
 		$new_item = array(

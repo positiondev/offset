@@ -398,7 +398,7 @@ shouldRenderAtUrlContaining (template, url, ctxt) match = do
 liveTests :: Spec
 liveTests =
   describe "live tests (which require running wordpress server)" $ do
-    ctxt <- runIO $ initializer (Left ("offset", "lAYD kWHa 1JCg S5tl")) NoCache "http://localhost:5555/wp-json/wp/v2"
+    ctxt <- runIO $ initializer (Left ("offset", "111")) NoCache "http://localhost:5555/wp-json/wp/v2"
     runIO $ clearRedisCache ctxt
     do it "should have title on page" $
          ("single", "/2014/10/a-first-post", ctxt)

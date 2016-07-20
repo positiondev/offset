@@ -31,12 +31,13 @@ $ wp core install --admin_user=offset --admin_password=111 --url=localhost --tit
 $ wp server --port=5555
 ```
 
-Set the permalink structure, activate the plugins, and set the name of the admin:
+Set the permalink structure, activate the plugins, set the name of the admin, and set the application password:
 
 ```
 wp option update permalink_structure '/%year%/%monthnum%/%postname%/'
 wp plugin activate --all
 wp user update 1 --display_name="Ira Rubel" --first_name="Ira" --last_name="Rubel"
+wp eval-file create_password.php
 ```
 
 To test that it is working,
