@@ -20,6 +20,8 @@ import           Web.Offset.Utils
 wpRequestInt :: Requester -> Text -> WPKey -> IO Text
 wpRequestInt runHTTP endpt key =
   case key of
+   TaxDictKey "tag" -> req "/tags/" []
+   TaxDictKey "category" -> req "/categories/" []
    TaxDictKey resName -> req ("/taxonomies/" <> resName <> "/terms") []
    PostByPermalinkKey year month slug ->
      req "/posts" [("filter[year]", year)

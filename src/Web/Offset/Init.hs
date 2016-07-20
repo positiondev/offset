@@ -13,7 +13,7 @@ import qualified Data.Map                as Map
 import           Data.Monoid
 import           Data.Text               (Text)
 import qualified Database.Redis          as R
-import           Larceny
+import           Web.Larceny
 
 import           Web.Offset.Cache
 import           Web.Offset.Cache.Types

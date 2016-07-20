@@ -8,7 +8,7 @@ import           Control.Monad.State
 import           Data.Monoid         ((<>))
 import           Data.Text           (Text)
 import qualified Data.Text           as T
-import           Larceny
+import           Web.Larceny
 
 -- TODO(dbp 2014-10-14): date should be parsed and nested.
 data Field s = F Text -- A single flat field
@@ -49,17 +49,17 @@ instance Show (Field s) where
   show (M t m) = "M(" <> T.unpack t <> "," <> show m <> ")"
 
 postFields :: [Field s]
-postFields = [F "ID"
-             ,F "title"
+postFields = [F "id"
+             ,C "title" ["title", "rendered"]
              ,F "status"
              ,F "type"
-             ,N "author" [F "ID",F "name",F "first_name",F "last_name",F "description", F "username"]
-             ,F "content"
+             ,F "author"
+             ,C "content" ["content", "rendered"]
              ,P "date" dateSplice
              ,F "slug"
-             ,F "excerpt"
+             ,C "excerpt" ["excerpt", "rendered"]
              ,N "custom_fields" [F "test"]
-             ,N "featured_image" [F "content"
+             ,N "featured_media" [F "content"
                                  ,F "source"
                                  ,N "attachment_meta" [F "width"
                                                       ,F "height"
@@ -70,8 +70,8 @@ postFields = [F "ID"
              -- ,CN "thumbnail"
              --     ["featured_image", "attachment_meta", "sizes", "thumbnail"]
              --     [F "width", F "height", F "url"]
-             ,N "terms" [M "category" [F "ID", F "name", F "slug", F "count"]
-                        ,M "post_tag" [F "ID", F "name", F "slug", F "count"]]
+             ,N "terms" [M "category" [F "id", F "name", F "slug", F "count"]
+                        ,M "post_tag" [F "id", F "name", F "slug", F "count"]]
              ]
 
 dateSplice :: Text -> Fill s

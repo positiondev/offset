@@ -29,7 +29,6 @@ import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Lazy           as TL
 import qualified Data.Text.Lazy.Encoding  as TL
 import qualified Database.Redis           as R
-import           Larceny
 import qualified Misc
 import           Network.Wai              (Application, Response,
                                            defaultRequest, pathInfo,
@@ -40,6 +39,7 @@ import           Test.Hspec
 import           Test.Hspec.Core.Spec     (Result (..))
 import qualified Text.XmlHtml             as X
 import           Web.Fn
+import           Web.Larceny
 
 import           Web.Offset
 import           Web.Offset.Cache.Redis
@@ -65,14 +65,14 @@ instance RequestContext Ctxt where
 enc a = TL.toStrict . TL.decodeUtf8 . encode $ a
 
 article1 :: Value
-article1 = object [ "ID" .= ("1" :: Text)
-                  , "title" .= ("Foo bar" :: Text)
-                  , "excerpt" .= ("summary" :: Text)
+article1 = object [ "id" .= (1 :: Int)
+                  , "title" .= object ["rendered" .= ("Foo bar" :: Text)]
+                  , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
                   ]
 
-article2 = object [ "ID" .= (2 :: Int)
-                  , "title" .= ("The post" :: Text)
-                  , "excerpt" .= ("summary" :: Text)
+article2 = object [ "id" .= (2 :: Int)
+                  , "title" .= object ["rendered" .= ("The post" :: Text)]
+                  , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
                   ]
 
 customFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-featured" [F "width"
@@ -120,20 +120,20 @@ renderLarceny ctxt name =
        _ -> return Nothing
 
 fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO Text
-fauxRequester _  "/taxonomies/post_tag/terms" [] =
-  return $ enc [object [ "ID" .= (177 :: Int)
-                                 , "slug" .= ("home-featured" :: Text)
-                                 ]
-                         ,object [ "ID" .= (160 :: Int)
-                                 , "slug" .= ("featured-global" :: Text)
-                                 ]
-                         ]
-fauxRequester _ "/taxonomies/category/terms" [] =
-          return $ enc [object [ "ID" .= (159 :: Int)
-                                 , "slug" .= ("bookmarx" :: Text)
-                                 , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
-                                 ]
-                         ]
+fauxRequester _  "/tags/" [] =
+  return $ enc [object [ "id" .= (177 :: Int)
+                       , "slug" .= ("home-featured" :: Text)
+                       ]
+               ,object [ "id" .= (160 :: Int)
+                       , "slug" .= ("featured-global" :: Text)
+                       ]
+               ]
+fauxRequester _ "/categories/" [] =
+          return $ enc [object [ "id" .= (159 :: Int)
+                               , "slug" .= ("bookmarx" :: Text)
+                               , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
+                               ]
+                       ]
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
@@ -202,7 +202,7 @@ larcenyFillTests = do
   describe "<wpPosts>" $
     it "should show the title, id, and excerpt" $ do
       "<wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo bar"
-      "<wpPosts><wpID/></wpPosts>" `shouldRender` "1"
+      "<wpPosts><wpId/></wpPosts>" `shouldRender` "1.0"
       "<wpPosts><wpExcerpt/></wpPosts>" `shouldRender` "summary"
 
   describe "<wpNoPostDuplicates/>" $ do
@@ -398,7 +398,7 @@ shouldRenderAtUrlContaining (template, url, ctxt) match = do
 liveTests :: Spec
 liveTests =
   describe "live tests (which require running wordpress server)" $ do
-    ctxt <- runIO $ initializer (Left ("offset", "111")) NoCache "http://127.0.0.1:5555/wp-json"
+    ctxt <- runIO $ initializer (Left ("offset", "lAYD kWHa 1JCg S5tl")) NoCache "http://localhost:5555/wp-json/wp/v2"
     runIO $ clearRedisCache ctxt
     do it "should have title on page" $
          ("single", "/2014/10/a-first-post", ctxt)
@@ -420,9 +420,6 @@ liveTests =
          ("/tag4", ctxt) `rendersDifferentlyFrom` "tag5"
        it "should be able to have multiple tag queries" $
          ("/tag6", ctxt) `rendersDifferentlyFrom` "tag7"
-       it "should be able to get nested attribute author name" $
-         ("author-date", "/2014/10/a-second-post/", ctxt)
-           `shouldRenderAtUrlContaining` "Ira Rubel"
        it "should be able to get customly parsed attribute date" $
          ("author-date", "/2014/10/a-second-post/", ctxt)
            `shouldRenderAtUrlContaining` "2014/10"

@@ -73,7 +73,7 @@ instance Show (TaxSpec a) where
 newtype TaxRes a = TaxRes (Int, Text) deriving (Show)
 
 instance FromJSON (TaxRes a) where
-  parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "ID" <*> o .: "slug")
+  parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "id" <*> o .: "slug")
   parseJSON _ = mzero
 
 data TaxDict a = TaxDict {dict :: [TaxRes a], desc :: Text} deriving (Show)

@@ -28,7 +28,7 @@ import           Data.Text               (Text)
 import qualified Data.Text               as T
 import qualified Data.Vector             as V
 import qualified Text.XmlHtml            as X
-import           Larceny
+import           Web.Larceny
 
 import           Web.Offset.Field
 import           Web.Offset.Posts
@@ -53,7 +53,7 @@ wpPostsFill :: Wordpress b
             -> WPLens b s
             -> Fill s
 wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
-  do tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
+  do tagDict <- liftIO $ lookupTaxDict (TaxDictKey "tag") wp
      catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
      let postsQuery = parseQueryNode (Map.toList attrs)
      let wpKey = mkWPKey tagDict catDict postsQuery
@@ -174,13 +174,13 @@ wpPrefetch :: Wordpress b
            -> Fill s
 wpPrefetch wp extra uri wpLens = Fill $ \ _m t@(p, tpl) l -> do
     Wordpress{..} <- use wpLens
-    tagDict <- liftIO $ lookupTaxDict (TaxDictKey "post_tag") wp
+    tagDict <- liftIO $ lookupTaxDict (TaxDictKey "tag") wp
     catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
     mKeys <- liftIO $ newMVar []
-    Larceny.runTemplate tpl p (prefetchSubs tagDict catDict mKeys) l
+    runTemplate tpl p (prefetchSubs tagDict catDict mKeys) l
     wpKeys <- liftIO $ readMVar mKeys
     void $ liftIO $ concurrently $ map cachingGet wpKeys
-    Larceny.runTemplate tpl p (wordpressSubs wp extra uri wpLens) l
+    runTemplate tpl p (wordpressSubs wp extra uri wpLens) l
 
 prefetchSubs tdict cdict mkeys =
   subs [ ("wpPosts", wpPostsPrefetch tdict cdict mkeys)
