@@ -1,9 +1,9 @@
 flags: {}
 packages:
 - '.'
-- location: ../larceny
-  extra-dep: true
-- location: ../hspec-fn
+- location:
+    git: https://github.com/positiondev/larceny
+    commit: aea0dfa420e2f151cfae166114a3d3ac8072ed02
   extra-dep: true
 extra-deps:
 - aeson-0.11.2.0
