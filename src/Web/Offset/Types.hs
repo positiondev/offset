@@ -67,8 +67,8 @@ data CatType
 data TagType
 
 instance Show (TaxSpec a) where
-  show (TaxPlus t) = "+" ++ (T.unpack t)
-  show (TaxMinus t) = "-" ++ (T.unpack t)
+  show (TaxPlus t) = '+' : T.unpack t
+  show (TaxMinus t) = '-' : T.unpack t
 
 newtype TaxRes a = TaxRes (Int, Text) deriving (Show)
 
