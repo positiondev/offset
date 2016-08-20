@@ -3,7 +3,7 @@ packages:
 - '.'
 - location:
     git: https://github.com/positiondev/larceny
-    commit: f15a8a364887eeb49122af675bfe1ee12fc10ee5
+    commit: 89bbcc035c3a2cd9889b0c0affed121ea9469e24
   extra-dep: true
 extra-deps:
 - aeson-0.11.2.0

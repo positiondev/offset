@@ -184,7 +184,7 @@ wpPrefetch wp extra uri wpLens = Fill $ \ _m t@(p, tpl) l -> do
 
 prefetchSubs tdict cdict mkeys =
   subs [ ("wpPosts", wpPostsPrefetch tdict cdict mkeys)
-        , ("wpPage", useAttrs (a"name") $ wpPagePrefetch tdict cdict mkeys) ]
+       , ("wpPage", useAttrs (a"name") $ wpPagePrefetch tdict cdict mkeys) ]
 
 wpPostsPrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
                 -> (TaxSpec CatType -> TaxSpecId CatType)

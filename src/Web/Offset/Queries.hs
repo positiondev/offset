@@ -19,6 +19,14 @@ lookupTaxDict key@(TaxDictKey resName) wp@Wordpress{..} =
                      terror $ "Unparsable JSON: " <> resp
        Just res -> return (getSpecId $ TaxDict res resName)
 
+lookupTaxSlug :: WPKey -> Wordpress b -> IO (Int -> Text)
+lookupTaxSlug key@(TaxDictKey resName) wp@Wordpress{..} =
+  do resp <- cachingGetErrorInt (cacheInternals { wpCacheSet = wpCacheSetInt (runRedis cacheInternals) (CacheSeconds (12 * 60 * 60))}) key
+     case decodeJson resp of
+       Nothing -> do wpExpirePostInt (runRedis cacheInternals) key
+                     terror $ "Unparsable JSON: " <> resp
+       Just res -> return (getTaxSlug $ TaxDict res resName)
+
 getSpecId :: TaxDict a -> TaxSpec a -> TaxSpecId a
 getSpecId taxDict spec =
   case spec of
@@ -30,3 +38,9 @@ getSpecId taxDict spec =
       case filter (\(TaxRes (_,s)) -> s == slug) dict of
        [] -> terror $ "Couldn't find " <> desc <> ": " <> slug
        (TaxRes (i,_):_) -> i
+
+getTaxSlug :: TaxDict a -> Int -> Text
+getTaxSlug (TaxDict{..}) taxId =
+  case filter (\(TaxRes (i, _)) -> i == taxId) dict of
+    [] -> terror $ "Couldn't find " <> desc <> " with id: " <> tshow taxId
+    (TaxRes (_,s):_) -> s
