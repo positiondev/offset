@@ -20,29 +20,26 @@ import           Web.Offset.Utils
 wpRequestInt :: Requester -> Text -> WPKey -> IO Text
 wpRequestInt runHTTP endpt key =
   case key of
-   TaxDictKey "tag" -> req "/tags/" []
-   TaxDictKey "category" -> req "/categories/" []
-   TaxDictKey resName -> req ("/taxonomies/" <> resName <> "/terms") []
-   PostByPermalinkKey year month slug ->
-     req "/posts" [("filter[year]", year)
-                  ,("filter[monthnum]", month)
-                  ,("filter[name]", slug)]
-   PostsKey{} -> req "/posts" (buildParams key)
-   PostKey i -> req ("/posts/" <> tshow i) []
-   PageKey s -> req "/posts" [("type", "page"),("filter[name]", s)]
-   AuthorKey i -> req ("/users/" <> tshow i) []
+   TaxDictKey "tag" ->            req "/tags/" []
+   TaxDictKey "category" ->       req "/categories/" []
+   TaxDictKey resName ->          req ("/taxonomies/" <> resName <> "/terms") []
+   PostByPermalinkKey _ _ slug -> req "/posts" [("slug", slug)]
+   PostsKey{} ->                  req "/posts" (buildParams key)
+   PostKey i ->                   req ("/posts/" <> tshow i) []
+   PageKey s ->                   req "/pages" [("slug", s)]
+   AuthorKey i ->                 req ("/users/" <> tshow i) []
   where req path = unRequester runHTTP (endpt <> path)
 
 buildParams :: WPKey -> [(Text, Text)]
 buildParams (PostsKey filters) = params
   where params = Set.toList $ Set.map mkFilter filters
-        mkFilter (TagFilter (TaxPlusId i)) = ("filter[tag__in]", tshow i)
-        mkFilter (TagFilter (TaxMinusId i)) = ("filter[tag__not_in]", tshow i)
-        mkFilter (CatFilter (TaxPlusId i)) = ("filter[category__in]", tshow i)
-        mkFilter (CatFilter (TaxMinusId i)) = ("filter[category__not_in]", tshow i)
-        mkFilter (NumFilter num) = ("filter[posts_per_page]", tshow num)
-        mkFilter (OffsetFilter offset) = ("filter[offset]", tshow offset)
-        mkFilter (UserFilter user) = ("filter[author_name]", user)
+        mkFilter (TagFilter (TaxPlusId i)) = ("tags[]", tshow i)
+        mkFilter (TagFilter (TaxMinusId i)) = ("tags_exclude[]", tshow i)
+        mkFilter (CatFilter (TaxPlusId i)) = ("categories[]", tshow i)
+        mkFilter (CatFilter (TaxMinusId i)) = ("categories_exclude[]", tshow i)
+        mkFilter (NumFilter num) = ("per_page", tshow num)
+        mkFilter (OffsetFilter offset) = ("offset", tshow offset)
+        mkFilter (UserFilter user) = ("author[]", user)
 
 wpLogInt :: Maybe (Text -> IO ()) -> Text -> IO ()
 wpLogInt logger msg = case logger of
