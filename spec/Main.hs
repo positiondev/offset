@@ -75,6 +75,11 @@ article2 = object [ "id" .= (2 :: Int)
                   , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
                   ]
 
+page1 = object [ "id" .= (3 :: Int)
+               , "title" .= object ["rendered" .= ("Page foo" :: Text)]
+               , "content" .= object ["rendered" .= ("<b>rendered</b> page content" :: Text)]
+               ]
+
 customFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-featured" [F "width"
                                                                                      ,F "height"
                                                                                      ,F "url"]
@@ -85,6 +90,7 @@ customFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-featu
 tplLibrary :: Library Ctxt
 tplLibrary =
   M.fromList [(["single"], parse "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>")
+             ,(["single-page"], parse "<wpPage name=a-first-page />")
              ,(["many"], parse "<wpPosts limit=2><wpTitle/></wpPosts>")
              ,(["many1"], parse "<wpPosts><wpTitle/></wpPosts>")
              ,(["many2"], parse "<wpPosts offset=1 limit=1><wpTitle/></wpPosts>")
@@ -134,6 +140,8 @@ fauxRequester _ "/categories/" [] =
                                , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
                                ]
                        ]
+fauxRequester _ "/pages" [("slug", "a-first-page")] =
+  return $ enc [page1]
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
@@ -167,12 +175,15 @@ initNoRequestWithCache =
 -- Section 2: Test suite against application.           --
 ----------------------------------------------------------
 
-main :: IO ()
-main = hspec $ do
+runTests :: IO ()
+runTests = hspec $ do
   Misc.tests
   larcenyFillTests
   queryTests
   liveTests
+
+main :: IO ()
+main = runTests
 
 type TemplateName = Text
 type TemplateText = Text
@@ -204,7 +215,9 @@ larcenyFillTests = do
       "<wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo bar"
       "<wpPosts><wpId/></wpPosts>" `shouldRender` "1.0"
       "<wpPosts><wpExcerpt/></wpPosts>" `shouldRender` "summary"
-
+  describe "<wpPage>" $
+    it "should show the content" $ do
+      "<wpPage name=a-first-page />" `shouldRender` "<b>rendered</b> page content"
   describe "<wpNoPostDuplicates/>" $ do
     it "should not duplicate any posts after call to wpNoPostDuplicates" $
       "<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo bar"
@@ -368,6 +381,8 @@ queryTests =
         ["/posts?categories_exclude[]=159&offset=0&per_page=20"]
       "<wp><div><wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts></div></wp>" `shouldQueryTo`
         replicate 2 "/posts?categories[]=159&offset=0&per_page=20"
+      "<wpPage name=blah />" `shouldQueryTo`
+        ["/pages?slug=blah"]
 
 rendersDifferentlyFrom :: (TemplateName, Ctxt)
                        -> TemplateName
@@ -427,3 +442,6 @@ liveTests =
          ("cat1", ctxt) `rendersDifferentlyFrom` "cat2"
        it "should be able to make negative category queries" $
          ("cat1", ctxt) `rendersDifferentlyFrom` "cat3"
+       it "should be able to render a single page" $
+         ("single-page", "/pages?slug=a-first-post", ctxt)
+         `shouldRenderAtUrlContaining` "This is the first page content"
