@@ -28,5 +28,5 @@ test:
     - cd wp && wp server --port=5555:
          background: true
     - sleep 5
-    - cp wp && python setup_posts.py
+    - cd wp && python setup_posts.py
     - stack test
