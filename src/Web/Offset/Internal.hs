@@ -20,7 +20,6 @@ import           Web.Offset.Utils
 wpRequestInt :: Requester -> Text -> WPKey -> IO Text
 wpRequestInt runHTTP endpt key =
   case key of
-   AllTaxonomiesKey ->            req "/taxonomies" []
    TaxDictKey resName ->          req ("/" <> resName) []
    PostByPermalinkKey _ _ slug -> req "/posts" [("slug", slug)]
    PostsKey{} ->                  req "/posts" (buildParams key)

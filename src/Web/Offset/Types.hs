@@ -81,11 +81,6 @@ instance FromJSON TaxRes where
 data TaxDict = TaxDict { dict :: [TaxRes]
                        , desc :: Text} deriving (Show)
 
-type TaxonomyItemSlug = Text
-type TaxonomyItemId = Int
-
-type TaxonomyDictionary = M.HashMap (TaxonomyName, TaxonomyItemSlug) TaxonomyItemId
-
 type Year = Text
 type Month = Text
 type Slug = Text
@@ -109,7 +104,6 @@ data WPKey = PostKey Int
            | PageKey Text
            | AuthorKey Int
            | TaxDictKey Text
-           | AllTaxonomiesKey
            deriving (Eq, Show, Ord)
 
 tagChars :: String

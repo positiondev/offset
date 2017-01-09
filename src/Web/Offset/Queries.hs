@@ -28,9 +28,6 @@ lookupTaxSlug key@(TaxDictKey resName) wp@Wordpress{..} =
                      terror $ "Unparsable JSON: " <> resp
        Just res -> return (getTaxSlug $ TaxDict res resName)
 
-getTaxonomies :: [TaxDict] -> TaxSpec -> TaxSpecId
-getTaxonomies taxDicts spec = undefined
-
 getSpecId :: TaxDict -> TaxSpec -> TaxSpecId
 getSpecId taxDict spec =
   case spec of
