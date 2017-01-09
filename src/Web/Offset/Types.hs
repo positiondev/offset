@@ -14,6 +14,7 @@ import           Control.Lens           hiding (children)
 import           Control.Monad          (mzero)
 import           Control.Monad.State
 import           Data.Aeson             (FromJSON, Value (..), parseJSON, (.:))
+import qualified Data.HashMap.Strict    as M
 import           Data.IntSet            (IntSet)
 import           Data.List              (intercalate)
 import           Data.Maybe             (catMaybes, isJust)
@@ -59,38 +60,45 @@ data WordpressInt b =
                   , runRedis      :: RunRedis
                   }
 
-data TaxSpec a = TaxPlus Text | TaxMinus Text deriving (Eq, Ord)
+data TaxSpec = TaxPlus Text | TaxMinus Text deriving (Eq, Ord)
 
-data TaxSpecId a = TaxPlusId Int | TaxMinusId Int deriving (Eq, Show, Ord)
+data TaxSpecId = TaxPlusId Int | TaxMinusId Int deriving (Eq, Show, Ord)
 
 data CatType
 data TagType
+type CustomType = Text
 
-instance Show (TaxSpec a) where
+instance Show TaxSpec where
   show (TaxPlus t) = '+' : T.unpack t
   show (TaxMinus t) = '-' : T.unpack t
 
-newtype TaxRes a = TaxRes (Int, Text) deriving (Show)
+newtype TaxRes = TaxRes (Int, Text) deriving (Show)
 
-instance FromJSON (TaxRes a) where
+instance FromJSON TaxRes where
   parseJSON (Object o) = TaxRes <$> ((,) <$> o .: "id" <*> o .: "slug")
   parseJSON _ = mzero
 
-data TaxDict a = TaxDict {dict :: [TaxRes a], desc :: Text} deriving (Show)
+data TaxDict = TaxDict { dict :: [TaxRes]
+                       , desc :: Text} deriving (Show)
+
+type TaxonomyItemSlug = Text
+type TaxonomyItemId = Int
+
+type TaxonomyDictionary = M.HashMap (TaxonomyName, TaxonomyItemSlug) TaxonomyItemId
 
 type Year = Text
 type Month = Text
 type Slug = Text
-data Filter = TagFilter (TaxSpecId TagType)
-            | CatFilter (TaxSpecId CatType)
+type TaxonomyName = Text
+
+data Filter = TaxFilter TaxonomyName TaxSpecId
             | NumFilter Int
             | OffsetFilter Int
             | UserFilter Text
             deriving (Eq, Ord)
 
 instance Show Filter where
-  show (TagFilter t) = "tag_" ++ show t
-  show (CatFilter t) = "cat_" ++ show t
+  show (TaxFilter n t) = show n ++ "_" ++ show t
   show (NumFilter n) = "num_" ++ show n
   show (OffsetFilter n) = "offset_" ++ show n
   show (UserFilter u) = T.unpack $ "user_" <> u
@@ -101,6 +109,7 @@ data WPKey = PostKey Int
            | PageKey Text
            | AuthorKey Int
            | TaxDictKey Text
+           | AllTaxonomiesKey
            deriving (Eq, Show, Ord)
 
 tagChars :: String
@@ -109,34 +118,35 @@ tagChars = ['a'..'z'] ++ "-" ++ digitChars
 digitChars :: String
 digitChars = ['0'..'9']
 
-instance Read (TaxSpec a) where
+instance Read TaxSpec where
   readsPrec _ ('+':cs) | not (null cs) && all (`elem` tagChars) cs = [(TaxPlus (T.pack cs), "")]
   readsPrec _ ('-':cs) | not (null cs) && all (`elem` tagChars) cs = [(TaxMinus (T.pack cs), "")]
   readsPrec _ cs | not (null cs) && all (`elem` tagChars) cs       = [(TaxPlus (T.pack cs), "")]
   readsPrec _ _ = []
 
-instance Read (TaxSpecId a) where
+instance Read TaxSpecId where
   readsPrec _ ('+':cs) | not (null cs) && all (`elem` digitChars) cs = [(TaxPlusId (read cs), "")]
   readsPrec _ ('-':cs) | not (null cs) && all (`elem` digitChars) cs = [(TaxMinusId (read cs), "")]
   readsPrec _ cs       | not (null cs) && all (`elem` digitChars) cs = [(TaxPlusId (read cs), "")]
   readsPrec _ _ = []
 
-newtype TaxSpecList a = TaxSpecList { unTaxSpecList :: [TaxSpec a]} deriving (Eq, Ord)
+data TaxSpecList = TaxSpecList { taxName :: TaxonomyName
+                               , taxList :: [TaxSpec]} deriving (Eq, Ord)
 
-instance Show (TaxSpecList a) where
-  show (TaxSpecList ts) = intercalate "," (map show ts)
+instance Show TaxSpecList where
+  show (TaxSpecList n ts) = T.unpack n ++ ": " ++ intercalate "," (map show ts)
 
-instance Read (TaxSpecList a) where
-  readsPrec _ ts = let vs = map readSafe $ T.splitOn "," $ T.pack ts in
-                     if all isJust vs
-                        then [(TaxSpecList $ catMaybes vs, "")]
-                        else []
+attrToTaxSpecList :: (Text, Text) -> TaxSpecList
+attrToTaxSpecList (k, ts) =
+  let vs = map readSafe $ T.splitOn "," ts in
+  if all isJust vs
+  then TaxSpecList k (catMaybes vs)
+  else TaxSpecList k []
 
 data WPQuery = WPPostsQuery{ qlimit  :: Int
                            , qnum    :: Int
                            , qoffset :: Int
                            , qpage   :: Int
-                           , qtags   :: TaxSpecList TagType
-                           , qcats   :: TaxSpecList CatType
+                           , qtaxes  :: [TaxSpecList]
                            , quser   :: Maybe Text
                            } deriving (Show)
