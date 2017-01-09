@@ -178,22 +178,6 @@ foreach ( $menu as $id => $data ) {
 }
 unset($id, $data, $subs, $first_sub);
 
-// Remove any duplicated separators
-$separator_found = false;
-foreach ( $menu as $id => $data ) {
-	if ( 0 == strcmp('wp-menu-separator', $data[4] ) ) {
-		if ( ! $separator_found ) {
-			$separator_found = true;
-		} else {
-			unset($menu[$id]);
-			$separator_found = false;
-		}
-	} else {
-		$separator_found = false;
-	}
-}
-unset($id, $data);
-
 /**
  *
  * @param string $add
@@ -245,7 +229,7 @@ function add_menu_classes($menu) {
 	}
 
 	/**
-	 * Filter administration menus array with classes added for top-level items.
+	 * Filters administration menus array with classes added for top-level items.
 	 *
 	 * @since 2.7.0
 	 *
@@ -257,9 +241,9 @@ function add_menu_classes($menu) {
 uksort($menu, "strnatcasecmp"); // make it all pretty
 
 /**
- * Filter whether to enable custom ordering of the administration menu.
+ * Filters whether to enable custom ordering of the administration menu.
  *
- * See the 'menu_order' filter for reordering menu items.
+ * See the {@see 'menu_order'} filter for reordering menu items.
  *
  * @since 2.8.0
  *
@@ -274,9 +258,9 @@ if ( apply_filters( 'custom_menu_order', false ) ) {
 	$default_menu_order = $menu_order;
 
 	/**
-	 * Filter the order of administration menu items.
+	 * Filters the order of administration menu items.
 	 *
-	 * A truthy value must first be passed to the 'custom_menu_order' filter
+	 * A truthy value must first be passed to the {@see 'custom_menu_order'} filter
 	 * for this filter to work. Use the following to enable custom menu ordering:
 	 *
 	 *     add_filter( 'custom_menu_order', '__return_true' );
@@ -319,6 +303,26 @@ if ( apply_filters( 'custom_menu_order', false ) ) {
 	unset($menu_order, $default_menu_order);
 }
 
+// Prevent adjacent separators
+$prev_menu_was_separator = false;
+foreach ( $menu as $id => $data ) {
+	if ( false === stristr( $data[4], 'wp-menu-separator' ) ) {
+
+		// This item is not a separator, so falsey the toggler and do nothing
+		$prev_menu_was_separator = false;
+	} else {
+
+		// The previous item was a separator, so unset this one
+		if ( true === $prev_menu_was_separator ) {
+			unset( $menu[ $id ] );
+		}
+
+		// This item is a separator, so truthy the toggler and move on
+		$prev_menu_was_separator = true;
+	}
+}
+unset( $id, $data, $prev_menu_was_separator );
+
 // Remove the last menu item if it is a separator.
 $last_menu_key = array_keys( $menu );
 $last_menu_key = array_pop( $last_menu_key );
@@ -335,7 +339,7 @@ if ( !user_can_access_admin_page() ) {
 	 */
 	do_action( 'admin_page_access_denied' );
 
-	wp_die( __( 'You do not have sufficient permissions to access this page.' ), 403 );
+	wp_die( __( 'Sorry, you are not allowed to access this page.' ), 403 );
 }
 
 $menu = add_menu_classes($menu);

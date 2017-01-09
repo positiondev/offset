@@ -1,16 +1,22 @@
 <?php
 /**
- * Users administration panel.
+ * User administration panel
  *
  * @package WordPress
  * @subpackage Administration
+ * @since 1.0.0
  */
 
 /** WordPress Administration Bootstrap */
 require_once( dirname( __FILE__ ) . '/admin.php' );
 
-if ( ! current_user_can( 'list_users' ) )
-	wp_die( __( 'Cheatin&#8217; uh?' ), 403 );
+if ( ! current_user_can( 'list_users' ) ) {
+	wp_die(
+		'<h1>' . __( 'Cheatin&#8217; uh?' ) . '</h1>' .
+		'<p>' . __( 'Sorry, you are not allowed to list users.' ) . '</p>',
+		403
+	);
+}
 
 $wp_list_table = _get_list_table('WP_Users_List_Table');
 $pagenum = $wp_list_table->get_pagenum();
@@ -33,7 +39,7 @@ get_current_screen()->add_help_tab( array(
 	'content' => '<p>' . __('You can customize the display of this screen in a number of ways:') . '</p>' .
 					'<ul>' .
 					'<li>' . __('You can hide/display columns based on your needs and decide how many users to list per screen using the Screen Options tab.') . '</li>' .
-					'<li>' . __('You can filter the list of users by User Role using the text links in the upper left to show All, Administrator, Editor, Author, Contributor, or Subscriber. The default view is to show all users. Unused User Roles are not listed.') . '</li>' .
+					'<li>' . __( 'You can filter the list of users by User Role using the text links above the users list to show All, Administrator, Editor, Author, Contributor, or Subscriber. The default view is to show all users. Unused User Roles are not listed.' ) . '</li>' .
 					'<li>' . __('You can view all posts made by a user by clicking on the number under the Posts column.') . '</li>' .
 					'</ul>'
 ) );
@@ -58,10 +64,16 @@ unset( $help );
 
 get_current_screen()->set_help_sidebar(
     '<p><strong>' . __('For more information:') . '</strong></p>' .
-    '<p>' . __('<a href="https://codex.wordpress.org/Users_Screen" target="_blank">Documentation on Managing Users</a>') . '</p>' .
-    '<p>' . __('<a href="https://codex.wordpress.org/Roles_and_Capabilities" target="_blank">Descriptions of Roles and Capabilities</a>') . '</p>' .
-    '<p>' . __('<a href="https://wordpress.org/support/" target="_blank">Support Forums</a>') . '</p>'
+    '<p>' . __('<a href="https://codex.wordpress.org/Users_Screen">Documentation on Managing Users</a>') . '</p>' .
+    '<p>' . __('<a href="https://codex.wordpress.org/Roles_and_Capabilities">Descriptions of Roles and Capabilities</a>') . '</p>' .
+    '<p>' . __('<a href="https://wordpress.org/support/">Support Forums</a>') . '</p>'
 );
+
+get_current_screen()->set_screen_reader_content( array(
+	'heading_views'      => __( 'Filter users list' ),
+	'heading_pagination' => __( 'Users list navigation' ),
+	'heading_list'       => __( 'Users list' ),
+) );
 
 if ( empty($_REQUEST) ) {
 	$referer = '<input type="hidden" name="wp_http_referer" value="'. esc_attr( wp_unslash( $_SERVER['REQUEST_URI'] ) ) . '" />';
@@ -75,25 +87,6 @@ if ( empty($_REQUEST) ) {
 
 $update = '';
 
-/**
- * @since 3.5.0
- * @access private
- */
-function delete_users_add_js() { ?>
-<script>
-jQuery(document).ready( function($) {
-	var submit = $('#submit').prop('disabled', true);
-	$('input[name=delete_option]').one('change', function() {
-		submit.prop('disabled', false);
-	});
-	$('#reassign_user').focus( function() {
-		$('#delete_option1').prop('checked', true).trigger('change');
-	});
-});
-</script>
-<?php
-}
-
 switch ( $wp_list_table->current_action() ) {
 
 /* Bulk Dropdown menu Role changes */
@@ -101,7 +94,7 @@ case 'promote':
 	check_admin_referer('bulk-users');
 
 	if ( ! current_user_can( 'promote_users' ) )
-		wp_die( __( 'You can&#8217;t edit that user.' ) );
+		wp_die( __( 'Sorry, you are not allowed to edit this user.' ) );
 
 	if ( empty($_REQUEST['users']) ) {
 		wp_redirect($redirect);
@@ -109,8 +102,16 @@ case 'promote':
 	}
 
 	$editable_roles = get_editable_roles();
-	if ( empty( $editable_roles[$_REQUEST['new_role']] ) )
-		wp_die(__('You can&#8217;t give users that role.'));
+	$role = false;
+	if ( ! empty( $_REQUEST['new_role2'] ) ) {
+		$role = $_REQUEST['new_role2'];
+	} elseif ( ! empty( $_REQUEST['new_role'] ) ) {
+		$role = $_REQUEST['new_role'];
+	}
+
+	if ( ! $role || empty( $editable_roles[ $role ] ) ) {
+		wp_die( __( 'Sorry, you are not allowed to give users that role.' ) );
+	}
 
 	$userids = $_REQUEST['users'];
 	$update = 'promote';
@@ -118,20 +119,25 @@ case 'promote':
 		$id = (int) $id;
 
 		if ( ! current_user_can('promote_user', $id) )
-			wp_die(__('You can&#8217;t edit that user.'));
+			wp_die(__('Sorry, you are not allowed to edit this user.'));
 		// The new role of the current user must also have the promote_users cap or be a multisite super admin
-		if ( $id == $current_user->ID && ! $wp_roles->role_objects[ $_REQUEST['new_role'] ]->has_cap('promote_users')
+		if ( $id == $current_user->ID && ! $wp_roles->role_objects[ $role ]->has_cap('promote_users')
 			&& ! ( is_multisite() && is_super_admin() ) ) {
 				$update = 'err_admin_role';
 				continue;
 		}
 
 		// If the user doesn't already belong to the blog, bail.
-		if ( is_multisite() && !is_user_member_of_blog( $id ) )
-			wp_die( __( 'Cheatin&#8217; uh?' ), 403 );
+		if ( is_multisite() && !is_user_member_of_blog( $id ) ) {
+			wp_die(
+				'<h1>' . __( 'Cheatin&#8217; uh?' ) . '</h1>' .
+				'<p>' . __( 'One of the selected users is not a member of this site.' ) . '</p>',
+				403
+			);
+		}
 
 		$user = get_userdata( $id );
-		$user->set_role($_REQUEST['new_role']);
+		$user->set_role( $role );
 	}
 
 	wp_redirect(add_query_arg('update', $update, $redirect));
@@ -158,14 +164,14 @@ case 'dodelete':
 	}
 
 	if ( ! current_user_can( 'delete_users' ) )
-		wp_die(__('You can&#8217;t delete users.'));
+		wp_die(__('Sorry, you are not allowed to delete users.'));
 
 	$update = 'del';
 	$delete_count = 0;
 
 	foreach ( $userids as $id ) {
 		if ( ! current_user_can( 'delete_user', $id ) )
-			wp_die(__( 'You can&#8217;t delete that user.' ) );
+			wp_die(__( 'Sorry, you are not allowed to delete that user.' ) );
 
 		if ( $id == $current_user->ID ) {
 			$update = 'err_admin_del';
@@ -198,14 +204,23 @@ case 'delete':
 	}
 
 	if ( ! current_user_can( 'delete_users' ) )
-		$errors = new WP_Error( 'edit_users', __( 'You can&#8217;t delete users.' ) );
+		$errors = new WP_Error( 'edit_users', __( 'Sorry, you are not allowed to delete users.' ) );
 
 	if ( empty($_REQUEST['users']) )
 		$userids = array( intval( $_REQUEST['user'] ) );
 	else
 		$userids = array_map( 'intval', (array) $_REQUEST['users'] );
 
-	add_action( 'admin_head', 'delete_users_add_js' );
+	$users_have_content = false;
+	if ( $wpdb->get_var( "SELECT ID FROM {$wpdb->posts} WHERE post_author IN( " . implode( ',', $userids ) . " ) LIMIT 1" ) ) {
+		$users_have_content = true;
+	} elseif ( $wpdb->get_var( "SELECT link_id FROM {$wpdb->links} WHERE link_owner IN( " . implode( ',', $userids ) . " ) LIMIT 1" ) ) {
+		$users_have_content = true;
+	}
+
+	if ( $users_have_content ) {
+		add_action( 'admin_head', 'delete_users_add_js' );
+	}
 
 	include( ABSPATH . 'wp-admin/admin-header.php' );
 ?>
@@ -233,39 +248,51 @@ case 'delete':
 	foreach ( $userids as $id ) {
 		$user = get_userdata( $id );
 		if ( $id == $current_user->ID ) {
+			/* translators: 1: user id, 2: user login */
 			echo "<li>" . sprintf(__('ID #%1$s: %2$s <strong>The current user will not be deleted.</strong>'), $id, $user->user_login) . "</li>\n";
 		} else {
+			/* translators: 1: user id, 2: user login */
 			echo "<li><input type=\"hidden\" name=\"users[]\" value=\"" . esc_attr($id) . "\" />" . sprintf(__('ID #%1$s: %2$s'), $id, $user->user_login) . "</li>\n";
 			$go_delete++;
 		}
 	}
 	?>
 	</ul>
-<?php if ( $go_delete ) : ?>
-	<?php if ( 1 == $go_delete ) : ?>
-		<fieldset><p><legend><?php _e( 'What should be done with content owned by this user?' ); ?></legend></p>
-	<?php else : ?>
-		<fieldset><p><legend><?php _e( 'What should be done with content owned by these users?' ); ?></legend></p>
-	<?php endif; ?>
-	<ul style="list-style:none;">
-		<li><label><input type="radio" id="delete_option0" name="delete_option" value="delete" />
-		<?php _e('Delete all content.'); ?></label></li>
-		<li><input type="radio" id="delete_option1" name="delete_option" value="reassign" />
-		<?php echo '<label for="delete_option1">' . __( 'Attribute all content to:' ) . '</label> ';
-		wp_dropdown_users( array( 'name' => 'reassign_user', 'exclude' => array_diff( $userids, array($current_user->ID) ) ) ); ?></li>
-	</ul></fieldset>
-	<?php
+<?php if ( $go_delete ) :
+
+	if ( ! $users_have_content ) : ?>
+		<input type="hidden" name="delete_option" value="delete" />
+	<?php else: ?>
+		<?php if ( 1 == $go_delete ) : ?>
+			<fieldset><p><legend><?php _e( 'What should be done with content owned by this user?' ); ?></legend></p>
+		<?php else : ?>
+			<fieldset><p><legend><?php _e( 'What should be done with content owned by these users?' ); ?></legend></p>
+		<?php endif; ?>
+		<ul style="list-style:none;">
+			<li><label><input type="radio" id="delete_option0" name="delete_option" value="delete" />
+			<?php _e('Delete all content.'); ?></label></li>
+			<li><input type="radio" id="delete_option1" name="delete_option" value="reassign" />
+			<?php echo '<label for="delete_option1">' . __( 'Attribute all content to:' ) . '</label> ';
+			wp_dropdown_users( array(
+				'name' => 'reassign_user',
+				'exclude' => array_diff( $userids, array( $current_user->ID ) ),
+				'show' => 'display_name_with_login',
+			) ); ?></li>
+		</ul></fieldset>
+	<?php endif;
 	/**
 	 * Fires at the end of the delete users form prior to the confirm button.
 	 *
 	 * @since 4.0.0
+	 * @since 4.5.0 The `$userids` parameter was added.
 	 *
-	 * @param WP_User $current_user WP_User object for the user being deleted.
+	 * @param WP_User $current_user WP_User object for the current user.
+	 * @param array   $userids      Array of IDs for users being deleted.
 	 */
-	do_action( 'delete_user_form', $current_user );
+	do_action( 'delete_user_form', $current_user, $userids );
 	?>
 	<input type="hidden" name="action" value="dodelete" />
-	<?php submit_button( __('Confirm Deletion'), 'secondary' ); ?>
+	<?php submit_button( __('Confirm Deletion'), 'primary' ); ?>
 <?php else : ?>
 	<p><?php _e('There are no valid users selected for deletion.'); ?></p>
 <?php endif; ?>
@@ -287,7 +314,7 @@ case 'doremove':
 	}
 
 	if ( ! current_user_can( 'remove_users' ) )
-		wp_die( __( 'You can&#8217;t remove users.' ) );
+		wp_die( __( 'Sorry, you are not allowed to remove users.' ) );
 
 	$userids = $_REQUEST['users'];
 
@@ -322,7 +349,7 @@ case 'remove':
 	}
 
 	if ( !current_user_can('remove_users') )
-		$error = new WP_Error('edit_users', __('You can&#8217;t remove users.'));
+		$error = new WP_Error('edit_users', __('Sorry, you are not allowed to remove users.'));
 
 	if ( empty($_REQUEST['users']) )
 		$userids = array(intval($_REQUEST['user']));
@@ -351,10 +378,13 @@ case 'remove':
 		$id = (int) $id;
  		$user = get_userdata( $id );
 		if ( $id == $current_user->ID && !is_super_admin() ) {
+			/* translators: 1: user id, 2: user login */
 			echo "<li>" . sprintf(__('ID #%1$s: %2$s <strong>The current user will not be removed.</strong>'), $id, $user->user_login) . "</li>\n";
 		} elseif ( !current_user_can('remove_user', $id) ) {
-			echo "<li>" . sprintf(__('ID #%1$s: %2$s <strong>You don\'t have permission to remove this user.</strong>'), $id, $user->user_login) . "</li>\n";
+			/* translators: 1: user id, 2: user login */
+			echo "<li>" . sprintf(__('ID #%1$s: %2$s <strong>Sorry, you are not allowed to remove this user.</strong>'), $id, $user->user_login) . "</li>\n";
 		} else {
+			/* translators: 1: user id, 2: user login */
 			echo "<li><input type=\"hidden\" name=\"users[]\" value=\"{$id}\" />" . sprintf(__('ID #%1$s: %2$s'), $id, $user->user_login) . "</li>\n";
 			$go_remove = true;
 		}
@@ -363,7 +393,7 @@ case 'remove':
 </ul>
 <?php if ( $go_remove ) : ?>
 		<input type="hidden" name="action" value="doremove" />
-		<?php submit_button( __('Confirm Removal'), 'secondary' ); ?>
+		<?php submit_button( __('Confirm Removal'), 'primary' ); ?>
 <?php else : ?>
 	<p><?php _e('There are no valid users selected for removal.'); ?></p>
 <?php endif; ?>
@@ -377,6 +407,17 @@ default:
 
 	if ( !empty($_GET['_wp_http_referer']) ) {
 		wp_redirect( remove_query_arg( array( '_wp_http_referer', '_wpnonce'), wp_unslash( $_SERVER['REQUEST_URI'] ) ) );
+		exit;
+	}
+
+	if ( $wp_list_table->current_action() && ! empty( $_REQUEST['users'] ) ) {
+		$userids = $_REQUEST['users'];
+		$sendback = wp_get_referer();
+
+		/** This action is documented in wp-admin/edit-comments.php */
+		$sendback = apply_filters( 'handle_bulk_actions-' . get_current_screen()->id, $sendback, $wp_list_table->current_action(), $userids );
+
+		wp_safe_redirect( $sendback );
 		exit;
 	}
 
@@ -404,6 +445,7 @@ default:
 			break;
 		case 'add':
 			if ( isset( $_GET['id'] ) && ( $user_id = $_GET['id'] ) && current_user_can( 'edit_user', $user_id ) ) {
+				/* translators: %s: edit page url */
 				$messages[] = '<div id="message" class="updated notice is-dismissible"><p>' . sprintf( __( 'New user created. <a href="%s">Edit user</a>' ),
 					esc_url( add_query_arg( 'wp_http_referer', urlencode( wp_unslash( $_SERVER['REQUEST_URI'] ) ),
 						self_admin_url( 'user-edit.php?user_id=' . $user_id ) ) ) ) . '</p></div>';
@@ -453,13 +495,16 @@ if ( ! empty($messages) ) {
 <?php
 echo esc_html( $title );
 if ( current_user_can( 'create_users' ) ) { ?>
-	<a href="user-new.php" class="page-title-action"><?php echo esc_html_x( 'Add New', 'user' ); ?></a>
+	<a href="<?php echo admin_url( 'user-new.php' ); ?>" class="page-title-action"><?php echo esc_html_x( 'Add New', 'user' ); ?></a>
 <?php } elseif ( is_multisite() && current_user_can( 'promote_users' ) ) { ?>
-	<a href="user-new.php" class="page-title-action"><?php echo esc_html_x( 'Add Existing', 'user' ); ?></a>
+	<a href="<?php echo admin_url( 'user-new.php' ); ?>" class="page-title-action"><?php echo esc_html_x( 'Add Existing', 'user' ); ?></a>
 <?php }
 
-if ( $usersearch )
-	printf( '<span class="subtitle">' . __('Search results for &#8220;%s&#8221;') . '</span>', esc_html( $usersearch ) ); ?>
+if ( strlen( $usersearch ) ) {
+	/* translators: %s: search keywords */
+	printf( '<span class="subtitle">' . __( 'Search results for &#8220;%s&#8221;' ) . '</span>', esc_html( $usersearch ) );
+}
+?>
 </h1>
 
 <?php $wp_list_table->views(); ?>

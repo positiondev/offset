@@ -12,7 +12,7 @@ class WP_Importer {
 	/**
 	 * Returns array with imported permalinks from WordPress database
 	 *
-	 * @global wpdb $wpdb
+	 * @global wpdb $wpdb WordPress database abstraction object.
 	 *
 	 * @param string $importer_name
 	 * @param string $bid
@@ -52,7 +52,7 @@ class WP_Importer {
 	/**
 	 * Return count of imported permalinks from WordPress database
 	 *
-	 * @global wpdb $wpdb
+	 * @global wpdb $wpdb WordPress database abstraction object.
 	 *
 	 * @param string $importer_name
 	 * @param string $bid
@@ -81,7 +81,7 @@ class WP_Importer {
 	/**
 	 * Set array with imported comments from WordPress database
 	 *
-	 * @global wpdb $wpdb
+	 * @global wpdb $wpdb WordPress database abstraction object.
 	 *
 	 * @param string $bid
 	 * @return array
@@ -136,13 +136,15 @@ class WP_Importer {
 				fwrite( STDERR, "Error: can not determine blog_id from $blog_id\n" );
 				exit();
 			}
-			if ( empty( $parsed['path'] ) )
+			if ( empty( $parsed['path'] ) ) {
 				$parsed['path'] = '/';
-			$blog = get_blog_details( array( 'domain' => $parsed['host'], 'path' => $parsed['path'] ) );
-			if ( !$blog ) {
+			}
+			$blogs = get_sites( array( 'domain' => $parsed['host'], 'number' => 1, 'path' => $parsed['path'] ) );
+			if ( ! $blogs ) {
 				fwrite( STDERR, "Error: Could not find blog\n" );
 				exit();
 			}
+			$blog = array_shift( $blogs );
 			$blog_id = (int) $blog->blog_id;
 		}
 

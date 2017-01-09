@@ -3,7 +3,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
@@ -17,7 +16,7 @@ import           Data.Ratio
 import           Web.Offset.Utils
 
 extractPostId :: Object -> (Int, Object)
-extractPostId p = let i = M.lookup "ID" p
+extractPostId p = let i = M.lookup "id" p
                       is = case i of
                             Just (String n) -> readSafe n
                             Just (Number n) ->

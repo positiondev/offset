@@ -1,9 +1,25 @@
-resolver: lts-3.10
-
+flags: {}
 packages:
 - '.'
 - location:
-    git: https://github.com/dbp/snaplet-redis
-    commit: fe25d41fec273e2ec68d13e65faec1d2b3fa1348
+    git: https://github.com/positiondev/larceny
+    commit: 89bbcc035c3a2cd9889b0c0affed121ea9469e24
   extra-dep: true
-extra-deps: []
+extra-deps:
+- aeson-0.11.2.0
+- bytestring-builder-0.10.8.1.0
+- cereal-text-0.1.0.2
+- digestive-functors-heist-0.8.6.2
+- directory-1.2.6.3
+- dotenv-0.3.0.2
+- fast-logger-2.4.6
+- fn-0.3.0.1
+- http2-1.6.0
+- logging-3.0.4
+- megaparsec-5.0.0
+- postgresql-simple-0.5.2.1
+- wai-3.2.1.1
+- wai-extra-3.0.15.2
+- wai-session-clientsession-0.1
+- warp-3.2.6
+resolver: lts-5.14

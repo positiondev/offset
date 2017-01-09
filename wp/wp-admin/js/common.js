@@ -1,6 +1,10 @@
 /* global setUserSetting, ajaxurl, commonL10n, alert, confirm, pagenow */
 var showNotice, adminMenu, columns, validateForm, screenMeta;
 ( function( $, window, undefined ) {
+	var $document = $( document ),
+		$window = $( window ),
+		$body = $( document.body );
+
 // Removed in 3.3.
 // (perhaps) needed for back-compat
 adminMenu = {
@@ -70,7 +74,7 @@ columns = {
 	}
 };
 
-$(document).ready(function(){columns.init();});
+$document.ready(function(){columns.init();});
 
 validateForm = function( form ) {
 	return !$( form )
@@ -79,7 +83,7 @@ validateForm = function( form ) {
 		.addClass( 'form-invalid' )
 		.find( 'input:visible' )
 		.change( function() { $( this ).closest( '.form-invalid' ).removeClass( 'form-invalid' ); } )
-		.size();
+		.length;
 };
 
 // stub for doing better warnings
@@ -133,7 +137,7 @@ screenMeta = {
 			button.addClass( 'screen-meta-active' ).attr( 'aria-expanded', true );
 		});
 
-		$( document ).trigger( 'screen:options:open' );
+		$document.trigger( 'screen:options:open' );
 	},
 
 	close: function( panel, button ) {
@@ -143,7 +147,7 @@ screenMeta = {
 			panel.parent().hide();
 		});
 
-		$( document ).trigger( 'screen:options:close' );
+		$document.trigger( 'screen:options:close' );
 	}
 };
 
@@ -171,17 +175,14 @@ $('.contextual-help-tabs').delegate('a', 'click', function(e) {
 	panel.addClass('active').show();
 });
 
-$(document).ready( function() {
-	var checks, first, last, checked, sliced, mobileEvent, transitionTimeout, focusedRowActions, $firstHeading,
+$document.ready( function() {
+	var checks, first, last, checked, sliced, mobileEvent, transitionTimeout, focusedRowActions,
 		lastClicked = false,
 		pageInput = $('input.current-page'),
 		currentPage = pageInput.val(),
 		isIOS = /iPhone|iPad|iPod/.test( navigator.userAgent ),
 		isAndroid = navigator.userAgent.indexOf( 'Android' ) !== -1,
 		isIE8 = $( document.documentElement ).hasClass( 'ie8' ),
-		$document = $( document ),
-		$window = $( window ),
-		$body = $( document.body ),
 		$adminMenuWrap = $( '#adminmenuwrap' ),
 		$wpwrap = $( '#wpwrap' ),
 		$adminmenu = $( '#adminmenu' ),
@@ -195,13 +196,15 @@ $(document).ready( function() {
 		pinnedMenuTop = false,
 		pinnedMenuBottom = false,
 		menuTop = 0,
+		menuState,
 		menuIsPinned = false,
 		height = {
 			window: $window.height(),
 			wpwrap: $wpwrap.height(),
 			adminbar: $adminbar.height(),
 			menu: $adminMenuWrap.height()
-		};
+		},
+		$headerEnd = $( '.wp-header-end' );
 
 
 	// when the menu is folded, make the fly-out submenu header clickable
@@ -209,45 +212,52 @@ $(document).ready( function() {
 		$(e.target).parent().siblings('a').get(0).click();
 	});
 
-	$('#collapse-menu').on('click.collapse-menu', function() {
-		var body = $( document.body ), respWidth, state;
+	$( '#collapse-button' ).on( 'click.collapse-menu', function() {
+		var viewportWidth = getViewportWidth() || 961;
 
 		// reset any compensation for submenus near the bottom of the screen
 		$('#adminmenu div.wp-submenu').css('margin-top', '');
 
-		if ( window.innerWidth ) {
-			// window.innerWidth is affected by zooming on phones
-			respWidth = Math.max( window.innerWidth, document.documentElement.clientWidth );
-		} else {
-			// IE < 9 doesn't support @media CSS rules
-			respWidth = 961;
-		}
-
-		if ( respWidth && respWidth < 960 ) {
-			if ( body.hasClass('auto-fold') ) {
-				body.removeClass('auto-fold').removeClass('folded');
+		if ( viewportWidth < 960 ) {
+			if ( $body.hasClass('auto-fold') ) {
+				$body.removeClass('auto-fold').removeClass('folded');
 				setUserSetting('unfold', 1);
 				setUserSetting('mfold', 'o');
-				state = 'open';
+				menuState = 'open';
 			} else {
-				body.addClass('auto-fold');
+				$body.addClass('auto-fold');
 				setUserSetting('unfold', 0);
-				state = 'folded';
+				menuState = 'folded';
 			}
 		} else {
-			if ( body.hasClass('folded') ) {
-				body.removeClass('folded');
+			if ( $body.hasClass('folded') ) {
+				$body.removeClass('folded');
 				setUserSetting('mfold', 'o');
-				state = 'open';
+				menuState = 'open';
 			} else {
-				body.addClass('folded');
+				$body.addClass('folded');
 				setUserSetting('mfold', 'f');
-				state = 'folded';
+				menuState = 'folded';
 			}
 		}
 
-		$( document ).trigger( 'wp-collapse-menu', { state: state } );
+		$document.trigger( 'wp-collapse-menu', { state: menuState } );
 	});
+
+	// Handle the `aria-haspopup` attribute on the current menu item when it has a sub-menu.
+	function currentMenuItemHasPopup() {
+		var $current = $( 'a.wp-has-current-submenu' );
+
+		if ( 'folded' === menuState ) {
+			// When folded or auto-folded and not responsive view, the current menu item does have a fly-out sub-menu.
+			$current.attr( 'aria-haspopup', 'true' );
+		} else {
+			// When expanded or in responsive view, reset aria-haspopup.
+			$current.attr( 'aria-haspopup', 'false' );
+		}
+	}
+
+	$document.on( 'wp-menu-state-set wp-collapse-menu wp-responsive-activate wp-responsive-deactivate', currentMenuItemHasPopup );
 
 	/**
 	 * Ensure an admin submenu is within the visual viewport.
@@ -289,7 +299,7 @@ $(document).ready( function() {
 		mobileEvent = isIOS ? 'touchstart' : 'click';
 
 		// close any open submenus when touch/click is not on the menu
-		$(document.body).on( mobileEvent+'.wp-mobile-hover', function(e) {
+		$body.on( mobileEvent+'.wp-mobile-hover', function(e) {
 			if ( $adminmenu.data('wp-responsive') ) {
 				return;
 			}
@@ -369,47 +379,51 @@ $(document).ready( function() {
 		});
 	}
 
-	// Move .notice, .updated and .error alert boxes. Don't move boxes designed to be inline.
-	$firstHeading = $( '.wrap > h1:first' );
-
-	// Back compatibility: if there is no H1, apply to first H2.
-	if ( ! $firstHeading.length ) {
-		$firstHeading = $( '.wrap h2:first' );
+	/*
+	 * The `.below-h2` class is here just for backward compatibility with plugins
+	 * that are (incorrectly) using it. Do not use. Use `.inline` instead. See #34570.
+	 * If '.wp-header-end' is found, append the notices after it otherwise
+	 * after the first h1 or h2 heading found within the main content.
+	 */
+	if ( ! $headerEnd.length ) {
+		$headerEnd = $( '.wrap h1, .wrap h2' ).first();
 	}
-
-	$firstHeading.nextAll( 'div.updated, div.error, div.notice' ).addClass( 'below-h2' );
-	$( 'div.updated, div.error, div.notice' ).not( '.below-h2, .inline' ).insertAfter( $firstHeading );
+	$( 'div.updated, div.error, div.notice' ).not( '.inline, .below-h2' ).insertAfter( $headerEnd );
 
 	// Make notices dismissible
-	$( '.notice.is-dismissible' ).each( function() {
-		var $this = $( this ),
-			$button = $( '<button type="button" class="notice-dismiss"><span class="screen-reader-text"></span></button>' ),
-			btnText = commonL10n.dismiss || '';
+	function makeNoticesDismissible() {
+		$( '.notice.is-dismissible' ).each( function() {
+			var $el = $( this ),
+				$button = $( '<button type="button" class="notice-dismiss"><span class="screen-reader-text"></span></button>' ),
+				btnText = commonL10n.dismiss || '';
 
-		// Ensure plain text
-		$button.find( '.screen-reader-text' ).text( btnText );
-
-		$this.append( $button );
-
-		$button.on( 'click.wp-dismiss-notice', function( event ) {
-			event.preventDefault();
-			$this.fadeTo( 100 , 0, function() {
-				$(this).slideUp( 100, function() {
-					$(this).remove();
+			// Ensure plain text
+			$button.find( '.screen-reader-text' ).text( btnText );
+			$button.on( 'click.wp-dismiss-notice', function( event ) {
+				event.preventDefault();
+				$el.fadeTo( 100, 0, function() {
+					$el.slideUp( 100, function() {
+						$el.remove();
+					});
 				});
 			});
+
+			$el.append( $button );
 		});
-	});
+	}
+
+	$document.on( 'wp-updates-notice-added wp-plugin-install-error wp-plugin-update-error wp-plugin-delete-error wp-theme-install-error wp-theme-delete-error', makeNoticesDismissible );
 
 	// Init screen meta
 	screenMeta.init();
 
-	// check all checkboxes
-	$('tbody').children().children('.check-column').find(':checkbox').click( function(e) {
-		if ( 'undefined' == e.shiftKey ) { return true; }
-		if ( e.shiftKey ) {
+	// This event needs to be delegated. Ticket #37973.
+	$body.on( 'click', 'tbody .check-column :checkbox', function( event ) {
+		// Shift click to select a range of checkboxes.
+		if ( 'undefined' == event.shiftKey ) { return true; }
+		if ( event.shiftKey ) {
 			if ( !lastClicked ) { return true; }
-			checks = $( lastClicked ).closest( 'form' ).find( ':checkbox' );
+			checks = $( lastClicked ).closest( 'form' ).find( ':checkbox' ).filter( ':visible:enabled' );
 			first = checks.index( lastClicked );
 			last = checks.index( this );
 			checked = $(this).prop('checked');
@@ -425,8 +439,8 @@ $(document).ready( function() {
 		}
 		lastClicked = this;
 
-		// toggle "check all" checkboxes
-		var unchecked = $(this).closest('tbody').find(':checkbox').filter(':visible').not(':checked');
+		// Toggle the "Select all" checkboxes depending if the other ones are all checked or not.
+		var unchecked = $(this).closest('tbody').find(':checkbox').filter(':visible:enabled').not(':checked');
 		$(this).closest('table').children('thead, tfoot').find(':checkbox').prop('checked', function() {
 			return ( 0 === unchecked.length );
 		});
@@ -434,7 +448,8 @@ $(document).ready( function() {
 		return true;
 	});
 
-	$('thead, tfoot').find('.check-column :checkbox').on( 'click.wp-toggle-checkboxes', function( event ) {
+	// This event needs to be delegated. Ticket #37973.
+	$body.on( 'click.wp-toggle-checkboxes', 'thead .check-column :checkbox, tfoot .check-column :checkbox', function( event ) {
 		var $this = $(this),
 			$table = $this.closest( 'table' ),
 			controlChecked = $this.prop('checked'),
@@ -443,7 +458,7 @@ $(document).ready( function() {
 		$table.children( 'tbody' ).filter(':visible')
 			.children().children('.check-column').find(':checkbox')
 			.prop('checked', function() {
-				if ( $(this).is(':hidden') ) {
+				if ( $(this).is(':hidden,:disabled') ) {
 					return false;
 				}
 
@@ -806,17 +821,14 @@ $(document).ready( function() {
 		},
 
 		trigger: function() {
-			var width;
+			var viewportWidth = getViewportWidth();
 
-			if ( window.innerWidth ) {
-				// window.innerWidth is affected by zooming on phones
-				width = Math.max( window.innerWidth, document.documentElement.clientWidth );
-			} else {
-				// Exclude IE < 9, it doesn't support @media CSS rules
+			// Exclude IE < 9, it doesn't support @media CSS rules.
+			if ( ! viewportWidth ) {
 				return;
 			}
 
-			if ( width <= 782 ) {
+			if ( viewportWidth <= 782 ) {
 				if ( ! wpResponsiveActive ) {
 					$document.trigger( 'wp-responsive-activate' );
 					wpResponsiveActive = true;
@@ -828,7 +840,7 @@ $(document).ready( function() {
 				}
 			}
 
-			if ( width <= 480 ) {
+			if ( viewportWidth <= 480 ) {
 				this.enableOverlay();
 			} else {
 				this.disableOverlay();
@@ -873,10 +885,99 @@ $(document).ready( function() {
 		}
 	};
 
+	// Add an ARIA role `button` to elements that behave like UI controls when JavaScript is on.
+	function aria_button_if_js() {
+		$( '.aria-button-if-js' ).attr( 'role', 'button' );
+	}
+
+	$( document ).ajaxComplete( function() {
+		aria_button_if_js();
+	});
+
+	/**
+	 * @summary Get the viewport width.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @returns {number|boolean} The current viewport width or false if the
+	 *                           browser doesn't support innerWidth (IE < 9).
+	 */
+	function getViewportWidth() {
+		var viewportWidth = false;
+
+		if ( window.innerWidth ) {
+			// On phones, window.innerWidth is affected by zooming.
+			viewportWidth = Math.max( window.innerWidth, document.documentElement.clientWidth );
+		}
+
+		return viewportWidth;
+	}
+
+	/**
+	 * @summary Set the admin menu collapsed/expanded state.
+	 *
+	 * Sets the global variable `menuState` and triggers a custom event passing
+	 * the current menu state.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @returns {void}
+	 */
+	function setMenuState() {
+		var viewportWidth = getViewportWidth() || 961;
+
+		if ( viewportWidth <= 782  ) {
+			menuState = 'responsive';
+		} else if ( $body.hasClass( 'folded' ) || ( $body.hasClass( 'auto-fold' ) && viewportWidth <= 960 && viewportWidth > 782 ) ) {
+			menuState = 'folded';
+		} else {
+			menuState = 'open';
+		}
+
+		$document.trigger( 'wp-menu-state-set', { state: menuState } );
+	}
+
+	// Set the menu state when the window gets resized.
+	$document.on( 'wp-window-resized.set-menu-state', setMenuState );
+
+	/**
+	 * @summary Set ARIA attributes on the collapse/expand menu button.
+	 *
+	 * When the admin menu is open or folded, updates the `aria-expanded` and
+	 * `aria-label` attributes of the button to give feedback to assistive
+	 * technologies. In the responsive view, the button is always hidden.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @returns {void}
+	 */
+	$document.on( 'wp-menu-state-set wp-collapse-menu', function( event, eventData ) {
+		var $collapseButton = $( '#collapse-button' ),
+			ariaExpanded = 'true',
+			ariaLabelText = commonL10n.collapseMenu;
+
+		if ( 'folded' === eventData.state ) {
+			ariaExpanded = 'false';
+			ariaLabelText = commonL10n.expandMenu;
+		}
+
+		$collapseButton.attr({
+			'aria-expanded': ariaExpanded,
+			'aria-label': ariaLabelText
+		});
+	});
+
 	window.wpResponsive.init();
 	setPinMenu();
+	setMenuState();
+	currentMenuItemHasPopup();
+	makeNoticesDismissible();
+	aria_button_if_js();
 
 	$document.on( 'wp-pin-menu wp-window-resized.pin-menu postboxes-columnchange.pin-menu postbox-toggled.pin-menu wp-collapse-menu.pin-menu wp-scroll-start.pin-menu', setPinMenu );
+
+	// Set initial focus on a specific element.
+	$( '.wp-initial-focus' ).focus();
 });
 
 // Fire a custom jQuery event at the end of window resize
@@ -884,7 +985,7 @@ $(document).ready( function() {
 	var timeout;
 
 	function triggerEvent() {
-		$(document).trigger( 'wp-window-resized' );
+		$document.trigger( 'wp-window-resized' );
 	}
 
 	function fireOnce() {
@@ -892,7 +993,7 @@ $(document).ready( function() {
 		timeout = window.setTimeout( triggerEvent, 200 );
 	}
 
-	$(window).on( 'resize.wp-fire-once', fireOnce );
+	$window.on( 'resize.wp-fire-once', fireOnce );
 }());
 
 // Make Windows 8 devices play along nicely.

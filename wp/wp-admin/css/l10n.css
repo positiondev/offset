@@ -16,7 +16,7 @@ body.rtl .press-this a.wp-switch-editor {
 .rtl h5,
 .rtl h6 {
 	font-family: Arial, sans-serif;
-	font-weight: bold;
+	font-weight: 600;
 }
 
 /* he_IL: Remove Tahoma from the font stack. Arial is best for Hebrew. */
@@ -28,7 +28,7 @@ body.locale-he-il .press-this a.wp-switch-editor {
 /* he_IL: Have <em> be bold rather than italic. */
 .locale-he-il em {
 	font-style: normal;
-	font-weight: bold;
+	font-weight: 600;
 }
 
 /* zh_CN: Remove italic properties. */
@@ -68,6 +68,13 @@ body.locale-he-il .press-this a.wp-switch-editor {
 }
 
 /* ru_RU: Text needs more room to breathe. */
+.locale-ru-ru #adminmenu {
+	width: inherit; /* back-compat for pre-3.2 */
+}
+.locale-ru-ru #adminmenu,
+.locale-ru-ru #wpbody {
+	margin-left: 0; /* back-compat for pre-3.2 */
+}
 .locale-ru-ru .inline-edit-row fieldset label span.title,
 .locale-ru-ru .inline-edit-row fieldset.inline-edit-date legend {
 	width: 8em; /* default 6em */
