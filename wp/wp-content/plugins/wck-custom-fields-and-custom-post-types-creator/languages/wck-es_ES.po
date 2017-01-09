@@ -1,0 +1,1157 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: WCK\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2013-06-13 16:28+0200\n"
+"PO-Revision-Date: 2014-01-24 11:10+0100\n"
+"Last-Translator: jelena kovacevic <jecajeca260@gmail.com>\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Poedit-KeywordsList: _;gettext;gettext_noop;__;_e\n"
+"X-Poedit-Basepath: .\n"
+"X-Generator: Poedit 1.5.5\n"
+"X-Poedit-SearchPath-0: d:\\!!!!!!!!!\\Free Version\\wck\n"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:26
+msgid "Add New Meta Box"
+msgstr "Añadir nueva Meta Box"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:27
+msgid "Edit Meta Box"
+msgstr "Editar Meta Box"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:28
+msgid "New Meta Box"
+msgstr "Nueva Meta Box"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:29 Version\wck/wck-sas.php:87
+msgid "Custom Fields Creator"
+msgstr "Creador de Campos Personalizados"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:30
+msgid "View Meta Box"
+msgstr "Ver Meta Box"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:31
+msgid "Search Meta Boxes"
+msgstr "Buscar Meta Boxes"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:32
+msgid "No Meta Boxes found"
+msgstr "No se encontraron Meta Boxes"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:33
+msgid "No Meta Boxes found in Trash"
+msgstr "No se encontraron Meta Boxes en la basura"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:35
+msgid "Custom Meta Boxes"
+msgstr "Meta Boxes personalizados"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:84
+msgid "Meta name"
+msgstr "Nombre Meta"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:84
+msgid ""
+"The name of the meta field. It is the name by which you will query the data "
+"in the frontend. Must be unique, only lowercase letters, no spaces and no "
+"special characters."
+msgstr ""
+"El nombre del campo de metadatos. Es el nombre con el que podrás consultar "
+"los datos en el frontend. Debe ser único, sólo letras minúsculas, sin "
+"espacios ni caracteres especiales."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:85 Version\wck/wck-cfc.php:442
+msgid "Post Type"
+msgstr "Tipo de Publicación"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:85
+msgid "What post type the meta box should be attached to"
+msgstr "A qué tipo de publicación debe adjuntarse el Meta Box"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:86
+msgid "Repeater"
+msgstr "Repetidor"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:86
+msgid ""
+"Whether the box supports just one entry or if it is a repeater field. By "
+"default it is a single field."
+msgstr ""
+"Si el cuadro es compatible con una sola entrada o si se trata de un campo "
+"repetidor. Por defecto es un solo campo."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:87
+msgid "Sortable"
+msgstr "Ordenable"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:87
+msgid ""
+"Whether the entries are sortable or not. Thsi is valid for repeater fields."
+msgstr ""
+"Si las entradas se pueden ordenar o no. Esto es válido para los campos de "
+"repetidores."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:88
+msgid "Post ID"
+msgstr "Identificación de la publicación"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:88
+msgid "ID of a post on which the meta box should appear."
+msgstr "Identificación de una publicación en la que debe aparecer el Meta Box."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:92 Version\wck/wck-cfc.php:443
+msgid "Page Template"
+msgstr "Plantilla de Página"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:92
+msgid ""
+"If post type is \"page\" you can further select a page templete. The meta "
+"box will only appear  on the page that has that selected page template."
+msgstr ""
+"Si el tipo de publicación es \"página\" se puede seleccionar además un "
+"templete de página. El Meta Box solo se mostrará en la página que tiene esa "
+"plantilla de página seleccionada."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:97 Version\wck/wck-cfc.php:536
+msgid "Meta Box Arguments"
+msgstr "Argumentos Meta Box"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:114
+msgid "Field Title"
+msgstr "Título Campo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:114
+msgid "Title of the field. A slug will automatically be generated."
+msgstr "Título del Campo. Automáticamente se genera un slug."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:115
+msgid "Field Type"
+msgstr "Tipo de Campo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:115
+msgid "The field type"
+msgstr "El tipo de campo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:116 Version\wck/wck-cptc.php:48
+msgid "Description"
+msgstr "Descripción"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:117
+msgid "Required"
+msgstr "Requerido"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:117
+msgid "Whether the field is required or not"
+msgstr "Si el campo es obligatorio o no"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:118
+msgid "Default Value"
+msgstr "Valor predeterminado"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:118
+msgid ""
+"Default value of the field. For Checkboxes if there are multiple values "
+"separete them with a \",\""
+msgstr ""
+"Valor predeterminado del campo. Para Casillas de verificación, si hay "
+"múltiples valores separarlas con un \",\""
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:119
+msgid "Options"
+msgstr "Opciones"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:119
+msgid ""
+"Options for field types \"select\", \"checkbox\" and \"radio\". For multiple "
+"options separete them with a \",\". You can use the following structure if "
+"you want the label to be different from the value: %LabelOne%valueone,"
+"%LabelTwo%valuetwo,%LabelThree%valuethree"
+msgstr ""
+"Opciones de tipos de campo \"seleccionar\", \"casilla\" y \" radio\". Para "
+"múltiples opciones de ellas separarlas con un \",\". Puede utilizar la "
+"siguiente estructura, si desea que la etiqueta sea diferente del valor: "
+"%LabelOne%valueone,%LabelTwo%valuetwo,%LabelThree%valuethree"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:120
+msgid "Attach upload to post"
+msgstr "Adjuntar carga para publicación"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:120
+msgid "Whether or not the uploads should be attached to the post"
+msgstr "Si los archivos a subir deben o no estar adjuntos a la publicación"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:127 Version\wck/wck-cfc.php:542
+msgid "Meta Box Fields"
+msgstr "Campos Meta Box"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:140
+msgid "Enter below the arguments for the meta box."
+msgstr "Escriba aquí los argumentos para la Meta Box"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:220
+msgid "Slug:"
+msgstr "Slug:"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:220
+msgid ""
+"(Note:changing the slug when you already have a lot of existing entries may "
+"result in unexpected behavior.)"
+msgstr ""
+"(Nota: cambiar el slug cuando ya tiene una gran cantidad de entradas "
+"existentes puede provocar un comportamiento inesperado)"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:355
+msgid "Choose a different Meta Name as this one contains spaces\n"
+msgstr "Elija un nombre diferente Meta pues éste contiene espacios\n"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:357
+msgid "Choose a different Meta Name as this one already exists\n"
+msgstr "Elija un nombre diferente Meta pues ya existe éste\n"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:441
+msgid "Id"
+msgstr "Id"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:506 Version\wck/wck-cptc.php:257
+#: Version\wck/wck-ctc.php:215 Version\wck/wck.php:38
+msgid "Wordpress Creation Kit"
+msgstr "Wordpress Creación Kit"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:530 Version\wck/wck-cptc.php:282
+#: Version\wck/wck-ctc.php:239
+msgid "Overview"
+msgstr "Descripción general"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:531
+msgid ""
+"WCK Custom Fields Creator allows you to easily create custom meta boxes for "
+"Wordpress without any programming knowledge."
+msgstr ""
+"WCK Custom Fields Creator le permite crear fácilmente Meta Boxes para "
+"Wordpress sin ningún conocimiento de programación."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:537
+msgid ""
+"Define here the rules for the meta box. This rules are used to set up where "
+"the meta box will appear, it's type and also the meta key name stored in the "
+"database. The name of the entry (Enter title here) will be used as the meta "
+"box title."
+msgstr ""
+"Defina aquí las reglas para la meta box. Estas reglas se usan para "
+"establecer donde aparecerá el Meta Box, su tipo y también el nombre de clave "
+"meta almacenada en la base de datos. El nombre de la entrada (Introduzca el "
+"título aquí) será utilizado como el título del Meta Box."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:543
+msgid ""
+"Define here the fields contained in the meta box. From \"Field Title\" a "
+"slug will be automatically generated and you will use this slug to display "
+"the data in the frontend."
+msgstr ""
+"Defina aquí los campos contenidos en la caja de meta. . Desde \"Título de "
+"Campo\" un slug se ​​generará automáticamente y usted usará este slug para "
+"mostrar los datos en el frontend."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:548
+msgid "CFC Frontend Example"
+msgstr "Ejemplo de Frontend CFC"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:549
+msgid ""
+"Let's consider we have a meta box with the following arguments:<br /> - Meta "
+"name: books <br /> - Post Type: post <br />And we also have two fields "
+"deffined:<br /> - A text field with the Field Title: Book name <br /> - And "
+"another text field with the Field Title: Author name "
+msgstr ""
+"Consideremos que tenemos una meta box con los siguientes argumentos: <br /> "
+"- Nombre Meta: libros <br /> - Tipo de Publicación: publicación <br /> Y "
+"también tenemos dos campos definidos: <br /> - Otro campo de texto con el "
+"Título de Campo: Nombre del Libro <br /> - Y otro campo de texto con el "
+"título del campo : Nombre del autor"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:549
+msgid ""
+"You will notice that slugs will automatically be created for the two text "
+"fields. For \"Book name\" the slug will be \"book-name\" and for \"Author "
+"name\" the slug will be \"author-name\""
+msgstr ""
+"Usted se dará cuenta de que los slugs se crearán automáticamente para los "
+"dos campos de texto. Para \"Book name\" el slug será \"book-name \" y para "
+"\"Nombre de autor\" el slug será \"author-name\""
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:549
+msgid ""
+"Let's see what the code for displaying the meta box values in single.php of "
+"your theme would be:"
+msgstr ""
+"Vamos a ver cuál es el código para mostrar los valores del Meta Box en una "
+"sola . php de su tema:"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:549
+msgid ""
+"So as you can see the Meta Name \"books\" is used as the $key parameter of "
+"the funtion <a href=\"http://codex.wordpress.org/Function_Reference/"
+"get_post_meta\" target=\"_blank\">get_post_meta()</a> and the slugs of the "
+"text fields are used as keys for the resulting array. Basically CFC stores "
+"the entries as post meta in a multidimensioanl array. In our case the array "
+"would be: <br /><pre>array( array( \"book-name\" => \"The Hitchhiker's Guide "
+"To The Galaxy\", \"author-name\" => \"Douglas Adams\" ),  array( \"book-name"
+"\" => \"Ender's Game\", \"author-name\" => \"Orson Scott Card\" ) );</pre> "
+"This is true even for single entries."
+msgstr ""
+"Así como usted puede ver el Meta Nombre \"libros\" se utiliza como parámetro "
+"$ clave de la función <a href=\"http://codex.wordpress.org/"
+"Function_Reference/get_post_meta\" target=\"_blank\">get_post_meta()</a> y "
+"los slugs de los campos de texto se utilizan como claves para la matriz "
+"resultante. Básicamente CFC almacena las entradas como post meta en una "
+"matriz multidimensional. En nuestro caso, la matriz sería: <br /><pre>array"
+"( array( \"book-name\" => \"The Hitchhiker's Guide To The Galaxy\", \"author-"
+"name\" => \"Douglas Adams\" ), array( \"book-name\" => \"Ender's Game\", "
+"\"author-name\" => \"Orson Scott Card\" ) );</pre> Esto es cierto incluso "
+"para entradas individuales"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cfc.php:577
+msgid "Metabox updated."
+msgstr "Metabox actualizada."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:6
+msgid "WCK Post Type Creator"
+msgstr "WCK Post Type Creator"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:7 Version\wck/wck-sas.php:91
+msgid "Post Type Creator"
+msgstr "Post Type Creator"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:47
+msgid "Post type"
+msgstr "Post type"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:47
+msgid ""
+"(max. 20 characters, can not contain capital letters, hyphens, or spaces)"
+msgstr ""
+"(máx. 20 caracteres, no puede contener letras mayúsculas, guiones, ni "
+"espacios)"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:48
+msgid "A short descriptive summary of what the post type is."
+msgstr "Un resumen descriptivo debajo de lo que el tipo de publicación es."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:49 Version\wck/wck-ctc.php:36
+msgid "Singular Label"
+msgstr "Etiqueta Individual"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:49
+msgid "ex. Book"
+msgstr "ej. Libro"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:50 Version\wck/wck-ctc.php:37
+msgid "Plural Label"
+msgstr "Etiqueta Plural"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:50
+msgid "ex. Books"
+msgstr "ej. Libros"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:51 Version\wck/wck-ctc.php:39
+msgid "Hierarchical"
+msgstr "Jerárquica"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:51
+msgid "Whether the post type is hierarchical. Allows Parent to be specified."
+msgstr ""
+"Si el tipo de la publicación es jerárquico. Permite que los padres se "
+"determinen."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:52
+msgid "Has Archive"
+msgstr "Tiene archivo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:52
+msgid ""
+"Enables post type archives. Will use string as archive slug. Will generate "
+"the proper rewrite rules if rewrite is enabled."
+msgstr ""
+"Permite archivos de tipo de publicación. Utilizará cadena como slug de "
+"archivo. Generará las reglas de reescritura adecuadas si reescritura está "
+"habilitada."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:53
+msgid "Supports"
+msgstr "Soporta"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:56
+msgid "Add New"
+msgstr "Añadir Nuevo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:56
+msgid "ex. Add New"
+msgstr "ej. Añadir Nuevo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:57 Version\wck/wck-ctc.php:48
+msgid "Add New Item"
+msgstr "Crear Nuevo Artículo."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:57
+msgid "ex. Add New Book"
+msgstr "ej  Crear Nuevo Libro"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:58 Version\wck/wck-ctc.php:46
+msgid "Edit Item"
+msgstr "Editar Artículo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:58
+msgid "ex. Edit Book"
+msgstr "ej. Editar Libro"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:59
+msgid "New Item"
+msgstr "Nuevo Artículo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:59
+msgid "ex. New Book"
+msgstr "ej. Nuevo Libro"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:60 Version\wck/wck-ctc.php:43
+msgid "All Items"
+msgstr "Todos los Artículos"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:60
+msgid "ex. All Books"
+msgstr "ej. Todos los Libros"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:61
+msgid "View Items"
+msgstr "Ver Artículos"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:61
+msgid "ex. View Books"
+msgstr "ej. Ver Libros"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:62 Version\wck/wck-ctc.php:41
+msgid "Search Items"
+msgstr "Buscar Artículos"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:62
+msgid "ex. Search Books"
+msgstr "ej. Buscar Libros"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:63
+msgid "Not Found"
+msgstr "No Encontrado"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:63
+msgid "ex. No Books Found"
+msgstr "Ej. No hay libros encontrados"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:64
+msgid "Not Found In Trash"
+msgstr "No se encuentran en la papelera"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:64
+msgid "ex. No Books found in Trash"
+msgstr "ej. No se han encontrado Libros en la basura."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:65 Version\wck/wck-ctc.php:45
+msgid "Parent Item Colon"
+msgstr "Colon Artículo Padre"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:65
+msgid ""
+"the parent text. This string isn't used on non-hierarchical types. In "
+"hierarchical ones the default is Parent Page "
+msgstr ""
+"el texto padre  Esta cadena no se utiliza en los tipos no jerárquicos. En "
+"los jerárquicos el valor predeterminado es la Página Padre"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:66 Version\wck/wck-ctc.php:53
+msgid "Menu Name"
+msgstr "Nombre Menú"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:68 Version\wck/wck-ctc.php:55
+msgid "Public"
+msgstr "Público"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:68 Version\wck/wck-ctc.php:55
+msgid ""
+"Meta argument used to define default values for publicly_queriable, show_ui, "
+"show_in_nav_menus and exclude_from_search"
+msgstr ""
+"Meta argumento utilizado para definir valores predeterminados para "
+"publicly_queriable, show_ui, show_in_nav_menus y exclude_from_search"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:69 Version\wck/wck-ctc.php:56
+msgid "Show UI"
+msgstr "Mostrar la interfaz de usuario"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:69 Version\wck/wck-ctc.php:56
+msgid "Whether to generate a default UI for managing this post type."
+msgstr ""
+"Si se debe generar una interfaz de usuario predeterminada para gestionar "
+"este tipo de publicaciones."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:70
+msgid "Show In Nav Menus"
+msgstr "Mostrar En Menús Nav"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:70
+msgid "Whether post_type is available for selection in navigation menus."
+msgstr ""
+"Si post_type está disponible para la selección en los menús de navegación."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:71
+msgid "Show In Menu"
+msgstr "Mostrar En Menú"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:71
+msgid ""
+"Whether to show the post type in the admin menu. show_ui must be true. "
+"\"false\" - do not display in the admin menu, \"true\" - display as a top "
+"level menu, \"some string\" - If an existing top level page such as \"tools."
+"php\" or \"edit.php?post_type=page\", the post type will be placed as a sub "
+"menu of that."
+msgstr ""
+"Si debe mostrar el tipo de publicación en el menú de administración. show_ui "
+"debe ser cierto. \"false\" - no se muestra en el menú de administración, "
+"\"true\" - pantalla como un menú de nivel superior, \"alguna cadena\" - Si "
+"una página de nivel superior existente, como \"tools.php\" o \"edit.php? "
+"post_type = page\", el tipo de publicación será colocado como un submenú de "
+"eso."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:72
+msgid "Menu Position"
+msgstr "Posición Menú"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:72
+msgid "The position in the menu order the post type should appear."
+msgstr ""
+"La posición en el orden de los menús en que el tipo publicación debería "
+"aparecer."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:73
+msgid "Menu Icon"
+msgstr "Icono Menú"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:73
+msgid "The url to the icon to be used for this menu."
+msgstr "La url para el icono que se utilizará para este menú."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:74
+msgid "Capability Type"
+msgstr "Tipo de Capacidad"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:74
+msgid "The string to use to build the read, edit, and delete capabilities."
+msgstr ""
+"La cadena que se utiliza para construir la lectura, editar y eliminar "
+"capacidades."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:75
+msgid "Taxonomies"
+msgstr "Taxonomías"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:76
+msgid "Rewrite"
+msgstr "Reescribir"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:76
+msgid "Rewrite permalinks."
+msgstr "Reescribir permalinks."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:77
+msgid "Rewrite Slug"
+msgstr "Reescribir Slug"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:77
+msgid "Defaults to post type name."
+msgstr "Predeterminados para el nombre del tipo de publicación."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:83
+msgid "Custom Post Type Creation"
+msgstr "Creación personalizada Post Type"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:108 Version\wck/wck-ctc.php:91
+msgid "Add New "
+msgstr "Añadir Nuevo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:109 Version\wck/wck-ctc.php:89
+msgid "Edit "
+msgstr "Editar"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:110 Version\wck/wck-ctc.php:92
+msgid "New "
+msgstr "Nuevo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:111 Version\wck/wck-ctc.php:86
+msgid "All "
+msgstr "Todos"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:112
+msgid "View "
+msgstr "Ver"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:113 Version\wck/wck-ctc.php:84
+msgid "Search "
+msgstr "Buscar"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:114 Version\wck/wck-cptc.php:115
+msgid "No "
+msgstr "No"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:116
+msgid "Parent Page"
+msgstr "Página Padre"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:169 Version\wck/wck-cptc.php:193
+#: Version\wck/wck-ctc.php:134 Version\wck/wck-ctc.php:158
+msgid "Show Advanced Label Options"
+msgstr "Mostrar Opciones Avanzadas de Etiqueta"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:169 Version\wck/wck-cptc.php:193
+#: Version\wck/wck-ctc.php:134 Version\wck/wck-ctc.php:158
+msgid "Hide Advanced Label Options"
+msgstr "Esconder Opciones Avanzadas de Etiqueta"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:181 Version\wck/wck-cptc.php:207
+#: Version\wck/wck-cptc.php:236 Version\wck/wck-ctc.php:146
+#: Version\wck/wck-ctc.php:172 Version\wck/wck-ctc.php:201
+msgid "Show Advanced Options"
+msgstr "Mostrar opciones avanzadas"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:181 Version\wck/wck-cptc.php:207
+#: Version\wck/wck-cptc.php:236 Version\wck/wck-ctc.php:146
+#: Version\wck/wck-ctc.php:172 Version\wck/wck-ctc.php:201
+msgid "Hide Advanced Options"
+msgstr "Ocultar Opciones Avanzadas"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:222 Version\wck/wck-ctc.php:187
+msgid "Show Advanced Labels"
+msgstr "Mostrar Etiquetas Avanzadas"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:222 Version\wck/wck-ctc.php:187
+msgid "Hide Advanced Labels"
+msgstr "Ocultar Etiquetas Avanzadas"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:283
+msgid ""
+"WCK Custom Post Type Creator allows you to easily create custom post types "
+"for Wordpress without any programming knowledge.<br />Most of the common "
+"options for creating a post type are displayed by default while the advanced "
+"options and label are just one click away."
+msgstr ""
+"WCK Custom Post Type Creator te permite crear fácilmente los tipos de "
+"correos personalizados para Wordpress y sin ningún conocimiento de "
+"programación. <br/> La mayoría de las opciones comunes para la creación de "
+"un puesto tipo se muestran de forma predeterminada, mientras que las "
+"opciones avanzadas y la etiqueta están a sólo un clic de distancia."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:288 Version\wck/wck-ctc.php:245
+msgid "Labels"
+msgstr "Etiquetas"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:289
+msgid ""
+"For simplicity you are required to introduce only the Singular Label and "
+"Plural Label from wchich the rest of the labels will be formed.<br />For a "
+"more detailed control of the labels you just have to click the \"Show "
+"Advanced Label Options\" link and all the availabel labels will be displayed."
+msgstr ""
+"Para simplicidad se requiere introducir sólo la etiqueta Singular y Plural "
+"desde donde se formará el resto de las etiquetas. <br/> ¡Para un control más "
+"detallado de las etiquetas, solo tienes que hacer clic en el enlace "
+"\"Mostrar opciones avanzadas etiqueta\" y todas las etiquetas disponibles "
+"serán mostradas."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:294 Version\wck/wck-ctc.php:251
+msgid "Advanced Options"
+msgstr "Opciones avanzadas"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-cptc.php:295
+msgid ""
+"The Advanced Options are set to the most common defaults for custom post "
+"types. To display them click the \"Show Advanced Options\" link."
+msgstr ""
+"Las opciones avanzadas se establecen en los valores predeterminados más "
+"comunes para este tipo de publicación personalizado. Para visualizarlos, "
+"haga clic en el enlace \"Mostrar opciones avanzadas\"."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:6
+msgid "WCK Taxonomy Creator"
+msgstr "WCK Taxonomy Creador"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:7 Version\wck/wck-sas.php:95
+msgid "Taxonomy Creator"
+msgstr "Creador deTaxonomía"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:35
+msgid "Taxonomy"
+msgstr "Taxonomía"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:35
+msgid ""
+"(The name of the taxonomy. Name must not contain capital letters or spaces.)"
+msgstr ""
+"(El nombre de la taxonomía. El nombre no debe contener letras mayúsculas o "
+"espacios.)"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:36
+msgid "ex. Writer"
+msgstr "ej  Escritor"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:37
+msgid "ex. Writers"
+msgstr "ej. Escritores"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:38
+msgid "Attach to"
+msgstr "Adjuntar a"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:39
+msgid ""
+"Is this taxonomy hierarchical (have descendants) like categories or not "
+"hierarchical like tags."
+msgstr ""
+"¿Es esta taxonomía jerárquica (tiene descendientes) como categorías o no "
+"jerárquica como las etiquetas?"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:41
+msgid "ex. Search Writers"
+msgstr "Ej. Buscar Escritores"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:42
+msgid "Popular Items"
+msgstr "Artículos populares"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:42
+msgid "ex. Popular Writers"
+msgstr "ej. Escritores populares"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:43
+msgid "ex. All Writers"
+msgstr "ej. Todos los Escritores"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:44
+msgid "Parent Item"
+msgstr "Artículo Padre"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:44
+msgid "ex. Parent Genre"
+msgstr "ej. Género Padre"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:45
+msgid "ex. Parent Genre:"
+msgstr "ej. Género Padre"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:46
+msgid "ex. Edit Writer"
+msgstr "ej. Editar Escritor"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:47
+msgid "Update Item"
+msgstr "Actualizar Artículo"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:47
+msgid "ex. Update Writer"
+msgstr "ej. Actualizar Escritor"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:48
+msgid "ex. Add New Writer"
+msgstr "ej. Añadir Nuevo Escritor"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:49
+msgid "New Item Name"
+msgstr "Nuevo Nombre del elemento"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:49
+msgid "ex. New Writer Name"
+msgstr "ej. Nuevo Nombre Escritor"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:50
+msgid "Separate Items With Commas"
+msgstr "Separe el Nombre con comas"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:50
+msgid "ex. Separate writers with commas"
+msgstr "ej. Separe Escritores con comas"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:51
+msgid "Add Or Remove Items"
+msgstr "Añadir o eliminar elementos"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:51
+msgid "ex. Add or remove writers"
+msgstr "ej. Añadir o eliminar escritores"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:52
+msgid "Choose From Most Used"
+msgstr "Elegir de los más usados."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:52
+msgid "ex. Choose from the most used writers"
+msgstr "ej  Elija uno de los escritores más utilizados"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:57
+msgid "Show Tagcloud"
+msgstr "Muestre Tagcloud"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:57
+msgid "Whether to allow the Tag Cloud widget to use this taxonomy."
+msgstr "Si permite que el Tag widget de nube utilice esta taxonomía."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:62
+msgid "Custom Taxonomy Creation"
+msgstr "Creación de Taxonomía Personalizada"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:85
+msgid "Popular "
+msgstr "Popular"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:87 Version\wck/wck-ctc.php:88
+msgid "Parent "
+msgstr "Padre"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:90
+msgid "Update "
+msgstr "Actualizar"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:93
+msgid "Separate  "
+msgstr "Separada"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:94
+msgid "Add or remove "
+msgstr "Agregar o quitar"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:95
+msgid "Choose from the most used "
+msgstr "Elija entre los más utilizados"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:240
+msgid ""
+"WCK Custom Taxonomy Creator allows you to easily create custom taxonomy for "
+"Wordpress without any programming knowledge.<br />Most of the common options "
+"for creating a taxonomy are displayed by default while the advanced and "
+"label options are just one click away."
+msgstr ""
+"WCK Custom Taxonomy Creador le permite crear fácilmente taxonomía "
+"personalizada para Wordpress sin ningún conocimientos de programación. <br /"
+"> La mayoría de las opciones comunes para la creación de una taxonomía se "
+"muestran por defecto, mientras que las opciones avanzadas y etiquetas están "
+"a sólo un clic de distancia."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:246
+msgid ""
+"For simplicity you are required to introduce only the Singular Label and "
+"Plural Label from wchich the rest of the labels will be formed.<br />For a "
+"more detailed control of the labels you just have to click the \"Show "
+"Advanced Label Options\" link and all the availabel labels will be displayed"
+msgstr ""
+"Por simplicidad, usted está obligado a introducir sólo la etiqueta Singular "
+"y Plural  desde donde el resto de las etiquetas se formará. <br /> ¡Para un "
+"control más detallado de las etiquetas, solo tienes que hacer clic en el "
+"enlace \"Mostrar opciones avanzadas de etiquetas\" y todas las etiquetas "
+"disponibles se mostrarán"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-ctc.php:252
+msgid ""
+"The Advanced Options are set to the most common defaults for taxonomies. To "
+"display them click the \"Show Advanced Options\" link."
+msgstr ""
+"Las opciones avanzadas están ajustadas a los valores predeterminados comunes "
+"para las taxonomías. Para visualizarlos, haga clic en el enlace \"Mostrar "
+"opciones avanzadas\"."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:15
+msgid "Start Here & General Settings"
+msgstr "Comience aquí y Ajustes generales"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:16
+msgid "Start and Settings"
+msgstr "Inicio y Configuración"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:34
+msgid "Serial Number"
+msgstr "Número de serie"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:34
+msgid ""
+"Please enter your serial number. For example: (e.g. WCKPRO-11-"
+"SN-251r55baa4fbe7bf595b2aabb8d72985)"
+msgstr ""
+"Introduzca su número de serie. Por ejemplo: (por ejemplo WCKPRO-11-"
+"SN-251r55baa4fbe7bf595b2aabb8d72985)"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:40
+msgid "Register Your Version"
+msgstr "Registre su Versión"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:67
+#, php-format
+msgid "Welcome to %s"
+msgstr "Bienvenido a %s"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:68
+msgid ""
+"WCK helps you to improve the usability of the sites you build, making them "
+"manageable by your clients. Your very own repeater custom fields and groups, "
+"custom post type and taxonomy creator with front-end posting."
+msgstr ""
+"WCK le ayuda a mejorar la usabilidad de los sitios que usted construye, "
+"haciéndolos manejables por sus clientes. . Sus propios campos y grupos "
+"personalizados repetidor, el tipo de publicación personalizada y creador de "
+"taxonomía con fijación frontal"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:69
+#, php-format
+msgid "Version %s"
+msgstr "Versión %s"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:83
+msgid "Quick Start-Up Guide"
+msgstr "Quía Rápida de Inicio"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:88
+msgid ""
+"WordPress Creation Kit Pro has support for a wide list of custom fields: "
+"WYSIWYG Editor, Upload Field, Date, User, Country, Text Input, Textarea, "
+"Drop-Down, Select, Checkboxes, Radio Buttons"
+msgstr ""
+"WordPress Creación Kit Pro tiene soporte para una amplia lista de campos "
+"personalizados: Editor WYSIWYG, Subi campo, Fecha , Usuario, país, entrada "
+"de texto, Área de texto, desplegable, Seleccionar, casillas de verificación, "
+"botones de radio"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:89
+msgid ""
+"Access documentation <a href=\"http://www.cozmoslabs.com/wordpress-creation-"
+"kit/custom-fields-creator/\" target=\"_blank\">here</a> about how to display "
+"them in your templates."
+msgstr ""
+"Documentación de Access <a href = \"http://www.cozmoslabs.com/wordpress-"
+"creation-kit/custom-fields-creator/ \"target=\"_blank\"> aquí </a> sobre "
+"cómo mostrarlos en sus plantillas."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:92
+msgid "Create & manage all your custom content types"
+msgstr "Crear y gestionar todos los tipos de contenido personalizado"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:93
+msgid ""
+"Access documentation <a href=\"http://www.cozmoslabs.com/wordpress-creation-"
+"kit/custom-post-type-creator/\" target=\"_blank\">here</a> about how to "
+"display them in your templates."
+msgstr ""
+"Documentación de acceso<a href=\"http://www.cozmoslabs.com/ wordpress-"
+"creation-kit/custom-post-type-creator/\"target=\" _blank\"> aquí </a> sobre "
+"cómo mostrarlos en sus plantillas."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:96
+msgid "Create new taxonomies for filtering your content"
+msgstr "Crear nuevas taxonomías para el filtrado de su contenido"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:97
+msgid ""
+"Access documentation <a href=\"http://www.cozmoslabs.com/wordpress-creation-"
+"kit/custom-taxonomy-creator/\" target=\"_blank\">here</a> about how to "
+"display them in your templates."
+msgstr ""
+"Documentación de acceso a<a href=\"http://www.cozmoslabs.com/wordpress-"
+"creation-kit/custom-taxonomy-creator/\" target=\"_blank\"> aquí </a> sobre "
+"cómo mostrarlos en sus plantillas"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:99
+msgid "Front-End Posting (available in the Pro version)"
+msgstr "Publicación Front-End (disponible en la versión Pro)"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:100
+msgid ""
+"Create and edit posts/pages or custom posts directly from the front-end."
+msgstr ""
+"Crear y editar publicaciones / páginas o publicaciones personalizadas "
+"directamente desde el front-end."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:101
+msgid "Available shortcodes:"
+msgstr "Códigos cortos disponibles:"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:103
+msgid ""
+"[fep form_name=\"front-end-post-name\"] - displayes your form in the front-"
+"end"
+msgstr ""
+"[fep form_name=\"front-end-post-name\"] - muestra su formulario en el front-"
+"end"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:104
+msgid ""
+"[fep-dashboard] - the quick-dashboard allows: simple profile updates, "
+"editing/deletion of posts, pages and custom post types."
+msgstr ""
+"[fep-dashboard] - el tablero rápido permite: actualizaciones de perfiles "
+"simples, edición / borrado de publicaciones, páginas y tipos de publicación "
+"personalizados"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:105
+msgid ""
+"[fep-lilo] - login/logout/register widget with the simple usage of a "
+"shortcode. Can be added in a page or text widget."
+msgstr ""
+"[fep-lilo] – widget login/logout/register con el simple uso de un shortcode. "
+"Se puede añadir en una página o widget de texto."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:107
+msgid ""
+"Access documentation <a href=\"http://www.cozmoslabs.com/wordpress-creation-"
+"kit/frontend-posting/\" target=\"_blank\">here</a> about how to display them "
+"in your templates."
+msgstr ""
+"Documentación de Acceso <a href=\"http://www.cozmoslabs.com/wordpress-"
+"creation-kit/frontend-posting/\" target=\"_blank\"> aquí </a> sobre cómo "
+"mostrarlos en sus plantillas."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:109
+msgid "Option Pages (available in the Pro version)"
+msgstr "Páginas de opción (disponible en la versión Pro)"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:110
+msgid ""
+"The Options Page Creator Allows you to create a new menu item called "
+"\"Options\"(for example) which can hold advanced custom field groups. "
+"Perfect for theme options or a simple UI for your custom plugin (like a "
+"simple testimonials section in the front-end)."
+msgstr ""
+"El Options Page Creator Permite crear un nuevo elemento del menú llamado "
+"\"Opciones\" (por ejemplo) que puede albergar grupos de campos "
+"personalizados avanzados. Perfecto para las opciones del tema o una interfaz "
+"de usuario simple para su complemento personalizado (como una sección de "
+"testimonios simple en el front-end)."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:137
+msgid ""
+"Please enter your serial number to get access to automatic updates. If you "
+"do not have one, you can <a href=\"http://www.cozmoslabs.com/wordpress-"
+"creation-kit/\" target=\"_blank\">Get One Here</a>."
+msgstr ""
+"Introduzca, por favor su número de serie para tener acceso a las "
+"actualizaciones automáticas. Si usted no tiene uno, puede <a href=\"http://"
+"www.cozmoslabs.com/wordpress-creation-kit/\" target=\"_blank\"> conseguir "
+"uno aquí </a>."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:139
+msgid "Oups! Our serial verification server is down. Please try again later."
+msgstr ""
+"¡Ups ! Nuestro servidor de verificación de serie se encuentra abajo. Por "
+"favor, inténtelo de nuevo más tarde."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:141
+msgid ""
+"Oups! It seems the serial number you entered was not found in our database. "
+"To find out what's your serial number log-in to <a href=\"http://www."
+"cozmoslabs.com/account/\" target=\"_blank\">your account page</a> over at "
+"Cozmoslabs.com"
+msgstr ""
+"¡Ups! Al parecer, el número de serie que ha puesto no se encuentra en "
+"nuestra base de datos. Para saber cuál es el número de serie ingrese a <a "
+"href=\"http://www.cozmoslabs.com/account/\" target=\"_blank\"> página de su "
+"cuenta </a> sobre al Cozmoslabs.com"
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:143
+msgid ""
+"Wohoo! Your serial number is valid and you have access to automatic updates."
+msgstr ""
+"Wohoo! Su número de serie es válido y tiene acceso a las actualizaciones "
+"automáticas."
+
+#: d:\!!!!!!!!!\Free Version\wck/wck-sas.php:145
+msgid ""
+"It seems your serial number has <strong>expired</strong>. You'll continue to "
+"get automatic updates if update your serial number for another year from <a "
+"href=\"http://www.cozmoslabs.com/account/\" target=\"_blank\"><strong>your "
+"account page</strong></a>."
+msgstr ""
+"Parece que su número de serie <strong> ha expirado </ strong>. Tendrá que "
+"continuar para obtener actualizaciones automáticas si actualizar su número "
+"de serie para otro año de <a href=\"http://www.cozmoslabs.com/account/\" "
+"target=\"_blank\"> <strong> su página de cuenta </ strong> </a>."
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:282
+msgid "Add Entry"
+msgstr "Añadir entrada"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:332
+msgid "Save Changes"
+msgstr "Guardar cambios"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:333
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:370
+msgid "Content"
+msgstr "Contenido"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:370
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:433
+msgid "Edit"
+msgstr "Editar"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:370
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:434
+msgid "Delete"
+msgstr "Borrar"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:433
+msgid "Edit this item"
+msgstr "Editar este artículo"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:434
+msgid "Delete this item"
+msgstr "Borrar este artículo"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:506
+msgid "Please enter a value for the required field "
+msgstr "Por favor, introduzca un valor para el campo requerido"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:788
+msgid "Select File"
+msgstr "Seleccione Archivo"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:828
+#: Version\wck/wordpress-creation-kit-api/fields/upload.php:28
+msgid "Remove"
+msgstr "Eliminar"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:866
+msgid "Syncronize WCK"
+msgstr "Syncronizar WCK"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/wordpress-creation-kit.php:878
+msgid "Syncronize WCK Translation"
+msgstr "Traducción Syncronizar WCK"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/fields/select.php:11
+msgid "...Chose"
+msgstr "... Elija"
+
+#: d:\!!!!!!!!!\Free
+#: Version\wck/wordpress-creation-kit-api/fields/upload.php:40
+msgid "Upload "
+msgstr "Subir"
