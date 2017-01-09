@@ -104,6 +104,7 @@ tplLibrary =
              ,(["cat1"], parse "<wpPosts categories=\"cat1\" limit=10><wpTitle/></wpPosts>")
              ,(["cat2"], parse "<wpPosts limit=10><wpTitle/></wpPosts>")
              ,(["cat3"], parse "<wpPosts categories=\"-cat1\" limit=10><wpTitle/></wpPosts>")
+             ,(["department"], parse "<wpPosts departments=\"sports\"><wpTitle/></wpPosts>")
              ,(["author-date"], parse "Hello<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
              ,(["fields"], parse "<wp><wpPosts limit=1 categories=\"-cat1\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
                ]
@@ -120,7 +121,7 @@ renderLarceny ctxt name =
        _ -> return Nothing
 
 fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO Text
-fauxRequester _  "/tags/" [] =
+fauxRequester _  "/tags" [] =
   return $ enc [object [ "id" .= (177 :: Int)
                        , "slug" .= ("home-featured" :: Text)
                        ]
@@ -128,7 +129,7 @@ fauxRequester _  "/tags/" [] =
                        , "slug" .= ("featured-global" :: Text)
                        ]
                ]
-fauxRequester _ "/categories/" [] =
+fauxRequester _ "/categories" [] =
           return $ enc [object [ "id" .= (159 :: Int)
                                , "slug" .= ("bookmarx" :: Text)
                                , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
@@ -385,6 +386,18 @@ rendersSameAs (name1, ctxt) name2 = do
   rendered2 <- renderLarceny ctxt name2
   ignoreWhitespace <$> rendered1 `shouldBe` ignoreWhitespace <$> rendered2
 
+shouldRenderContaining :: (TemplateName, Ctxt) -> Text -> Expectation
+shouldRenderContaining (template, ctxt) match = do
+    rendered <- renderLarceny ctxt template
+    let rendered' = fromMaybe "" rendered
+    (match `T.isInfixOf` rendered') `shouldBe` True
+
+shouldNotRenderContaining :: (TemplateName, Ctxt) -> Text -> Expectation
+shouldNotRenderContaining (template, ctxt) match = do
+    rendered <- renderLarceny ctxt template
+    let rendered' = fromMaybe "" rendered
+    (match `T.isInfixOf` rendered') `shouldBe` False
+
 shouldRenderAtUrlContaining :: (TemplateName, TemplateUrl, Ctxt) -> Text -> Expectation
 shouldRenderAtUrlContaining (template, url, ctxt) match = do
     let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 url }
@@ -427,3 +440,6 @@ liveTests =
          ("cat1", ctxt) `rendersDifferentlyFrom` "cat2"
        it "should be able to make negative category queries" $
          ("cat1", ctxt) `rendersDifferentlyFrom` "cat3"
+       it "should be able to query custom taxonomies" $ do
+         ("department", ctxt) `shouldRenderContaining` "A sports post"
+         ("department", ctxt) `shouldNotRenderContaining` "A first post"

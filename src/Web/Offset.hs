@@ -25,6 +25,7 @@ module Web.Offset (
  , TaxSpecList(..)
  , Field(..)
  , mergeFields
+ , attrToTaxSpecList
  ) where
 
 import           Web.Offset.Cache.Types
