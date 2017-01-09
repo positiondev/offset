@@ -441,5 +441,5 @@ liveTests =
        it "should be able to make negative category queries" $
          ("cat1", ctxt) `rendersDifferentlyFrom` "cat3"
        it "should be able to query custom taxonomies" $ do
-         ("department", ctxt) `shouldRenderContaining` "A second post"
+         ("department", ctxt) `shouldRenderContaining` "A sports post"
          ("department", ctxt) `shouldNotRenderContaining` "A first post"
