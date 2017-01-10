@@ -20,14 +20,6 @@ lookupTaxDict key@(TaxDictKey resName) wp@Wordpress{..} =
                      terror $ "Unparsable JSON: " <> resp
        Just res -> return (resName, getSpecId $ TaxDict res resName)
 
-lookupTaxSlug :: WPKey -> Wordpress b -> IO (Int -> Text)
-lookupTaxSlug key@(TaxDictKey resName) wp@Wordpress{..} =
-  do resp <- cachingGetErrorInt (cacheInternals { wpCacheSet = wpCacheSetInt (runRedis cacheInternals) (CacheSeconds (12 * 60 * 60))}) key
-     case decodeJson resp of
-       Nothing -> do wpExpirePostInt (runRedis cacheInternals) key
-                     terror $ "Unparsable JSON: " <> resp
-       Just res -> return (getTaxSlug $ TaxDict res resName)
-
 getSpecId :: TaxDict -> TaxSpec -> TaxSpecId
 getSpecId taxDict spec =
   case spec of
@@ -40,8 +32,28 @@ getSpecId taxDict spec =
        [] -> terror $ "Couldn't find " <> desc <> ": " <> slug
        (TaxRes (i,_):_) -> i
 
-getTaxSlug :: TaxDict -> Int -> Text
-getTaxSlug (TaxDict{..}) taxId =
-  case filter (\(TaxRes (i, _)) -> i == taxId) dict of
-    [] -> terror $ "Couldn't find " <> desc <> " with id: " <> tshow taxId
-    (TaxRes (_,s):_) -> s
+lookupSpecId :: Wordpress b -> TaxonomyName -> TaxSpec -> IO (Maybe TaxSpecId)
+lookupSpecId wp@Wordpress{..} taxName spec =
+  case spec of
+   TaxPlus slug -> (fmap . fmap) (\(TaxRes (i, _)) -> TaxPlusId i) (idFor taxName slug)
+   TaxMinus slug -> (fmap . fmap) (\(TaxRes (i, _)) -> TaxMinusId i) (idFor taxName slug)
+  where
+    idFor :: Text -> Text -> IO (Maybe TaxRes)
+    idFor taxName slug = do
+      let key = TaxSlugKey taxName slug
+      let cacheSettings = cacheInternals { wpCacheSet = wpCacheSetInt (runRedis cacheInternals)
+                                                                      (CacheSeconds (12 * 60 * 60)) }
+      resp <- cachingGetErrorInt cacheSettings key
+      case decodeJson resp of
+        Nothing -> do
+          wpLogger $ "Unparseable JSON in lookupSpecId for: " <> tshow spec <>
+                     " response: " <> resp
+          return Nothing
+        Just [] ->  do
+          wpLogger $ "No id found in lookupSpecId for: " <> tshow spec
+          return Nothing
+        Just [taxRes] -> return $ Just taxRes
+        Just (x:xs) ->  do
+          wpLogger $ "JSON response in lookupSpecId for: " <> tshow spec
+                     <> " contains multiple results: " <> resp
+          return Nothing

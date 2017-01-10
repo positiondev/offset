@@ -26,6 +26,7 @@ wpRequestInt runHTTP endpt key =
    PostKey i ->                   req ("/posts/" <> tshow i) []
    PageKey s ->                   req "/pages" [("slug", s)]
    AuthorKey i ->                 req ("/users/" <> tshow i) []
+   TaxSlugKey tName tSlug ->      req ("/" <> tName) [("slug", tSlug)]
   where req path = unRequester runHTTP (endpt <> path)
 
 buildParams :: WPKey -> [(Text, Text)]
