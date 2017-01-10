@@ -127,20 +127,19 @@ renderLarceny ctxt name =
        _ -> return Nothing
 
 fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO Text
-fauxRequester _  "/tags" [] =
+fauxRequester _ "/tags" [("slug", "home-featured")] =
   return $ enc [object [ "id" .= (177 :: Int)
                        , "slug" .= ("home-featured" :: Text)
-                       ]
-               ,object [ "id" .= (160 :: Int)
+                       ]]
+fauxRequester _ "/tags" [("slug", "featured-global")] =
+  return $ enc [object [ "id" .= (160 :: Int)
                        , "slug" .= ("featured-global" :: Text)
-                       ]
-               ]
-fauxRequester _ "/categories" [] =
-          return $ enc [object [ "id" .= (159 :: Int)
-                               , "slug" .= ("bookmarx" :: Text)
-                               , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
-                               ]
-                       ]
+                       ]]
+fauxRequester _ "/categories" [("slug", "bookmarx")] =
+  return $ enc [object [ "id" .= (159 :: Int)
+                       , "slug" .= ("bookmarx" :: Text)
+                       , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
+                       ] ]
 fauxRequester _ "/pages" [("slug", "a-first-page")] =
   return $ enc [page1]
 fauxRequester mRecord rqPath rqParams = do

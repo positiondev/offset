@@ -21,7 +21,7 @@ import qualified Data.Map as Map
 import           Data.IntSet             (IntSet)
 import qualified Data.IntSet             as IntSet
 import           Data.Map.Syntax
-import           Data.Maybe              (fromJust, fromMaybe)
+import           Data.Maybe              (fromJust, fromMaybe, catMaybes)
 import           Data.Monoid
 import qualified Data.Set                as Set
 import           Data.Text               (Text)
@@ -54,9 +54,9 @@ wpPostsFill :: Wordpress b
             -> Fill s
 wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
   do let dictKeys = taxDictKeys $ filterTaxonomies (Map.toList attrs)
-     allDicts <- liftIO $ mapM (\k -> lookupTaxDict k wp) dictKeys
      let postsQuery = parseQueryNode (Map.toList attrs)
-     let wpKey = mkWPKey allDicts postsQuery
+     filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
+     let wpKey = mkWPKey filters postsQuery
      res <- liftIO $ cachingGetRetry wp wpKey
      case decode res of
        Just posts -> do let postsW = extractPostIds posts
@@ -69,6 +69,16 @@ wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         noDuplicates Nothing = id
         noDuplicates (Just wpPostIdSet) = filter (\(wpId,_) -> IntSet.notMember wpId wpPostIdSet)
+
+mkFilters :: Wordpress b -> [TaxSpecList] -> IO [Filter]
+mkFilters wp specLists =
+  concat <$> mapM (\(TaxSpecList tName list) -> catMaybes <$> mapM (toFilter tName) list) specLists
+  where toFilter :: TaxonomyName -> TaxSpec -> IO (Maybe Filter)
+        toFilter tName tSpec = do
+          mTSpecId <- lookupSpecId wp tName tSpec
+          case mTSpecId of
+            Just tSpecId -> return $ Just (TaxFilter tName tSpecId)
+            Nothing -> return Nothing
 
 wpPostsHelper :: [Field s]
               -> [Object]
@@ -186,44 +196,42 @@ wpPrefetch :: Wordpress b
            -> Fill s
 wpPrefetch wp extra uri wpLens = Fill $ \ _m t@(p, tpl) l -> do
     Wordpress{..} <- use wpLens
-    allDicts <- liftIO $ mapM (\k -> lookupTaxDict k wp) [TaxDictKey "tags", TaxDictKey "categories"]
     mKeys <- liftIO $ newMVar []
-    runTemplate tpl p (prefetchSubs allDicts mKeys) l
+    runTemplate tpl p (prefetchSubs wp mKeys) l
     wpKeys <- liftIO $ readMVar mKeys
     void $ liftIO $ concurrently $ map cachingGet wpKeys
     runTemplate tpl p (wordpressSubs wp extra uri wpLens) l
 
-prefetchSubs allDicts mkeys =
-  subs [ ("wpPosts", wpPostsPrefetch allDicts mkeys)
-       , ("wpPage", useAttrs (a"name") $ wpPagePrefetch allDicts mkeys) ]
+prefetchSubs wp mkeys =
+  subs [ ("wpPosts", wpPostsPrefetch wp mkeys)
+       , ("wpPage", useAttrs (a"name") $ wpPagePrefetch mkeys) ]
 
-wpPostsPrefetch :: [(TaxonomyName, TaxSpec -> TaxSpecId)]
+wpPostsPrefetch :: Wordpress b
                 -> MVar [WPKey]
                 -> Fill s
-wpPostsPrefetch tdict mKeys = Fill $ \attrs _ _ ->
-  do let key = mkWPKey tdict . parseQueryNode $ Map.toList attrs
+wpPostsPrefetch wp mKeys = Fill $ \attrs _ _ ->
+  do let postsQuery = parseQueryNode (Map.toList attrs)
+     filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
+     let key = mkWPKey filters postsQuery
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""
 
-wpPagePrefetch :: [(TaxonomyName, TaxSpec -> TaxSpecId)]
-               -> MVar [WPKey]
+wpPagePrefetch :: MVar [WPKey]
                -> Text
                -> Fill s
-wpPagePrefetch tdict mKeys name = textFill' $
+wpPagePrefetch mKeys name = textFill' $
   do let key = PageKey name
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""
 
-mkWPKey :: [(TaxonomyName, TaxSpec -> TaxSpecId)]
+mkWPKey :: [Filter]
     -> WPQuery
     -> WPKey
-mkWPKey taxDicts WPPostsQuery{..} =
+mkWPKey taxFilters WPPostsQuery{..} =
   let page = if qpage < 1 then 1 else qpage
       offset = qnum * (page - 1) + qoffset
-      taxes = concatMap (findDict taxDicts)  qtaxes
-      --(\name i -> TaxFilter name i) taxes
   in PostsKey (Set.fromList $ [ NumFilter qnum , OffsetFilter offset]
-               ++ taxes ++ userFilter quser)
+               ++ taxFilters ++ userFilter quser)
   where userFilter Nothing = []
         userFilter (Just u) = [UserFilter u]
 
