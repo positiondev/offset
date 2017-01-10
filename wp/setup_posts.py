@@ -8,6 +8,7 @@ system("wp post create --post_title='A second post' --post_status=publish --post
 system("wp post create --post_title='A third post' --post_status=publish --post_date='2014-10-10 07:00:00' --post_content=\"This is the third post content\" --post_author=1 ")
 system("wp post create --post_title='A fourth post' --post_status=publish --post_date='2014-10-15 07:00:00' --post_content=\"This is the fourth post content\" --post_author=1 ")
 system("wp post create --post_title='A sports post' --post_status=publish --post_date='2014-10-20 07:00:00' --post_content=\"This is the sports post content\" --post_author=1")
+system("wp post create --post_type=page --post_title='A first page' --post_status=publish --post_date='2014-10-15 07:00:00' --post_content=\"This is the first page content\" --post_author=1")
 system("wp option update permalink_structure '/%year%/%monthnum%/%postname%/' ")
 system("wp plugin activate --all")
 system("wp user update 1 --display_name='Ira Rubel' --first_name='Ira' --last_name='Rubel' ")

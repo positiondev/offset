@@ -108,7 +108,9 @@ wpPageFill wpLens =
          do res <- wpGetPost wpLens (PageKey slug)
             return $ case res of
                        Just page -> case M.lookup "content" page of
-                                      Just (String c) -> c
+                                      Just (Object o) -> case M.lookup "rendered" o of
+                                        Just (String r) -> r
+                                        _ -> ""
                                       _ -> ""
                        _ -> ""
 
