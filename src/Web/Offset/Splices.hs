@@ -53,10 +53,10 @@ wpPostsFill :: Wordpress b
             -> WPLens b s
             -> Fill s
 wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
-  do tagDict <- liftIO $ lookupTaxDict (TaxDictKey "tag") wp
-     catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
+  do let dictKeys = taxDictKeys $ filterTaxonomies (Map.toList attrs)
+     allDicts <- liftIO $ mapM (\k -> lookupTaxDict k wp) dictKeys
      let postsQuery = parseQueryNode (Map.toList attrs)
-     let wpKey = mkWPKey tagDict catDict postsQuery
+     let wpKey = mkWPKey allDicts postsQuery
      res <- liftIO $ cachingGetRetry wp wpKey
      case decode res of
        Just posts -> do let postsW = extractPostIds posts
@@ -151,21 +151,31 @@ parseQueryNode attrs =
                (readSafe =<< lookup "num" attrs)
                (readSafe =<< lookup "offset" attrs)
                (readSafe =<< lookup "page" attrs)
-               (readSafe =<< lookup "tags" attrs)
-               (readSafe =<< lookup "categories" attrs)
+               (filterTaxonomies attrs)
                (lookup "user" attrs)
 
-mkPostsQuery :: Maybe Int -> Maybe Int -> Maybe Int -> Maybe Int
-       -> Maybe (TaxSpecList TagType) -> Maybe (TaxSpecList CatType)
-       -> Maybe Text
-       -> WPQuery
-mkPostsQuery l n o p ts cs us =
+filterTaxonomies :: [(Text, Text)] -> [TaxSpecList]
+filterTaxonomies attrs =
+  let reservedTerms = ["limit", "num", "offset", "page", "user"]
+      taxAttrs = filter (\(a, b) -> (a `notElem` reservedTerms)) attrs in
+  map attrToTaxSpecList taxAttrs
+
+taxDictKeys :: [TaxSpecList] -> [WPKey]
+taxDictKeys = map (\(TaxSpecList tName _) -> TaxDictKey tName)
+
+mkPostsQuery :: Maybe Int
+             -> Maybe Int
+             -> Maybe Int
+             -> Maybe Int
+             -> [TaxSpecList]
+             -> Maybe Text
+             -> WPQuery
+mkPostsQuery l n o p ts us =
   WPPostsQuery{ qlimit = fromMaybe 20 l
               , qnum = fromMaybe 20 n
               , qoffset = fromMaybe 0 o
               , qpage = fromMaybe 1 p
-              , qtags = fromMaybe (TaxSpecList []) ts
-              , qcats = fromMaybe (TaxSpecList []) cs
+              , qtaxes = ts
               , quser = us
               }
 
@@ -176,50 +186,52 @@ wpPrefetch :: Wordpress b
            -> Fill s
 wpPrefetch wp extra uri wpLens = Fill $ \ _m t@(p, tpl) l -> do
     Wordpress{..} <- use wpLens
-    tagDict <- liftIO $ lookupTaxDict (TaxDictKey "tag") wp
-    catDict <- liftIO $ lookupTaxDict (TaxDictKey "category") wp
+    allDicts <- liftIO $ mapM (\k -> lookupTaxDict k wp) [TaxDictKey "tags", TaxDictKey "categories"]
     mKeys <- liftIO $ newMVar []
-    runTemplate tpl p (prefetchSubs tagDict catDict mKeys) l
+    runTemplate tpl p (prefetchSubs allDicts mKeys) l
     wpKeys <- liftIO $ readMVar mKeys
     void $ liftIO $ concurrently $ map cachingGet wpKeys
     runTemplate tpl p (wordpressSubs wp extra uri wpLens) l
 
-prefetchSubs tdict cdict mkeys =
-  subs [ ("wpPosts", wpPostsPrefetch tdict cdict mkeys)
-       , ("wpPage", useAttrs (a"name") $ wpPagePrefetch tdict cdict mkeys) ]
+prefetchSubs allDicts mkeys =
+  subs [ ("wpPosts", wpPostsPrefetch allDicts mkeys)
+       , ("wpPage", useAttrs (a"name") $ wpPagePrefetch allDicts mkeys) ]
 
-wpPostsPrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
-                -> (TaxSpec CatType -> TaxSpecId CatType)
+wpPostsPrefetch :: [(TaxonomyName, TaxSpec -> TaxSpecId)]
                 -> MVar [WPKey]
                 -> Fill s
-wpPostsPrefetch tdict cdict mKeys = Fill $ \attrs _ _ ->
-  do let key = mkWPKey tdict cdict . parseQueryNode $ Map.toList attrs
+wpPostsPrefetch tdict mKeys = Fill $ \attrs _ _ ->
+  do let key = mkWPKey tdict . parseQueryNode $ Map.toList attrs
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""
 
-wpPagePrefetch :: (TaxSpec TagType -> TaxSpecId TagType)
-               -> (TaxSpec CatType -> TaxSpecId CatType)
+wpPagePrefetch :: [(TaxonomyName, TaxSpec -> TaxSpecId)]
                -> MVar [WPKey]
                -> Text
                -> Fill s
-wpPagePrefetch tdict cdict mKeys name = textFill' $
+wpPagePrefetch tdict mKeys name = textFill' $
   do let key = PageKey name
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""
 
-mkWPKey :: (TaxSpec TagType -> TaxSpecId TagType)
-    -> (TaxSpec CatType -> TaxSpecId CatType)
+mkWPKey :: [(TaxonomyName, TaxSpec -> TaxSpecId)]
     -> WPQuery
     -> WPKey
-mkWPKey tagDict catDict WPPostsQuery{..} =
+mkWPKey taxDicts WPPostsQuery{..} =
   let page = if qpage < 1 then 1 else qpage
       offset = qnum * (page - 1) + qoffset
-      tags = map tagDict $ unTaxSpecList qtags
-      cats = map catDict $ unTaxSpecList qcats
+      taxes = concatMap (findDict taxDicts)  qtaxes
+      --(\name i -> TaxFilter name i) taxes
   in PostsKey (Set.fromList $ [ NumFilter qnum , OffsetFilter offset]
-               ++ map TagFilter tags ++ map CatFilter cats ++ userFilter quser)
+               ++ taxes ++ userFilter quser)
   where userFilter Nothing = []
         userFilter (Just u) = [UserFilter u]
+
+findDict :: [(TaxonomyName, TaxSpec -> TaxSpecId)] -> TaxSpecList -> [Filter]
+findDict dicts (TaxSpecList tName tList) =
+  case lookup tName dicts of
+    Just dict -> map (TaxFilter tName . dict) tList
+    Nothing -> []
 
 parsePermalink :: Text -> Maybe (Text, Text, Text)
 parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse

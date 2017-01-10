@@ -20,9 +20,7 @@ import           Web.Offset.Utils
 wpRequestInt :: Requester -> Text -> WPKey -> IO Text
 wpRequestInt runHTTP endpt key =
   case key of
-   TaxDictKey "tag" ->            req "/tags/" []
-   TaxDictKey "category" ->       req "/categories/" []
-   TaxDictKey resName ->          req ("/taxonomies/" <> resName <> "/terms") []
+   TaxDictKey resName ->          req ("/" <> resName) []
    PostByPermalinkKey _ _ slug -> req "/posts" [("slug", slug)]
    PostsKey{} ->                  req "/posts" (buildParams key)
    PostKey i ->                   req ("/posts/" <> tshow i) []
@@ -33,10 +31,8 @@ wpRequestInt runHTTP endpt key =
 buildParams :: WPKey -> [(Text, Text)]
 buildParams (PostsKey filters) = params
   where params = Set.toList $ Set.map mkFilter filters
-        mkFilter (TagFilter (TaxPlusId i)) = ("tags[]", tshow i)
-        mkFilter (TagFilter (TaxMinusId i)) = ("tags_exclude[]", tshow i)
-        mkFilter (CatFilter (TaxPlusId i)) = ("categories[]", tshow i)
-        mkFilter (CatFilter (TaxMinusId i)) = ("categories_exclude[]", tshow i)
+        mkFilter (TaxFilter taxName (TaxPlusId i)) = (taxName <> "[]", tshow i)
+        mkFilter (TaxFilter taxName (TaxMinusId i)) = (taxName <> "_exclude[]", tshow i)
         mkFilter (NumFilter num) = ("per_page", tshow num)
         mkFilter (OffsetFilter offset) = ("offset", tshow offset)
         mkFilter (UserFilter user) = ("author[]", user)

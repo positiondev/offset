@@ -59,18 +59,18 @@ tests = do
       read "+foo-bar" `shouldBe` (TaxPlus "foo-bar")
     it "should parse tag minus" $
       read "-foo-bar" `shouldBe` (TaxMinus "foo-bar")
-    it "should parse a list" $
-      read "foo-bar,baz" `shouldBe` (TaxSpecList [TaxPlus "foo-bar", TaxPlus "baz"])
-    it "should parse a list with mixed pluses and minuses" $
-      read "+foo-bar,-baz,-qux" `shouldBe`
-        (TaxSpecList [TaxPlus "foo-bar", TaxMinus "baz", TaxMinus "qux"])
+    it "should parse a tag list" $
+      attrToTaxSpecList ("tag","foo-bar,baz") `shouldBe` (TaxSpecList "tag" [TaxPlus "foo-bar", TaxPlus "baz"])
+    it "should parse a tag list with mixed pluses and minuses" $
+      attrToTaxSpecList ("tag","+foo-bar,-baz,-qux") `shouldBe`
+        (TaxSpecList "tag" [TaxPlus "foo-bar", TaxMinus "baz", TaxMinus "qux"])
     it "should round trip tag plus" $
-      show (read "+foo-bar" :: TaxSpec TagType) `shouldBe` "+foo-bar"
+      show (attrToTaxSpecList ("tag","+foo-bar")) `shouldBe` "tag: +foo-bar"
     it "should round trip tag minus" $
-      show (read "-foo-bar" :: TaxSpec TagType) `shouldBe` "-foo-bar"
+      show (attrToTaxSpecList ("tag", "-foo-bar")) `shouldBe` "tag: -foo-bar"
     it "should add plus to bare tag plus when round tripping" $
-      show (read "foo-bar" :: TaxSpec TagType) `shouldBe` "+foo-bar"
+      show (attrToTaxSpecList ("tag", "foo-bar")) `shouldBe` "tag: +foo-bar"
     it "should round trip list" $
-      show (read "+foo-bar,-baz,-qux" :: TaxSpecList CatType) `shouldBe` "+foo-bar,-baz,-qux"
+      show (attrToTaxSpecList ("tag", "+foo-bar,-baz,-qux")) `shouldBe` "tag: +foo-bar,-baz,-qux"
     it "should add plus to bare tag pluses in list roundtrip" $
-      show (read "foo-bar,-baz,-qux" :: TaxSpecList TagType) `shouldBe` "+foo-bar,-baz,-qux"
+      show (attrToTaxSpecList ("tag", "foo-bar,-baz,-qux")) `shouldBe` "tag: +foo-bar,-baz,-qux"

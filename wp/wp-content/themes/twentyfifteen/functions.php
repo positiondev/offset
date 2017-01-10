@@ -353,3 +353,44 @@ require get_template_directory() . '/inc/template-tags.php';
  * @since Twenty Fifteen 1.0
  */
 require get_template_directory() . '/inc/customizer.php';
+
+function departments_init() {
+	register_taxonomy( 'departments', array( 'post' ), array(
+		'hierarchical'      => false,
+		'public'            => true,
+		'show_in_nav_menus' => true,
+		'show_ui'           => true,
+		'show_admin_column' => false,
+		'query_var'         => true,
+		'rewrite'           => true,
+		'capabilities'      => array(
+			'manage_terms'  => 'edit_posts',
+			'edit_terms'    => 'edit_posts',
+			'delete_terms'  => 'edit_posts',
+			'assign_terms'  => 'edit_posts'
+		),
+		'labels'            => array(
+			'name'                       => __( 'Departments', 'YOUR-TEXTDOMAIN' ),
+			'singular_name'              => _x( 'Departments', 'taxonomy general name', 'YOUR-TEXTDOMAIN' ),
+			'search_items'               => __( 'Search departments', 'YOUR-TEXTDOMAIN' ),
+			'popular_items'              => __( 'Popular departments', 'YOUR-TEXTDOMAIN' ),
+			'all_items'                  => __( 'All departments', 'YOUR-TEXTDOMAIN' ),
+			'parent_item'                => __( 'Parent departments', 'YOUR-TEXTDOMAIN' ),
+			'parent_item_colon'          => __( 'Parent departments:', 'YOUR-TEXTDOMAIN' ),
+			'edit_item'                  => __( 'Edit departments', 'YOUR-TEXTDOMAIN' ),
+			'update_item'                => __( 'Update departments', 'YOUR-TEXTDOMAIN' ),
+			'add_new_item'               => __( 'New departments', 'YOUR-TEXTDOMAIN' ),
+			'new_item_name'              => __( 'New departments', 'YOUR-TEXTDOMAIN' ),
+			'separate_items_with_commas' => __( 'Separate departments with commas', 'YOUR-TEXTDOMAIN' ),
+			'add_or_remove_items'        => __( 'Add or remove departments', 'YOUR-TEXTDOMAIN' ),
+			'choose_from_most_used'      => __( 'Choose from the most used departments', 'YOUR-TEXTDOMAIN' ),
+			'not_found'                  => __( 'No departments found.', 'YOUR-TEXTDOMAIN' ),
+			'menu_name'                  => __( 'Departments', 'YOUR-TEXTDOMAIN' ),
+		),
+		'show_in_rest'      => true,
+		'rest_base'         => 'departments',
+		'rest_controller_class' => 'WP_REST_Terms_Controller',
+	) );
+
+}
+add_action( 'init', 'departments_init' );
