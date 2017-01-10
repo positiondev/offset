@@ -46,12 +46,14 @@ lookupSpecId wp@Wordpress{..} taxName spec =
       resp <- cachingGetErrorInt cacheSettings key
       case decodeJson resp of
         Nothing -> do
-          wpLogger $ "Unparseable JSON in lookupSpecId for: " <> tshow spec
+          wpLogger $ "Unparseable JSON in lookupSpecId for: " <> tshow spec <>
+                     " response: " <> resp
           return Nothing
         Just [] ->  do
-          wpLogger $ "No id found for lookupSpecId for: " <> tshow spec
+          wpLogger $ "No id found in lookupSpecId for: " <> tshow spec
           return Nothing
         Just [taxRes] -> return $ Just taxRes
         Just (x:xs) ->  do
-          wpLogger $ "JSON response for lookupSpecId: " <> tshow spec <> " contains multiple results: " <> resp
+          wpLogger $ "JSON response in lookupSpecId for: " <> tshow spec
+                     <> " contains multiple results: " <> resp
           return Nothing
