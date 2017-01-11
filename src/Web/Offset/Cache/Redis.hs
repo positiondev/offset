@@ -15,7 +15,7 @@ rset :: Text -> Text -> Redis Bool
 rset k v = isRight <$> R.set (T.encodeUtf8 k) (T.encodeUtf8 v)
 
 rget :: Text -> Redis (Maybe Text)
-rget k = (fmap T.decodeUtf8) <$> join <$> eitherToMaybe <$> R.get (T.encodeUtf8 k)
+rget k = fmap T.decodeUtf8 <$> join <$> eitherToMaybe <$> R.get (T.encodeUtf8 k)
   where eitherToMaybe :: Either a b -> Maybe b
         eitherToMaybe e =
           case e of

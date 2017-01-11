@@ -24,7 +24,11 @@ import           Web.Offset.Types
 
 
 instance Default (WordpressConfig m) where
-  def = WordpressConfig "http://127.0.0.1:8080/wp-json" (Left ("offset", "111")) (CacheSeconds 600) [] Nothing
+  def = WordpressConfig "http://127.0.0.1:8080/wp-json"
+                        (Left ("offset", "111"))
+                        (CacheSeconds 600)
+                        []
+                        Nothing
 
 initWordpress :: WordpressConfig s
               -> R.Connection

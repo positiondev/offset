@@ -216,7 +216,7 @@ larcenyFillTests = do
       "<wpPosts><wpId/></wpPosts>" `shouldRender` "1.0"
       "<wpPosts><wpExcerpt/></wpPosts>" `shouldRender` "summary"
   describe "<wpPage>" $
-    it "should show the content" $ do
+    it "should show the content" $
       "<wpPage name=a-first-page />" `shouldRender` "<b>rendered</b> page content"
   describe "<wpNoPostDuplicates/>" $ do
     it "should not duplicate any posts after call to wpNoPostDuplicates" $
@@ -274,13 +274,13 @@ wpExpirePost' wordpress k = do
   liftIO $ wpExpirePost k
 
 cacheTests = do
-  describe "should grab post from cache if it's there" $ do
+  describe "should grab post from cache if it's there" $
       it "should do a thing" $ do
         let (Object a2) = article2
         ctxt <- liftIO initNoRequestWithCache
         wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2001" "10" "the-post")
                                         (enc a2)
-        ("single", "/2001/10/the-post/", ctxt) `shouldRenderAtUrlContaining` "The post"
+        ("single", ctxt) `shouldRenderAtUrlContaining` ("/2001/10/the-post/", "The post")
 
   describe "caching" $ do
     it "should find nothing for a non-existent post" $ do
@@ -322,15 +322,15 @@ cacheTests = do
            >>= shouldNotBe Nothing
     it "should find a different single post after expiring another" $
       do ctxt <- initNoRequestWithCache
-         let key1 = (PostByPermalinkKey "2000" "1" "the-article")
-             key2 = (PostByPermalinkKey "2001" "2" "another-article")
+         let key1 = PostByPermalinkKey "2000" "1" "the-article"
+             key2 = PostByPermalinkKey "2001" "2" "another-article"
          wpCacheSet' (view wordpress ctxt) key1 (enc article1)
          wpCacheSet' (view wordpress ctxt) key2 (enc article2)
          wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
          wpCacheGet' (view wordpress ctxt) key2 >>= shouldBe (Just (enc article2))
     it "should be able to cache and retrieve post" $
       do ctxt <- initNoRequestWithCache
-         let key = (PostKey 200)
+         let key = PostKey 200
          wpCacheSet' (view wordpress ctxt) key (enc article1)
          wpCacheGet' (view wordpress ctxt) key >>= shouldBe (Just (enc article1))
 
@@ -412,8 +412,10 @@ shouldNotRenderContaining (template, ctxt) match = do
     let rendered' = fromMaybe "" rendered
     (match `T.isInfixOf` rendered') `shouldBe` False
 
-shouldRenderAtUrlContaining :: (TemplateName, TemplateUrl, Ctxt) -> Text -> Expectation
-shouldRenderAtUrlContaining (template, url, ctxt) match = do
+shouldRenderAtUrlContaining :: (TemplateName, Ctxt)
+                            -> (TemplateUrl, Text)
+                            -> Expectation
+shouldRenderAtUrlContaining (template, ctxt) (url, match) = do
     let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 url }
     let ctxt' = setRequest ctxt
                  $ (\(x,y) -> (requestWithUrl, y)) defaultFnRequest
@@ -428,8 +430,8 @@ liveTests =
     ctxt <- runIO $ initializer (Left ("offset", "111")) NoCache "http://localhost:5555/wp-json/wp/v2"
     runIO $ clearRedisCache ctxt
     do it "should have title on page" $
-         ("single", "/2014/10/a-first-post", ctxt)
-         `shouldRenderAtUrlContaining` "A first post"
+         ("single", ctxt)
+         `shouldRenderAtUrlContaining` ("/2014/10/a-first-post", "A first post")
        it "should be able to limit" $
          ("many", ctxt) `rendersDifferentlyFrom` "many1"
        it "should be able to offset" $
@@ -448,15 +450,15 @@ liveTests =
        it "should be able to have multiple tag queries" $
          ("/tag6", ctxt) `rendersDifferentlyFrom` "tag7"
        it "should be able to get customly parsed attribute date" $
-         ("author-date", "/2014/10/a-second-post/", ctxt)
-           `shouldRenderAtUrlContaining` "2014/10"
+         ("author-date", ctxt) `shouldRenderAtUrlContaining`
+           ("/2014/10/a-second-post/", "2014/10")
        it "should be able to restrict based on category" $
          ("cat1", ctxt) `rendersDifferentlyFrom` "cat2"
        it "should be able to make negative category queries" $
          ("cat1", ctxt) `rendersDifferentlyFrom` "cat3"
        it "should be able to render a single page" $
-         ("single-page", "/pages?slug=a-first-post", ctxt)
-         `shouldRenderAtUrlContaining` "This is the first page content"
+         ("single-page", ctxt) `shouldRenderAtUrlContaining`
+           ("/pages?slug=a-first-post", "This is the first page content")
        it "should be able to query custom taxonomies" $ do
          ("department", ctxt) `shouldRenderContaining` "A sports post"
          ("department", ctxt) `shouldNotRenderContaining` "A first post"

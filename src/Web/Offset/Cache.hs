@@ -34,12 +34,12 @@ stopReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO ()
 stopReqMutexInt activeMV wpKey =
   modifyMVar_ activeMV $ return . Map.delete wpKey
 
-cachingGetRetryInt :: (WordpressInt b) -> WPKey -> IO Text
-cachingGetRetryInt wp = retryUnless . (cachingGetInt wp)
+cachingGetRetryInt :: WordpressInt b -> WPKey -> IO Text
+cachingGetRetryInt wp = retryUnless . cachingGetInt wp
 
-cachingGetErrorInt :: (WordpressInt b) -> WPKey -> IO Text
+cachingGetErrorInt :: WordpressInt b -> WPKey -> IO Text
 cachingGetErrorInt wp wpKey = errorUnless msg (cachingGetInt wp wpKey)
-  where msg = ("Could not retrieve " <> tshow wpKey)
+  where msg = "Could not retrieve " <> tshow wpKey
 
 cachingGetInt :: WordpressInt b
            -> WPKey
@@ -59,14 +59,14 @@ cachingGetInt WordpressInt{..} wpKey =
                     return $ Just o
 
 wpCacheGetInt :: RunRedis -> CacheBehavior -> WPKey -> IO (Maybe Text)
-wpCacheGetInt runRedis b = runRedis . (cacheGet b) . formatKey
+wpCacheGetInt runRedis b = runRedis . cacheGet b . formatKey
 
 cacheGet :: CacheBehavior -> Text -> Redis (Maybe Text)
 cacheGet NoCache _ = return Nothing
 cacheGet _ key = rget key
 
 wpCacheSetInt :: RunRedis -> CacheBehavior -> WPKey -> Text -> IO ()
-wpCacheSetInt runRedis b key = void . runRedis . (cacheSet b (formatKey key))
+wpCacheSetInt runRedis b key = void . runRedis . cacheSet b (formatKey key)
 
 cacheSet :: CacheBehavior -> Text -> Text -> Redis Bool
 cacheSet b k v =

@@ -24,9 +24,9 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
   where overrideInList :: Bool -> Field s -> [Field s] -> [Field s]
         overrideInList False fl [] = [fl]
         overrideInList True _ [] = []
-        overrideInList v fl (m:ms) = (if matchesName m fl
-                                        then mergeField m fl : (overrideInList True fl ms)
-                                        else m : (overrideInList v fl ms))
+        overrideInList v fl (m:ms) = if matchesName m fl
+                                     then mergeField m fl : overrideInList True fl ms
+                                     else m : overrideInList v fl ms
         matchesName a b = getName a == getName b
         getName (F t) = t
         getName (P t _) = t
@@ -67,9 +67,6 @@ postFields = [F "id"
                                                                                 ,F "height"
                                                                                 ,F "url"]
                                                                  ]]]
-             -- ,CN "thumbnail"
-             --     ["featured_image", "attachment_meta", "sizes", "thumbnail"]
-             --     [F "width", F "height", F "url"]
              ,N "terms" [M "category" [F "id", F "name", F "slug", F "count"]
                         ,M "post_tag" [F "id", F "name", F "slug", F "count"]]
              ]
