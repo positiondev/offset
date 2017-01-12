@@ -113,6 +113,9 @@ tplLibrary =
              ,(["department"], parse "<wpPosts departments=\"sports\"><wpTitle/></wpPosts>")
              ,(["author-date"], parse "Hello<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
              ,(["fields"], parse "<wp><wpPosts limit=1 categories=\"-cat1\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
+             ,(["custom-endpoint-object"], parse "<wpCustom endpoint=\"taxonomies\"><wpCategory><wpRestBase /></wpCategory></wpCustom>")
+             ,(["custom-endpoint-array"], parse "<wpCustom endpoint=\"posts\"><wpDate /></wpCustom>")
+             ,(["custom-endpoint-enter-the-matrix"], parse "<wpCustom endpoint=\"posts\"><wpCustom endpoint=\"posts/${wpId}\"><wpDate /></wpCustom></wpCustom>")
                ]
 
 renderLarceny :: Ctxt ->
@@ -142,6 +145,8 @@ fauxRequester _ "/categories" [("slug", "bookmarx")] =
                        ] ]
 fauxRequester _ "/pages" [("slug", "a-first-page")] =
   return $ enc [page1]
+fauxRequester _ "/dev/null" [] =
+  return $ enc [object ["this_is_null" .= Null]]
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
@@ -250,6 +255,10 @@ larcenyFillTests = do
       let tpl = toTpl "<wp><wpNoPostDuplicates/><wpPostByPermalink><wpTitle/></wpPostByPermalink><wpPosts limit=1><wpTitle/></wpPosts></wp>"
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Foo bar"
+
+  describe "<wpCustom>" $
+    it "should render an HTML comment if JSON field is null" $
+      "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
 
 -- Caching tests
 
@@ -462,3 +471,12 @@ liveTests =
        it "should be able to query custom taxonomies" $ do
          ("department", ctxt) `shouldRenderContaining` "A sports post"
          ("department", ctxt) `shouldNotRenderContaining` "A first post"
+       it "should be able to query custom endpoints" $ do
+         ("custom-endpoint-object", ctxt) `shouldRenderContaining` "categories"
+         ("custom-endpoint-object", ctxt) `shouldNotRenderContaining` "departments"
+       it "should be able to query custom endpoints" $ do
+         ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-01"
+         ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-02"
+         ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-15"
+       it "should be able to reference fields from the custom endpoint in another custom endpoint query" $ do
+         ("custom-endpoint-array", ctxt) `rendersSameAs` "custom-endpoint-enter-the-matrix"

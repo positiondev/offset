@@ -14,6 +14,7 @@ import           Control.Concurrent.MVar
 import           Control.Monad           (void, sequence)
 import           Control.Monad.Trans     (lift, liftIO)
 import           Data.Aeson              hiding (decode, encode)
+import Data.Scientific (floatingOrInteger)
 import qualified Data.Attoparsec.Text    as A
 import           Data.Char               (toUpper)
 import qualified Data.HashMap.Strict     as M
@@ -46,18 +47,44 @@ wordpressSubs wp extraFields getURI wpLens =
         , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
         , ("wpPage", wpPageFill wpLens)
         , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
-        , ("wp", wpPrefetch wp extraFields getURI wpLens) ]
+        , ("wp", wpPrefetch wp extraFields getURI wpLens)
+        , ("wpCustom", wpCustomFill wp)]
+
+wpCustomFill :: Wordpress b -> Fill s
+wpCustomFill wp@Wordpress{..} =
+  useAttrs (a "endpoint") customFill
+  where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
+          do let key = EndpointKey endpoint
+             res <- liftIO $ cachingGetRetry key
+             case decode res of
+               Just (json :: Value) -> do liftIO $ wpLogger res
+                                          jsonToSubs tpl path lib json
+               Nothing -> do liftIO $ wpLogger res
+                             return $ "<!-- Unable to decode JSON for endpoint \"" <> endpoint <> "\" -->"
+
+jsonToSubs :: Template s -> Path -> Library s -> Value -> StateT s IO Text
+jsonToSubs tpl path lib (Object o) = runTemplate tpl path (subs $ map (\k -> (transformName k,
+                                                                              Fill $ \a (p', t') l' -> jsonToSubs t' p' l' (fromJust (M.lookup k o))))
+                                                                      (M.keys o)
+                                                          ) lib
+jsonToSubs tpl path lib (Array v) = V.foldr mappend "" <$> V.mapM (jsonToSubs tpl path lib) v
+jsonToSubs tpl path lib (String s) = return s
+jsonToSubs tpl path lib (Number n) = case floatingOrInteger n of
+  Left r -> return $ tshow r
+  Right i -> return $ tshow i
+jsonToSubs tpl path lib (Bool b) = return $ tshow b
+jsonToSubs tpl path lib (Null) = return "<!-- JSON field found, but value is null. -->"
 
 wpPostsFill :: Wordpress b
             -> [Field s]
             -> WPLens b s
             -> Fill s
-wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
+wpPostsFill wp@Wordpress{..} extraFields wpLens = Fill $ \attrs tpl lib ->
   do let dictKeys = taxDictKeys $ filterTaxonomies (Map.toList attrs)
      let postsQuery = parseQueryNode (Map.toList attrs)
      filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
      let wpKey = mkWPKey filters postsQuery
-     res <- liftIO $ cachingGetRetry wp wpKey
+     res <- liftIO $ cachingGetRetry wpKey
      case decode res of
        Just posts -> do let postsW = extractPostIds posts
                         Wordpress{..} <- use wpLens
