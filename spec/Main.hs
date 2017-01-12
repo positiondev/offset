@@ -113,6 +113,9 @@ tplLibrary =
              ,(["department"], parse "<wpPosts departments=\"sports\"><wpTitle/></wpPosts>")
              ,(["author-date"], parse "Hello<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
              ,(["fields"], parse "<wp><wpPosts limit=1 categories=\"-cat1\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
+             ,(["custom-endpoint-object"], parse "<wpCustom endpoint=\"wp/v2/taxonomies\"><wpCategory><wpRestBase /></wpCategory></wpCustom>")
+             ,(["custom-endpoint-array"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpDate /></wpCustom>")
+             ,(["custom-endpoint-enter-the-matrix"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpCustom endpoint=\"wp/v2/posts/${wpId}\"><wpDate /></wpCustom></wpCustom>")
                ]
 
 renderLarceny :: Ctxt ->
@@ -127,21 +130,23 @@ renderLarceny ctxt name =
        _ -> return Nothing
 
 fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO Text
-fauxRequester _ "/tags" [("slug", "home-featured")] =
+fauxRequester _ "/wp/v2/tags" [("slug", "home-featured")] =
   return $ enc [object [ "id" .= (177 :: Int)
                        , "slug" .= ("home-featured" :: Text)
                        ]]
-fauxRequester _ "/tags" [("slug", "featured-global")] =
+fauxRequester _ "/wp/v2/tags" [("slug", "featured-global")] =
   return $ enc [object [ "id" .= (160 :: Int)
                        , "slug" .= ("featured-global" :: Text)
                        ]]
-fauxRequester _ "/categories" [("slug", "bookmarx")] =
+fauxRequester _ "/wp/v2/categories" [("slug", "bookmarx")] =
   return $ enc [object [ "id" .= (159 :: Int)
                        , "slug" .= ("bookmarx" :: Text)
                        , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
                        ] ]
-fauxRequester _ "/pages" [("slug", "a-first-page")] =
+fauxRequester _ "/wp/v2/pages" [("slug", "a-first-page")] =
   return $ enc [page1]
+fauxRequester _ "/dev/null" [] =
+  return $ enc [object ["this_is_null" .= Null]]
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
@@ -240,7 +245,7 @@ larcenyFillTests = do
       let s = _wpsubs ctxt'
       let tpl = toTpl "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp"
       evalStateT (runTemplate tpl [] s mempty) ctxt'
-      liftIO (tryTakeMVar record) `shouldReturn` Just ["/posts?slug=the-post"]
+      liftIO (tryTakeMVar record) `shouldReturn` Just ["/wp/v2/posts?slug=the-post"]
     it "should render stuff" $ do
       ctxt <- initFauxRequestNoCache
       let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 "/2009/10/the-post/"}
@@ -250,6 +255,10 @@ larcenyFillTests = do
       let tpl = toTpl "<wp><wpNoPostDuplicates/><wpPostByPermalink><wpTitle/></wpPostByPermalink><wpPosts limit=1><wpTitle/></wpPosts></wp>"
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Foo bar"
+
+  describe "<wpCustom>" $
+    it "should render an HTML comment if JSON field is null" $
+      "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
 
 -- Caching tests
 
@@ -350,39 +359,39 @@ shouldQueryTo hQuery wpQuery =
 queryTests =
   describe "generate queries from <wpPosts>" $ do
       "<wpPosts></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=0&per_page=20"]
+        ["/wp/v2/posts?offset=0&per_page=20"]
       "<wpPosts limit=2></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=0&per_page=20"]
+        ["/wp/v2/posts?offset=0&per_page=20"]
       "<wpPosts offset=1 limit=1></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=1&per_page=20"]
+        ["/wp/v2/posts?offset=1&per_page=20"]
       "<wpPosts offset=0 limit=1></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=0&per_page=20"]
+        ["/wp/v2/posts?offset=0&per_page=20"]
       "<wpPosts limit=10 page=1></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=0&per_page=20"]
+        ["/wp/v2/posts?offset=0&per_page=20"]
       "<wpPosts limit=10 page=2></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=20&per_page=20"]
+        ["/wp/v2/posts?offset=20&per_page=20"]
       "<wpPosts num=2></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=0&per_page=2"]
+        ["/wp/v2/posts?offset=0&per_page=2"]
       "<wpPosts num=2 page=2 limit=1></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=2&per_page=2"]
+        ["/wp/v2/posts?offset=2&per_page=2"]
       "<wpPosts num=1 page=3></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=2&per_page=1"]
+        ["/wp/v2/posts?offset=2&per_page=1"]
       "<wpPosts tags=\"+home-featured\" limit=10></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=0&per_page=20&tags[]=177"]
+        ["/wp/v2/posts?offset=0&per_page=20&tags[]=177"]
       "<wpPosts tags=\"-home-featured\" limit=1></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=0&per_page=20&tags_exclude[]=177"]
+        ["/wp/v2/posts?offset=0&per_page=20&tags_exclude[]=177"]
       "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=0&per_page=20&tags[]=177&tags_exclude[]=160"]
+        ["/wp/v2/posts?offset=0&per_page=20&tags[]=177&tags_exclude[]=160"]
       "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>" `shouldQueryTo`
-        ["/posts?offset=0&per_page=20&tags[]=160&tags[]=177"]
+        ["/wp/v2/posts?offset=0&per_page=20&tags[]=160&tags[]=177"]
       "<wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts>" `shouldQueryTo`
-        ["/posts?categories[]=159&offset=0&per_page=20"]
+        ["/wp/v2/posts?categories[]=159&offset=0&per_page=20"]
       "<wpPosts categories=\"-bookmarx\" limit=10><wpTitle/></wpPosts>" `shouldQueryTo`
-        ["/posts?categories_exclude[]=159&offset=0&per_page=20"]
+        ["/wp/v2/posts?categories_exclude[]=159&offset=0&per_page=20"]
       "<wp><div><wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts></div></wp>" `shouldQueryTo`
-        replicate 2 "/posts?categories[]=159&offset=0&per_page=20"
+        replicate 2 "/wp/v2/posts?categories[]=159&offset=0&per_page=20"
       "<wpPage name=blah />" `shouldQueryTo`
-        ["/pages?slug=blah"]
+        ["/wp/v2/pages?slug=blah"]
 
 rendersDifferentlyFrom :: (TemplateName, Ctxt)
                        -> TemplateName
@@ -427,7 +436,7 @@ shouldRenderAtUrlContaining (template, ctxt) (url, match) = do
 liveTests :: Spec
 liveTests =
   describe "live tests (which require running wordpress server)" $ do
-    ctxt <- runIO $ initializer (Left ("offset", "111")) NoCache "http://localhost:5555/wp-json/wp/v2"
+    ctxt <- runIO $ initializer (Left ("offset", "111")) NoCache "http://localhost:5555/wp-json"
     runIO $ clearRedisCache ctxt
     do it "should have title on page" $
          ("single", ctxt)
@@ -462,3 +471,12 @@ liveTests =
        it "should be able to query custom taxonomies" $ do
          ("department", ctxt) `shouldRenderContaining` "A sports post"
          ("department", ctxt) `shouldNotRenderContaining` "A first post"
+       it "should be able to query custom endpoints" $ do
+         ("custom-endpoint-object", ctxt) `shouldRenderContaining` "categories"
+         ("custom-endpoint-object", ctxt) `shouldNotRenderContaining` "departments"
+       it "should be able to query custom endpoints" $ do
+         ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-01"
+         ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-02"
+         ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-15"
+       it "should be able to reference fields from the custom endpoint in another custom endpoint query" $ do
+         ("custom-endpoint-array", ctxt) `rendersSameAs` "custom-endpoint-enter-the-matrix"

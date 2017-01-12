@@ -97,4 +97,5 @@ formatKey = format
         format (AuthorKey n) = ns "author:" <> tshow n
         format (TaxDictKey t) = ns "tax_dict:" <> t
         format (TaxSlugKey tn ts) = ns "tax_slug:" <> tn <> ":" <> ts
+        format (EndpointKey e) = ns "endpoint:" <> e
         ns k = "wordpress:" <> k

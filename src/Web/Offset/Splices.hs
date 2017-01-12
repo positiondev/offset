@@ -14,6 +14,7 @@ import           Control.Concurrent.MVar
 import           Control.Monad           (void, sequence)
 import           Control.Monad.Trans     (lift, liftIO)
 import           Data.Aeson              hiding (decode, encode)
+import Data.Scientific (floatingOrInteger)
 import qualified Data.Attoparsec.Text    as A
 import           Data.Char               (toUpper)
 import qualified Data.HashMap.Strict     as M
@@ -46,18 +47,49 @@ wordpressSubs wp extraFields getURI wpLens =
         , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
         , ("wpPage", wpPageFill wpLens)
         , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
-        , ("wp", wpPrefetch wp extraFields getURI wpLens) ]
+        , ("wp", wpPrefetch wp extraFields getURI wpLens)
+        , ("wpCustom", wpCustomFill wp)]
+
+wpCustomFill :: Wordpress b -> Fill s
+wpCustomFill wp@Wordpress{..} =
+  useAttrs (a "endpoint") customFill
+  where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
+          do let key = EndpointKey endpoint
+             res <- liftIO $ cachingGetRetry key
+             case decode res of
+               Just (json :: Value) -> do liftIO $ wpLogger res
+                                          unFill (jsonToFill json) attrs (path, tpl) lib
+               Nothing -> do liftIO $ wpLogger res
+                             return $ "<!-- Unable to decode JSON for endpoint \"" <> endpoint <> "\" -->"
+
+jsonToFill :: Value -> Fill s
+jsonToFill (Object o) =
+  Fill $ \attrs (path, tpl) lib -> runTemplate tpl path objectSubstitutions lib
+  where objectSubstitutions =
+          subs $ map (\k -> (transformName k,
+                             jsonToFill (fromJust (M.lookup k o))))
+                     (M.keys o)
+jsonToFill (Array v) =
+  Fill $ \attrs (path, tpl) lib ->
+           V.foldr mappend "" <$> V.mapM (\e -> unFill (jsonToFill e) attrs (path, tpl) lib) v
+jsonToFill (String s) = textFill s
+jsonToFill (Number n) = case floatingOrInteger n of
+                          Left r -> textFill $ tshow r
+                          Right i -> textFill $ tshow i
+jsonToFill (Bool b) = textFill $ tshow b
+jsonToFill (Null) = textFill "<!-- JSON field found, but value is null. -->"
+
 
 wpPostsFill :: Wordpress b
             -> [Field s]
             -> WPLens b s
             -> Fill s
-wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
+wpPostsFill wp@Wordpress{..} extraFields wpLens = Fill $ \attrs tpl lib ->
   do let dictKeys = taxDictKeys $ filterTaxonomies (Map.toList attrs)
      let postsQuery = parseQueryNode (Map.toList attrs)
      filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
      let wpKey = mkWPKey filters postsQuery
-     res <- liftIO $ cachingGetRetry wp wpKey
+     res <- liftIO $ cachingGetRetry wpKey
      case decode res of
        Just posts -> do let postsW = extractPostIds posts
                         Wordpress{..} <- use wpLens
@@ -123,6 +155,11 @@ wpPageFill wpLens =
                                         _ -> ""
                                       _ -> ""
                        _ -> ""
+
+wpCustomEndpoint :: WPLens b s -> Fill s
+wpCustomEndpoint wpLens = undefined
+  --useAttrs (a "endpoint") customEndpointFill
+  where customEndpointFill endpoint = undefined
 
 postSubs :: [Field s] -> Object -> Substitutions s
 postSubs extra object = subs (map (buildSplice object) (mergeFields postFields extra))
