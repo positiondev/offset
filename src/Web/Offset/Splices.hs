@@ -58,22 +58,27 @@ wpCustomFill wp@Wordpress{..} =
              res <- liftIO $ cachingGetRetry key
              case decode res of
                Just (json :: Value) -> do liftIO $ wpLogger res
-                                          jsonToSubs tpl path lib json
+                                          unFill (jsonToFill json) attrs (path, tpl) lib
                Nothing -> do liftIO $ wpLogger res
                              return $ "<!-- Unable to decode JSON for endpoint \"" <> endpoint <> "\" -->"
 
-jsonToSubs :: Template s -> Path -> Library s -> Value -> StateT s IO Text
-jsonToSubs tpl path lib (Object o) = runTemplate tpl path (subs $ map (\k -> (transformName k,
-                                                                              Fill $ \a (p', t') l' -> jsonToSubs t' p' l' (fromJust (M.lookup k o))))
-                                                                      (M.keys o)
-                                                          ) lib
-jsonToSubs tpl path lib (Array v) = V.foldr mappend "" <$> V.mapM (jsonToSubs tpl path lib) v
-jsonToSubs tpl path lib (String s) = return s
-jsonToSubs tpl path lib (Number n) = case floatingOrInteger n of
-  Left r -> return $ tshow r
-  Right i -> return $ tshow i
-jsonToSubs tpl path lib (Bool b) = return $ tshow b
-jsonToSubs tpl path lib (Null) = return "<!-- JSON field found, but value is null. -->"
+jsonToFill :: Value -> Fill s
+jsonToFill (Object o) =
+  Fill $ \attrs (path, tpl) lib -> runTemplate tpl path objectSubstitutions lib
+  where objectSubstitutions =
+          subs $ map (\k -> (transformName k,
+                             jsonToFill (fromJust (M.lookup k o))))
+                     (M.keys o)
+jsonToFill (Array v) =
+  Fill $ \attrs (path, tpl) lib ->
+           V.foldr mappend "" <$> V.mapM (\e -> unFill (jsonToFill e) attrs (path, tpl) lib) v
+jsonToFill (String s) = textFill s
+jsonToFill (Number n) = case floatingOrInteger n of
+                          Left r -> textFill $ tshow r
+                          Right i -> textFill $ tshow i
+jsonToFill (Bool b) = textFill $ tshow b
+jsonToFill (Null) = textFill "<!-- JSON field found, but value is null. -->"
+
 
 wpPostsFill :: Wordpress b
             -> [Field s]
@@ -150,6 +155,11 @@ wpPageFill wpLens =
                                         _ -> ""
                                       _ -> ""
                        _ -> ""
+
+wpCustomEndpoint :: WPLens b s -> Fill s
+wpCustomEndpoint wpLens = undefined
+  --useAttrs (a "endpoint") customEndpointFill
+  where customEndpointFill endpoint = undefined
 
 postSubs :: [Field s] -> Object -> Substitutions s
 postSubs extra object = subs (map (buildSplice object) (mergeFields postFields extra))
