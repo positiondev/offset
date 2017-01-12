@@ -20,15 +20,16 @@ import           Web.Offset.Utils
 wpRequestInt :: Requester -> Text -> WPKey -> IO Text
 wpRequestInt runHTTP endpt key =
   case key of
-   TaxDictKey resName ->          req ("/" <> resName) []
-   PostByPermalinkKey _ _ slug -> req "/posts" [("slug", slug)]
-   PostsKey{} ->                  req "/posts" (buildParams key)
-   PostKey i ->                   req ("/posts/" <> tshow i) []
-   PageKey s ->                   req "/pages" [("slug", s)]
-   AuthorKey i ->                 req ("/users/" <> tshow i) []
-   TaxSlugKey tName tSlug ->      req ("/" <> tName) [("slug", tSlug)]
+   TaxDictKey resName ->          req (defaultEndpoint <> "/" <> resName) []
+   PostByPermalinkKey _ _ slug -> req (defaultEndpoint <> "/posts") [("slug", slug)]
+   PostsKey{} ->                  req (defaultEndpoint <> "/posts") (buildParams key)
+   PostKey i ->                   req (defaultEndpoint <> "/posts/" <> tshow i) []
+   PageKey s ->                   req (defaultEndpoint <> "/pages") [("slug", s)]
+   AuthorKey i ->                 req (defaultEndpoint <> "/users/" <> tshow i) []
+   TaxSlugKey tName tSlug ->      req (defaultEndpoint <> "/" <> tName) [("slug", tSlug)]
    EndpointKey endpoint ->        req ("/" <> endpoint) []
   where req path = unRequester runHTTP (endpt <> path)
+        defaultEndpoint = "/wp/v2"
 
 buildParams :: WPKey -> [(Text, Text)]
 buildParams (PostsKey filters) = params
