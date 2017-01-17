@@ -143,6 +143,11 @@ fauxRequester _ "/wp/v2/categories" [("slug", "bookmarx")] =
                        , "slug" .= ("bookmarx" :: Text)
                        , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
                        ] ]
+fauxRequester _ "/jacobin/featured-content/editors-picks" [] =
+  return $ enc [object [ "post_date" .= ("2013-04-26 10:11:52" :: Text)
+                       , "date" .= ("2014-04-26 10:11:52" :: Text)
+                       , "post_date_gmt" .= ("2015-04-26 15:11:52" :: Text)
+                       ]]
 fauxRequester _ "/wp/v2/pages" [("slug", "a-first-page")] =
   return $ enc [page1]
 fauxRequester _ "/dev/null" [] =
@@ -259,6 +264,14 @@ larcenyFillTests = do
   describe "<wpCustom>" $
     it "should render an HTML comment if JSON field is null" $
       "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
+  describe "<wpCustomDate>" $
+    it "should parse a date field with the format string it's given" $
+      "<wpCustom endpoint=\"jacobin/featured-content/editors-picks\" > \
+      \   <wpCustomDate date=\"${wpPostDate}\" format=\"%Y-%m-%d %H:%M:%S\"> \
+      \     <wpDay />~<wpMonth />~<wpYear /> \
+      \   </wpCustomDate> \
+      \ </wpCustom>" `shouldRender` "26~4~2013"
+
 
 -- Caching tests
 
