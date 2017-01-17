@@ -14,7 +14,6 @@ import           Control.Concurrent.MVar
 import           Control.Monad           (void, sequence)
 import           Control.Monad.Trans     (lift, liftIO)
 import           Data.Aeson              hiding (decode, encode)
-import Data.Scientific (floatingOrInteger)
 import qualified Data.Attoparsec.Text    as A
 import           Data.Char               (toUpper)
 import qualified Data.HashMap.Strict     as M
@@ -24,9 +23,12 @@ import qualified Data.IntSet             as IntSet
 import           Data.Map.Syntax
 import           Data.Maybe              (fromJust, fromMaybe, catMaybes)
 import           Data.Monoid
+import           Data.Scientific         (floatingOrInteger)
 import qualified Data.Set                as Set
 import           Data.Text               (Text)
 import qualified Data.Text               as T
+import           Data.Time.Calendar      (toGregorian)
+import           Data.Time.Format        (parseTimeM, defaultTimeLocale)
 import qualified Data.Vector             as V
 import qualified Text.XmlHtml            as X
 import           Web.Larceny
@@ -48,7 +50,20 @@ wordpressSubs wp extraFields getURI wpLens =
         , ("wpPage", wpPageFill wpLens)
         , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
         , ("wp", wpPrefetch wp extraFields getURI wpLens)
-        , ("wpCustom", wpCustomFill wp)]
+        , ("wpCustom", wpCustomFill wp)
+        , ("wpCustomDate", wpCustomDateFill wp)]
+
+wpCustomDateFill :: Wordpress b -> Fill s
+wpCustomDateFill wp@Wordpress{..} =
+  useAttrs (a "format" % a "date") customDateFill
+  where customDateFill format date =
+          let parsedDate = parseTimeM False defaultTimeLocale (T.unpack format) (T.unpack date) in
+            case toGregorian <$> parsedDate of
+              Just (y, m, d) -> let dateSubs = subs [ ("wpYear", textFill $ tshow y)
+                                                    , ("wpMonth", textFill $ tshow m)
+                                                    , ("wpDay", textFill $ tshow d)] in
+                                  fillChildrenWith dateSubs
+              Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
 
 wpCustomFill :: Wordpress b -> Fill s
 wpCustomFill wp@Wordpress{..} =
