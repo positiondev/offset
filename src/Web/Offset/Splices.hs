@@ -71,11 +71,18 @@ wpCustomFill wp@Wordpress{..} =
   where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
           do let key = EndpointKey endpoint
              res <- liftIO $ cachingGetRetry key
-             case decode res of
-               Just (json :: Value) -> do liftIO $ wpLogger res
-                                          unFill (jsonToFill json) attrs (path, tpl) lib
-               Nothing -> do liftIO $ wpLogger res
-                             return $ "<!-- Unable to decode JSON for endpoint \"" <> endpoint <> "\" -->"
+             case fmap decode res of
+               Left code -> do
+                 let notification = "Encountered status code " <> tshow code
+                                   <> " when querying \"" <> endpoint <> "\"."
+                 liftIO $ wpLogger notification
+                 return $ "<!-- " <> notification <> " -->"
+               Right (Just (json :: Value)) -> do
+                 unFill (jsonToFill json) attrs (path, tpl) lib
+               Right Nothing -> do
+                 let notification = "Unable to decode JSON for endpoint \"" <> endpoint
+                 liftIO $ wpLogger $ notification <> ": " <> tshow res
+                 return $ "<!-- " <> notification <> "-->"
 
 jsonToFill :: Value -> Fill s
 jsonToFill (Object o) =
@@ -105,14 +112,20 @@ wpPostsFill wp@Wordpress{..} extraFields wpLens = Fill $ \attrs tpl lib ->
      filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
      let wpKey = mkWPKey filters postsQuery
      res <- liftIO $ cachingGetRetry wpKey
-     case decode res of
-       Just posts -> do let postsW = extractPostIds posts
-                        Wordpress{..} <- use wpLens
-                        let postsND = take (qlimit postsQuery)
-                                      . noDuplicates requestPostSet $ postsW
-                        addPostIds wpLens (map fst postsND)
-                        unFill (wpPostsHelper extraFields (map snd postsND)) mempty tpl lib
-       Nothing -> return ""
+     case fmap decode res of
+       Right (Just posts) -> do
+         let postsW = extractPostIds posts
+         Wordpress{..} <- use wpLens
+         let postsND = take (qlimit postsQuery)
+                       . noDuplicates requestPostSet $ postsW
+         addPostIds wpLens (map fst postsND)
+         unFill (wpPostsHelper extraFields (map snd postsND)) mempty tpl lib
+       Right Nothing -> return ""
+       Left code -> do
+         let notification = "Encountered status code " <> tshow code
+                            <> " when querying wpPosts."
+         liftIO $ wpLogger notification
+         return $ "<!-- " <> notification <> " -->"
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         noDuplicates Nothing = id
         noDuplicates (Just wpPostIdSet) = filter (\(wpId,_) -> IntSet.notMember wpId wpPostIdSet)
@@ -313,12 +326,14 @@ wpGetPost wpLens wpKey =
 
 getPost :: Wordpress b -> WPKey -> IO (Maybe Object)
 getPost Wordpress{..} wpKey = decodePost <$> cachingGetRetry wpKey
-  where decodePost :: Text -> Maybe Object
-        decodePost t =
+  where decodePost :: Either StatusCode Text -> Maybe Object
+        decodePost (Right t) =
           do post' <- decodeJson t
              case post' of
               Just (post:_) -> Just post
               _ -> Nothing
+        decodePost (Left code) = Nothing
+
 
 transformName :: Text -> Text
 transformName = T.append "wp" . snd . T.foldl f (True, "")

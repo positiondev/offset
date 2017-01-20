@@ -39,21 +39,6 @@ decodeJson = decode
 performOnJust :: (o -> IO ()) -> Maybe o -> IO ()
 performOnJust = maybe (return ())
 
-retryUnless :: IO (Maybe a) -> IO a
-retryUnless action =
-  do ma <- action
-     case ma of
-       Just r -> return r
-       Nothing -> do CC.threadDelay 100000
-                     retryUnless action
-
-errorUnless :: Text -> IO (Maybe a) -> IO a
-errorUnless msg action =
-  do ma <- action
-     case ma of
-      Just a -> return a
-      Nothing -> error $ T.unpack msg
-
 concurrently :: [IO a] -> IO [a]
 concurrently [] = return []
 concurrently [a] =

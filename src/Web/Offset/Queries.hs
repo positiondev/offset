@@ -11,15 +11,6 @@ import           Web.Offset.Cache.Types
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
-lookupTaxDict :: WPKey -> Wordpress b -> IO (TaxonomyName, TaxSpec -> TaxSpecId)
-lookupTaxDict key@(TaxDictKey resName) wp@Wordpress{..} =
-  do resp <- cachingGetErrorInt (cacheInternals { wpCacheSet = wpCacheSetInt (runRedis cacheInternals)
-                                (CacheSeconds (12 * 60 * 60))}) key
-     case decodeJson resp of
-       Nothing -> do wpExpirePostInt (runRedis cacheInternals) key
-                     terror $ "Unparsable JSON: " <> resp
-       Just res -> return (resName, getSpecId $ TaxDict res resName)
-
 getSpecId :: TaxDict -> TaxSpec -> TaxSpecId
 getSpecId taxDict spec =
   case spec of
@@ -44,16 +35,19 @@ lookupSpecId wp@Wordpress{..} taxName spec =
       let cacheSettings = cacheInternals { wpCacheSet = wpCacheSetInt (runRedis cacheInternals)
                                                                       (CacheSeconds (12 * 60 * 60)) }
       resp <- cachingGetErrorInt cacheSettings key
-      case decodeJson resp of
-        Nothing -> do
-          wpLogger $ "Unparseable JSON in lookupSpecId for: " <> tshow spec <>
-                     " response: " <> resp
+      case fmap decodeJson resp of
+        Left errCode -> do
+          wpLogger $ "Cache lookup returned HTTP error code " <> tshow errCode
           return Nothing
-        Just [] ->  do
+        Right Nothing -> do
+          wpLogger $ "Unparseable JSON in lookupSpecId for: " <> tshow spec <>
+                     " response: " <> tshow resp
+          return Nothing
+        Right (Just []) ->  do
           wpLogger $ "No id found in lookupSpecId for: " <> tshow spec
           return Nothing
-        Just [taxRes] -> return $ Just taxRes
-        Just (x:xs) ->  do
+        Right (Just [taxRes]) -> return $ Just taxRes
+        Right (Just (x:xs)) ->  do
           wpLogger $ "JSON response in lookupSpecId for: " <> tshow spec
-                     <> " contains multiple results: " <> resp
+                     <> " contains multiple results: " <> tshow resp
           return Nothing

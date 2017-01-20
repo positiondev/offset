@@ -129,34 +129,34 @@ renderLarceny ctxt name =
          return $ Just rendered
        _ -> return Nothing
 
-fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO Text
+fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO (Either StatusCode Text)
 fauxRequester _ "/wp/v2/tags" [("slug", "home-featured")] =
-  return $ enc [object [ "id" .= (177 :: Int)
+  return $ Right $ enc [object [ "id" .= (177 :: Int)
                        , "slug" .= ("home-featured" :: Text)
                        ]]
 fauxRequester _ "/wp/v2/tags" [("slug", "featured-global")] =
-  return $ enc [object [ "id" .= (160 :: Int)
+  return $ Right $ enc [object [ "id" .= (160 :: Int)
                        , "slug" .= ("featured-global" :: Text)
                        ]]
 fauxRequester _ "/wp/v2/categories" [("slug", "bookmarx")] =
-  return $ enc [object [ "id" .= (159 :: Int)
+  return $ Right $ enc [object [ "id" .= (159 :: Int)
                        , "slug" .= ("bookmarx" :: Text)
                        , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
                        ] ]
 fauxRequester _ "/jacobin/featured-content/editors-picks" [] =
-  return $ enc [object [ "post_date" .= ("2013-04-26 10:11:52" :: Text)
+  return $ Right $ enc [object [ "post_date" .= ("2013-04-26 10:11:52" :: Text)
                        , "date" .= ("2014-04-26 10:11:52" :: Text)
                        , "post_date_gmt" .= ("2015-04-26 15:11:52" :: Text)
                        ]]
 fauxRequester _ "/wp/v2/pages" [("slug", "a-first-page")] =
-  return $ enc [page1]
+  return $ Right $ enc [page1]
 fauxRequester _ "/dev/null" [] =
-  return $ enc [object ["this_is_null" .= Null]]
+  return $ Right $ enc [object ["this_is_null" .= Null]]
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
     Nothing -> return ()
-  return $ enc [article1]
+  return $ Right $ enc [article1]
   where mkUrlUnescape url params =
              url <> "?"
           <> T.intercalate "&" (map (\(k, v) -> k <> "=" <> v) params)
@@ -179,7 +179,7 @@ initFauxRequestNoCache =
   initializer (Right $ Requester (fauxRequester Nothing)) NoCache ""
 
 initNoRequestWithCache =
-  initializer (Right $ Requester (\_ _ -> return "" )) (CacheSeconds 60) ""
+  initializer (Right $ Requester (\_ _ -> return (Right "") )) (CacheSeconds 60) ""
 
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
