@@ -22,6 +22,7 @@ wreqRequester :: (Text -> IO ())
 wreqRequester logger user passw =
   Requester $ \u ps -> do let opts = W.defaults & W.params .~ ps
                                                 & W.auth ?~ W.basicAuth user' pass'
+                                                & W.checkStatus ?~ (\__ _ _ -> Nothing)
                           logger $ "wreq: " <> u <> " with params: " <>
                             (T.intercalate "&" . map (\(a,b) -> a <> "=" <> b) $ ps)
                           r <- W.getWith opts (T.unpack u)

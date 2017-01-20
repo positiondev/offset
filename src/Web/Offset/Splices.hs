@@ -77,7 +77,7 @@ wpCustomFill wp@Wordpress{..} =
                                    <> " when querying \"" <> endpoint <> "\"."
                  liftIO $ wpLogger notification
                  return $ "<!-- " <> notification <> " -->"
-               Right (Just (json :: Value)) -> do
+               Right (Just (json :: Value)) ->
                  unFill (jsonToFill json) attrs (path, tpl) lib
                Right Nothing -> do
                  let notification = "Unable to decode JSON for endpoint \"" <> endpoint
