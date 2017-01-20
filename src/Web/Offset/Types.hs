@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor         #-}
 {-# LANGUAGE EmptyDataDecls        #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -32,9 +33,9 @@ data Wordpress b =
      Wordpress { requestPostSet     :: Maybe IntSet
                , wpExpireAggregates :: IO Bool
                , wpExpirePost       :: WPKey -> IO Bool
-               , cachingGet         :: WPKey -> IO (Maybe Text)
-               , cachingGetRetry    :: WPKey -> IO Text
-               , cachingGetError    :: WPKey -> IO Text
+               , cachingGet         :: WPKey -> IO (CacheResult Text)
+               , cachingGetRetry    :: WPKey -> IO (Either StatusCode Text)
+               , cachingGetError    :: WPKey -> IO (Either StatusCode Text)
                , wpLogger           :: Text -> IO ()
                , cacheInternals     :: WordpressInt (StateT b IO Text)
                }
@@ -55,7 +56,7 @@ data WordpressInt b =
      WordpressInt { wpCacheGet    :: WPKey -> IO (Maybe Text)
                   , wpCacheSet    :: WPKey -> Text -> IO ()
                   , startReqMutex :: WPKey -> IO Bool
-                  , wpRequest     :: WPKey -> IO Text
+                  , wpRequest     :: WPKey -> IO (Either StatusCode Text)
                   , stopReqMutex  :: WPKey -> IO ()
                   , runRedis      :: RunRedis
                   }
@@ -146,3 +147,10 @@ data WPQuery = WPPostsQuery{ qlimit  :: Int
                            , qtaxes  :: [TaxSpecList]
                            , quser   :: Maybe Text
                            } deriving (Show)
+
+type StatusCode = Int
+
+data CacheResult a = Successful a -- cache worked as expected
+                   | Retry -- cache didn't work, but keep trying
+                   | Abort StatusCode -- we got a 404 or something, no need to retry
+  deriving (Show, Functor)

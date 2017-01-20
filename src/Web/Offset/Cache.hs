@@ -4,16 +4,18 @@
 
 module Web.Offset.Cache where
 
+import           Control.Concurrent       as CC
+import qualified Control.Concurrent.Async as CC
 import           Control.Concurrent.MVar
-import           Control.Monad           (void)
-import           Data.Map                (Map)
-import qualified Data.Map                as Map
-import           Data.Monoid             ((<>))
-import qualified Data.Set                as Set
-import           Data.Text               (Text)
-import qualified Data.Text               as T
-import           Data.Time.Clock         (UTCTime, diffUTCTime, getCurrentTime)
-import           Database.Redis          (Redis)
+import           Control.Monad            (void)
+import           Data.Map                 (Map)
+import qualified Data.Map                 as Map
+import           Data.Monoid              ((<>))
+import qualified Data.Set                 as Set
+import           Data.Text                (Text)
+import qualified Data.Text                as T
+import           Data.Time.Clock          (UTCTime, diffUTCTime, getCurrentTime)
+import           Database.Redis           (Redis)
 
 import           Web.Offset.Cache.Redis
 import           Web.Offset.Cache.Types
@@ -34,29 +36,50 @@ stopReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO ()
 stopReqMutexInt activeMV wpKey =
   modifyMVar_ activeMV $ return . Map.delete wpKey
 
-cachingGetRetryInt :: WordpressInt b -> WPKey -> IO Text
+cachingGetRetryInt :: WordpressInt b -> WPKey -> IO (Either StatusCode Text)
 cachingGetRetryInt wp = retryUnless . cachingGetInt wp
 
-cachingGetErrorInt :: WordpressInt b -> WPKey -> IO Text
+cachingGetErrorInt :: WordpressInt b -> WPKey -> IO (Either StatusCode Text)
 cachingGetErrorInt wp wpKey = errorUnless msg (cachingGetInt wp wpKey)
   where msg = "Could not retrieve " <> tshow wpKey
 
+retryUnless :: IO (CacheResult a) -> IO (Either StatusCode a)
+retryUnless action =
+  do ma <- action
+     case ma of
+       Successful r -> return $ Right r
+       Abort code -> return $ Left code
+       Retry -> do CC.threadDelay 100000
+                   retryUnless action
+
+errorUnless :: Text -> IO (CacheResult a) -> IO (Either StatusCode a)
+errorUnless msg action =
+  do ma <- action
+     case ma of
+      Successful a -> return $ Right a
+      Abort code -> return $ Left code
+      Retry -> return $ Left 500
+
 cachingGetInt :: WordpressInt b
            -> WPKey
-           -> IO (Maybe Text)
+           -> IO (CacheResult Text)
 cachingGetInt WordpressInt{..} wpKey =
-  do cached <- wpCacheGet wpKey
-     case cached of
-       Just _ -> return cached
+  do mCached <- wpCacheGet wpKey
+     case mCached of
+       Just cached -> return $ Successful cached
        Nothing ->
          do running <- startReqMutex wpKey
             if running
-               then return Nothing
+               then return Retry
                else
                  do o <- wpRequest wpKey
-                    wpCacheSet wpKey o
-                    stopReqMutex wpKey
-                    return $ Just o
+                    case o of
+                      Left errorCode ->
+                        return $ Abort errorCode
+                      Right jsonBlob -> do
+                        wpCacheSet wpKey jsonBlob
+                        stopReqMutex wpKey
+                        return $ Successful jsonBlob
 
 wpCacheGetInt :: RunRedis -> CacheBehavior -> WPKey -> IO (Maybe Text)
 wpCacheGetInt runRedis b = runRedis . cacheGet b . formatKey
