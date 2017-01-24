@@ -117,6 +117,7 @@ tplLibrary =
              ,(["custom-endpoint-object"], parse "<wpCustom endpoint=\"wp/v2/taxonomies\"><wpCategory><wpRestBase /></wpCategory></wpCustom>")
              ,(["custom-endpoint-array"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpDate /></wpCustom>")
              ,(["custom-endpoint-enter-the-matrix"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpCustom endpoint=\"wp/v2/posts/${wpId}\"><wpDate /></wpCustom></wpCustom>")
+             ,(["custom-endpoint-404"], parse "<wpCustom endpoint=\"doesnt/exist\"></wpCustom>")
                ]
 
 renderLarceny :: Ctxt ->
@@ -427,6 +428,7 @@ shouldRenderContaining :: (TemplateName, Ctxt) -> Text -> Expectation
 shouldRenderContaining (template, ctxt) match = do
     rendered <- renderLarceny ctxt template
     let rendered' = fromMaybe "" rendered
+    liftIO $ print rendered'
     (match `T.isInfixOf` rendered') `shouldBe` True
 
 shouldNotRenderContaining :: (TemplateName, Ctxt) -> Text -> Expectation
@@ -485,12 +487,14 @@ liveTests =
        it "should be able to query custom taxonomies" $ do
          ("department", ctxt) `shouldRenderContaining` "A sports post"
          ("department", ctxt) `shouldNotRenderContaining` "A first post"
-       it "should be able to query custom endpoints" $ do
+       it "should be able to query custom endpoints (as object)" $ do
          ("custom-endpoint-object", ctxt) `shouldRenderContaining` "categories"
          ("custom-endpoint-object", ctxt) `shouldNotRenderContaining` "departments"
-       it "should be able to query custom endpoints" $ do
+       it "should be able to query custom endpoints (as array)" $ do
          ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-01"
          ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-02"
          ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-15"
        it "should be able to reference fields from the custom endpoint in another custom endpoint query" $ do
          ("custom-endpoint-array", ctxt) `rendersSameAs` "custom-endpoint-enter-the-matrix"
+       it "should handle 404s without blowing up" $
+         ("custom-endpoint-404", ctxt) `shouldRenderContaining` "404"
