@@ -10,7 +10,7 @@ module Web.Offset.Splices where
 import           Control.Monad.State
 import           Control.Applicative     ((<|>))
 import           Control.Lens            hiding (children)
-import Control.Exception (try)
+import Control.Exception (try, SomeException)
 import           Control.Concurrent.MVar
 import           Control.Monad           (void, sequence)
 import           Control.Monad.Trans     (lift, liftIO)
@@ -73,17 +73,16 @@ wpCustomFill wp@Wordpress{..} =
           do let key = EndpointKey endpoint
              res <- liftIO $ try (cachingGetRetry key)
              case fmap decode res of
-               Left (e :: StatusCodeException) -> do
-                 let notification = "Encountered status code " <> tshow (code e)
-                                   <> " when querying \"" <> endpoint <> "\"."
-                 liftIO $ wpLogger notification
-                 return $ "<!-- " <> notification <> " -->"
                Right (Just (json :: Value)) ->
                  unFill (jsonToFill json) attrs (path, tpl) lib
                Right Nothing -> do
                  let notification = "Unable to decode JSON for endpoint \"" <> endpoint
                  liftIO $ wpLogger $ notification <> ": " <> tshow res
                  return $ "<!-- " <> notification <> "-->"
+               Left (e :: SomeException) -> do
+                 let notification = "Encountered error: " <> tshow e <> " when querying wpPosts."
+                 liftIO $ wpLogger notification
+                 return $ "<!-- " <> notification <> " -->"
 
 jsonToFill :: Value -> Fill s
 jsonToFill (Object o) =
@@ -125,12 +124,7 @@ wpPostsFill wp@Wordpress{..} extraFields wpLens = Fill $ \attrs tpl lib ->
          let notification = "Unable to decode JSON for wpPosts"
          liftIO $ wpLogger $ notification <> ": " <> tshow res
          return $ "<!-- " <> notification <> "-->"
-       Left (e :: StatusCodeException) -> do
-         let notification = "Encountered status code " <> tshow (code e)
-                            <> " when querying wpPosts."
-         liftIO $ wpLogger notification
-         return $ "<!-- " <> notification <> " -->"
-       Left e -> do
+       Left (e :: SomeException) -> do
          let notification = "Encountered error: " <> tshow e <> " when querying wpPosts."
          liftIO $ wpLogger notification
          return $ "<!-- " <> notification <> " -->"
