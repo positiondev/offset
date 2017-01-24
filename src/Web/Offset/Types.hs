@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE DeriveFunctor         #-}
 {-# LANGUAGE EmptyDataDecls        #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -11,6 +12,7 @@
 
 module Web.Offset.Types where
 
+import           Control.Exception      (Exception (..))
 import           Control.Lens           hiding (children)
 import           Control.Monad          (mzero)
 import           Control.Monad.State
@@ -23,6 +25,7 @@ import           Data.Monoid            ((<>))
 import           Data.Set               (Set)
 import           Data.Text              (Text)
 import qualified Data.Text              as T
+import           Data.Typeable          (Typeable (..))
 
 import           Web.Offset.Cache.Types
 import           Web.Offset.Field
@@ -33,8 +36,8 @@ data Wordpress b =
      Wordpress { requestPostSet     :: Maybe IntSet
                , wpExpireAggregates :: IO Bool
                , wpExpirePost       :: WPKey -> IO Bool
-               , cachingGet         :: WPKey -> IO (CacheResult Text)
-               , cachingGetRetry    :: WPKey -> IO (Either StatusCode Text)
+               , cachingGet         :: WPKey -> IO Text
+               , cachingGetRetry    :: WPKey -> IO Text
                , cachingGetError    :: WPKey -> IO (Either StatusCode Text)
                , wpLogger           :: Text -> IO ()
                , cacheInternals     :: WordpressInt (StateT b IO Text)
@@ -56,7 +59,7 @@ data WordpressInt b =
      WordpressInt { wpCacheGet    :: WPKey -> IO (Maybe Text)
                   , wpCacheSet    :: WPKey -> Text -> IO ()
                   , startReqMutex :: WPKey -> IO Bool
-                  , wpRequest     :: WPKey -> IO (Either StatusCode Text)
+                  , wpRequest     :: WPKey -> IO Text
                   , stopReqMutex  :: WPKey -> IO ()
                   , runRedis      :: RunRedis
                   }
@@ -154,3 +157,17 @@ data CacheResult a = Successful a -- cache worked as expected
                    | Retry -- cache didn't work, but keep trying
                    | Abort StatusCode -- we got a 404 or something, no need to retry
   deriving (Show, Functor)
+
+data OffsetException = OtherException Text
+                     | NotAnObject
+  deriving (Show, Typeable)
+
+instance Exception OffsetException
+
+newtype CacheInProgress = CacheInProgress ()
+  deriving (Show, Typeable)
+instance Exception CacheInProgress
+
+newtype StatusCodeException = StatusCodeException { code :: StatusCode }
+  deriving (Show, Typeable)
+instance Exception StatusCodeException

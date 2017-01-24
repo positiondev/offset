@@ -3,6 +3,7 @@
 
 module Web.Offset.Queries where
 
+import           Control.Exception      (throw)
 import           Data.Monoid
 import           Data.Text              (Text)
 
@@ -20,7 +21,7 @@ getSpecId taxDict spec =
     idFor :: TaxDict -> Text -> Int
     idFor (TaxDict{..}) slug =
       case filter (\(TaxRes (_,s)) -> s == slug) dict of
-       [] -> terror $ "Couldn't find " <> desc <> ": " <> slug
+       [] -> throw $ OtherException ("Couldn't find " <> desc <> ": " <> slug)
        (TaxRes (i,_):_) -> i
 
 lookupSpecId :: Wordpress b -> TaxonomyName -> TaxSpec -> IO (Maybe TaxSpecId)

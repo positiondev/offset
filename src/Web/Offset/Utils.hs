@@ -20,9 +20,6 @@ readSafe = fmap fst . listToMaybe . reads . T.unpack
 tshow :: Show a => a -> Text
 tshow = T.pack . show
 
-terror :: Text -> a
-terror = error . T.unpack
-
 (=<<<) :: Monad r => (a -> r (Maybe b)) -> r (Maybe a) -> r (Maybe b)
 f =<<< g = maybe (return Nothing) f =<< g
 
