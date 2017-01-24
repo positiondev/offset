@@ -223,7 +223,7 @@ larcenyFillTests = do
   describe "<wpPosts>" $
     it "should show the title, id, and excerpt" $ do
       "<wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo bar"
-      "<wpPosts><wpId/></wpPosts>" `shouldRender` "1.0"
+      "<wpPosts><wpId/></wpPosts>" `shouldRender` "1"
       "<wpPosts><wpExcerpt/></wpPosts>" `shouldRender` "summary"
   describe "<wpPage>" $
     it "should show the content" $
