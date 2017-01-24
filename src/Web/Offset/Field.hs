@@ -5,13 +5,18 @@ module Web.Offset.Field where
 
 import           Control.Applicative ((<$>))
 import           Control.Monad.State
+import           Data.Maybe          (fromMaybe)
 import           Data.Monoid         ((<>))
 import           Data.Text           (Text)
 import qualified Data.Text           as T
+import           Text.Read           (readMaybe)
 import           Web.Larceny
+
+import           Web.Offset.Utils
 
 -- TODO(dbp 2014-10-14): date should be parsed and nested.
 data Field s = F Text -- A single flat field
+             | I Text -- A single flat field that should be an integer
              | P Text (Text -> Fill s) -- A customly parsed flat field
              | N Text [Field s] -- A nested object field
              | C Text [Text] -- A nested text field that is found by following the specified path
@@ -29,6 +34,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
                                      else m : overrideInList v fl ms
         matchesName a b = getName a == getName b
         getName (F t) = t
+        getName (I t) = t
         getName (P t _) = t
         getName (N t _) = t
         getName (C t _) = t
@@ -42,6 +48,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
 
 instance Show (Field s) where
   show (F t) = "F(" <> T.unpack t <> ")"
+  show (I t) = "I(" <> T.unpack t <> ")"
   show (P t _) = "P(" <> T.unpack t <> ",{code})"
   show (N t n) = "N(" <> T.unpack t <> "," <> show n <> ")"
   show (C t p) = "C(" <> T.unpack t <> ":" <> T.unpack (T.intercalate "/" p) <> ")"
@@ -49,7 +56,7 @@ instance Show (Field s) where
   show (M t m) = "M(" <> T.unpack t <> "," <> show m <> ")"
 
 postFields :: [Field s]
-postFields = [F "id"
+postFields = [I "id"
              ,C "title" ["title", "rendered"]
              ,F "status"
              ,F "type"
@@ -67,8 +74,8 @@ postFields = [F "id"
                                                                                 ,F "height"
                                                                                 ,F "url"]
                                                                  ]]]
-             ,N "terms" [M "category" [F "id", F "name", F "slug", F "count"]
-                        ,M "post_tag" [F "id", F "name", F "slug", F "count"]]
+             ,N "terms" [M "category" [I "id", F "name", F "slug", F "count"]
+                        ,M "post_tag" [I "id", F "name", F "slug", F "count"]]
              ]
 
 dateSplice :: Text -> Fill s
