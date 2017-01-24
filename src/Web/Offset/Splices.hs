@@ -27,8 +27,8 @@ import           Data.Scientific         (floatingOrInteger)
 import qualified Data.Set                as Set
 import           Data.Text               (Text)
 import qualified Data.Text               as T
-import           Data.Time.Calendar      (toGregorian)
-import           Data.Time.Format        (parseTimeM, defaultTimeLocale)
+import Data.Time.Clock (UTCTime)
+import           Data.Time.Format        (parseTimeM, formatTime, defaultTimeLocale)
 import qualified Data.Vector             as V
 import qualified Text.XmlHtml            as X
 import           Web.Larceny
@@ -55,15 +55,23 @@ wordpressSubs wp extraFields getURI wpLens =
 
 wpCustomDateFill :: Wordpress b -> Fill s
 wpCustomDateFill wp@Wordpress{..} =
-  useAttrs (a "format" % a "date") customDateFill
-  where customDateFill format date =
-          let parsedDate = parseTimeM False defaultTimeLocale (T.unpack format) (T.unpack date) in
-            case toGregorian <$> parsedDate of
-              Just (y, m, d) -> let dateSubs = subs [ ("wpYear", textFill $ tshow y)
-                                                    , ("wpMonth", textFill $ tshow m)
-                                                    , ("wpDay", textFill $ tshow d)] in
-                                  fillChildrenWith dateSubs
+  useAttrs (a "wp_format" % a "date") customDateFill
+  where customDateFill mWPFormat date =
+          let wpFormat = fromMaybe "%Y-%m-%d %H:%M:%S" mWPFormat
+              parsedDate = parseTimeM False
+                                      defaultTimeLocale
+                                      (T.unpack wpFormat)
+                                      (T.unpack date) :: Maybe UTCTime in
+          case parsedDate of
+              Just d -> let dateSubs = subs [ ("wpYear", datePartFill "%0Y" d)
+                                            , ("wpMonth", datePartFill "%m" d)
+                                            , ("wpDay", datePartFill "%d" d)] in
+                        fillChildrenWith dateSubs
               Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
+        datePartFill defaultFormat date =
+                useAttrs (a "format_out") $ \mf ->
+                   let f = fromMaybe defaultFormat mf in
+                   textFill $ T.pack $ formatTime defaultTimeLocale (T.unpack f) date
 
 wpCustomFill :: Wordpress b -> Fill s
 wpCustomFill wp@Wordpress{..} =
