@@ -215,7 +215,9 @@ postSubs extra object = subs (map (buildSplice object) (mergeFields postFields e
         traverseObject pth o = foldl (\o x -> unObj . M.lookup x $ o) o pth
         getText n o = case M.lookup n o of
                         Just (String t) -> t
-                        Just (Number i) -> T.pack $ show i
+                        Just (Number i) -> case floatingOrInteger i of
+                                             Right r -> tshow r
+                                             Left i -> tshow i
                         _ -> ""
 
 -- * -- Internal -- * --
