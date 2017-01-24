@@ -184,11 +184,6 @@ wpPageFill wpLens =
                                       _ -> ""
                        _ -> ""
 
-wpCustomEndpoint :: WPLens b s -> Fill s
-wpCustomEndpoint wpLens = undefined
-  --useAttrs (a "endpoint") customEndpointFill
-  where customEndpointFill endpoint = undefined
-
 postSubs :: [Field s] -> Object -> Substitutions s
 postSubs extra object = subs (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
@@ -215,9 +210,7 @@ postSubs extra object = subs (map (buildSplice object) (mergeFields postFields e
         traverseObject pth o = foldl (\o x -> unObj . M.lookup x $ o) o pth
         getText n o = case M.lookup n o of
                         Just (String t) -> t
-                        Just (Number i) -> case floatingOrInteger i of
-                                             Right r -> tshow r
-                                             Left i -> tshow i
+                        Just (Number i) -> either tshow tshow (floatingOrInteger i)
                         _ -> ""
 
 -- * -- Internal -- * --
