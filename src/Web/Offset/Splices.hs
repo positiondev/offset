@@ -193,8 +193,6 @@ postSubs :: [Field s] -> Object -> Substitutions s
 postSubs extra object = subs (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
           (transformName n, textFill $ getText n o)
-        buildSplice o (I n) =
-          (transformName n, textFill $ maybeInteger (getText n o))
         buildSplice o (P n fill') =
           (transformName n, fill' $ getText n o)
         buildSplice o (N n fs) =
@@ -219,11 +217,6 @@ postSubs extra object = subs (map (buildSplice object) (mergeFields postFields e
                         Just (String t) -> t
                         Just (Number i) -> T.pack $ show i
                         _ -> ""
-        maybeInteger :: Text -> Text
-        maybeInteger integerField =
-          let mInteger = T.stripSuffix ".0" integerField in
-            fromMaybe integerField mInteger
-
 
 -- * -- Internal -- * --
 
