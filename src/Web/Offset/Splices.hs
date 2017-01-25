@@ -51,10 +51,10 @@ wordpressSubs wp extraFields getURI wpLens =
         , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
         , ("wp", wpPrefetch wp extraFields getURI wpLens)
         , ("wpCustom", wpCustomFill wp)
-        , ("wpCustomDate", wpCustomDateFill wp)]
+        , ("wpCustomDate", wpCustomDateFill)]
 
-wpCustomDateFill :: Wordpress b -> Fill s
-wpCustomDateFill wp@Wordpress{..} =
+wpCustomDateFill :: Fill s
+wpCustomDateFill =
   useAttrs (a "wp_format" % a "date") customDateFill
   where customDateFill mWPFormat date =
           let wpFormat = fromMaybe "%Y-%m-%d %H:%M:%S" mWPFormat
