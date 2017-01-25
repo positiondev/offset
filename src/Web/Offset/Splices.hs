@@ -65,7 +65,8 @@ wpCustomDateFill =
           case parsedDate of
               Just d -> let dateSubs = subs [ ("wpYear", datePartFill "%0Y" d)
                                             , ("wpMonth", datePartFill "%m" d)
-                                            , ("wpDay", datePartFill "%d" d)] in
+                                            , ("wpDay", datePartFill "%d" d)
+                                            , ("wpDate", datePartFill "%D" d) ] in
                         fillChildrenWith dateSubs
               Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
         datePartFill defaultFormat date =

@@ -277,6 +277,10 @@ larcenyFillTests = do
       "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
       \    <wpDay />~<wpMonth />~<wpYear /> \
       \ </wpCustomDate>" `shouldRender` "26~04~2013"
+    it "should allow formatting the whole date in a single tag" $
+      "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
+      \    <wpDate /> \
+      \ </wpCustomDate>" `shouldRender` "04/26/13"
 
 
 
