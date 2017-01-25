@@ -264,13 +264,24 @@ larcenyFillTests = do
   describe "<wpCustom>" $
     it "should render an HTML comment if JSON field is null" $
       "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
-  describe "<wpCustomDate>" $
+  describe "<wpCustomDate>" $ do
     it "should parse a date field with the format string it's given" $
-      "<wpCustom endpoint=\"jacobin/featured-content/editors-picks\" > \
-      \   <wpCustomDate date=\"${wpPostDate}\" format=\"%Y-%m-%d %H:%M:%S\"> \
-      \     <wpDay />~<wpMonth />~<wpYear /> \
-      \   </wpCustomDate> \
-      \ </wpCustom>" `shouldRender` "26~4~2013"
+      "<wpCustomDate date=\"2013-04-26 10:11:52\" wp_format=\"%Y-%m-%d %H:%M:%S\"> \
+      \   <wpDay />~<wpMonth />~<wpYear /> \
+      \ </wpCustomDate>" `shouldRender` "26~04~2013"
+    it "should format a date field with the format strings it's given" $
+      "<wpCustomDate date=\"2013-04-26 10:11:52\" wp_format=\"%Y-%m-%d %H:%M:%S\"> \
+      \   <wpMonth format_out=\"%B\"/> <wpDay format_out=\"%-d\"/>, <wpYear /> \
+      \ </wpCustomDate>" `shouldRender` "April 26, 2013"
+    it "should use default WordPress date format if none specified" $
+      "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
+      \    <wpDay />~<wpMonth />~<wpYear /> \
+      \ </wpCustomDate>" `shouldRender` "26~04~2013"
+    it "should allow formatting the whole date in a single tag" $
+      "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
+      \    <wpDate /> \
+      \ </wpCustomDate>" `shouldRender` "04/26/13"
+
 
 
 -- Caching tests
