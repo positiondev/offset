@@ -11,6 +11,7 @@ import           Prelude                  hiding ((++))
 import           Blaze.ByteString.Builder
 import           Configuration.Dotenv     (loadFile)
 import           Control.Concurrent.MVar
+import           Control.Exception        (throw)
 import           Control.Lens             hiding ((.=))
 import           Control.Monad            (mplus, void, when)
 import           Control.Monad.State      (StateT, evalStateT)
@@ -116,6 +117,7 @@ tplLibrary =
              ,(["custom-endpoint-object"], parse "<wpCustom endpoint=\"wp/v2/taxonomies\"><wpCategory><wpRestBase /></wpCategory></wpCustom>")
              ,(["custom-endpoint-array"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpDate /></wpCustom>")
              ,(["custom-endpoint-enter-the-matrix"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpCustom endpoint=\"wp/v2/posts/${wpId}\"><wpDate /></wpCustom></wpCustom>")
+             ,(["custom-endpoint-404"], parse "<wpCustom endpoint=\"doesnt/exist\"></wpCustom>")
                ]
 
 renderLarceny :: Ctxt ->
@@ -129,34 +131,34 @@ renderLarceny ctxt name =
          return $ Just rendered
        _ -> return Nothing
 
-fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO (Either StatusCode Text)
+fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO Text
 fauxRequester _ "/wp/v2/tags" [("slug", "home-featured")] =
-  return $ Right $ enc [object [ "id" .= (177 :: Int)
+  return $ enc [object [ "id" .= (177 :: Int)
                        , "slug" .= ("home-featured" :: Text)
                        ]]
 fauxRequester _ "/wp/v2/tags" [("slug", "featured-global")] =
-  return $ Right $ enc [object [ "id" .= (160 :: Int)
+  return $ enc [object [ "id" .= (160 :: Int)
                        , "slug" .= ("featured-global" :: Text)
                        ]]
 fauxRequester _ "/wp/v2/categories" [("slug", "bookmarx")] =
-  return $ Right $ enc [object [ "id" .= (159 :: Int)
+  return $ enc [object [ "id" .= (159 :: Int)
                        , "slug" .= ("bookmarx" :: Text)
                        , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
                        ] ]
 fauxRequester _ "/jacobin/featured-content/editors-picks" [] =
-  return $ Right $ enc [object [ "post_date" .= ("2013-04-26 10:11:52" :: Text)
+  return $ enc [object [ "post_date" .= ("2013-04-26 10:11:52" :: Text)
                        , "date" .= ("2014-04-26 10:11:52" :: Text)
                        , "post_date_gmt" .= ("2015-04-26 15:11:52" :: Text)
                        ]]
 fauxRequester _ "/wp/v2/pages" [("slug", "a-first-page")] =
-  return $ Right $ enc [page1]
+  return $ enc [page1]
 fauxRequester _ "/dev/null" [] =
-  return $ Right $ enc [object ["this_is_null" .= Null]]
+  return $ enc [object ["this_is_null" .= Null]]
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
     Nothing -> return ()
-  return $ Right $ enc [article1]
+  return $ enc [article1]
   where mkUrlUnescape url params =
              url <> "?"
           <> T.intercalate "&" (map (\(k, v) -> k <> "=" <> v) params)
@@ -179,7 +181,7 @@ initFauxRequestNoCache =
   initializer (Right $ Requester (fauxRequester Nothing)) NoCache ""
 
 initNoRequestWithCache =
-  initializer (Right $ Requester (\_ _ -> return (Right "") )) (CacheSeconds 60) ""
+  initializer (Right $ Requester (\_ _ -> return "")) (CacheSeconds 60) ""
 
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
@@ -204,7 +206,7 @@ clearRedisCache ctxt = R.runRedis (_redis ctxt) (rdelstar "wordpress:*")
 
 unobj :: Value -> Object
 unobj (Object x) = x
-unobj _ = error "Not an object"
+unobj _ = throw NotAnObject
 
 toTpl tpl = parse (TL.fromStrict tpl)
 
@@ -437,6 +439,7 @@ shouldRenderContaining :: (TemplateName, Ctxt) -> Text -> Expectation
 shouldRenderContaining (template, ctxt) match = do
     rendered <- renderLarceny ctxt template
     let rendered' = fromMaybe "" rendered
+    liftIO $ print rendered'
     (match `T.isInfixOf` rendered') `shouldBe` True
 
 shouldNotRenderContaining :: (TemplateName, Ctxt) -> Text -> Expectation
@@ -495,12 +498,14 @@ liveTests =
        it "should be able to query custom taxonomies" $ do
          ("department", ctxt) `shouldRenderContaining` "A sports post"
          ("department", ctxt) `shouldNotRenderContaining` "A first post"
-       it "should be able to query custom endpoints" $ do
+       it "should be able to query custom endpoints (as object)" $ do
          ("custom-endpoint-object", ctxt) `shouldRenderContaining` "categories"
          ("custom-endpoint-object", ctxt) `shouldNotRenderContaining` "departments"
-       it "should be able to query custom endpoints" $ do
+       it "should be able to query custom endpoints (as array)" $ do
          ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-01"
          ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-02"
          ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-15"
        it "should be able to reference fields from the custom endpoint in another custom endpoint query" $ do
          ("custom-endpoint-array", ctxt) `rendersSameAs` "custom-endpoint-enter-the-matrix"
+       it "should handle 404s without blowing up" $
+         ("custom-endpoint-404", ctxt) `shouldRenderContaining` "404"

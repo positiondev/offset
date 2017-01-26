@@ -13,21 +13,20 @@ import qualified Network.Wreq            as W
 
 newtype Requester = Requester { unRequester :: Text
                                             -> [(Text, Text)]
-                                            -> IO (Either Int Text) }
+                                            -> IO Text }
 
 wreqRequester :: (Text -> IO ())
               -> Text
               -> Text
               -> Requester
 wreqRequester logger user passw =
-  Requester $ \u ps -> do let opts = W.defaults & W.params .~ ps
-                                                & W.auth ?~ W.basicAuth user' pass'
-                                                & W.checkStatus ?~ (\__ _ _ -> Nothing)
-                          logger $ "wreq: " <> u <> " with params: " <>
-                            (T.intercalate "&" . map (\(a,b) -> a <> "=" <> b) $ ps)
-                          r <- W.getWith opts (T.unpack u)
-                          case r ^. W.responseStatus ^. W.statusCode of
-                            200 -> return $ Right $ TL.toStrict . TL.decodeUtf8 $ r ^. W.responseBody
-                            n -> return $ Left n
+  Requester $ \u ps ->
+    do let opts = W.defaults & W.params .~ ps
+                             & W.auth ?~ W.basicAuth user' pass'
+       logger $ "wreq: " <> u <> " with params: " <>
+                (T.intercalate "&" . map (\(a,b) -> a <> "=" <> b) $ ps)
+       r <- W.getWith opts (T.unpack u)
+       return $ TL.toStrict . TL.decodeUtf8
+              $ r ^. W.responseBody
   where user' = T.encodeUtf8 user
         pass' = T.encodeUtf8 passw

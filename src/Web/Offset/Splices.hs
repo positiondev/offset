@@ -10,6 +10,7 @@ module Web.Offset.Splices where
 import           Control.Monad.State
 import           Control.Applicative     ((<|>))
 import           Control.Lens            hiding (children)
+import Control.Exception (try, SomeException)
 import           Control.Concurrent.MVar
 import           Control.Monad           (void, sequence)
 import           Control.Monad.Trans     (lift, liftIO)
@@ -79,19 +80,18 @@ wpCustomFill wp@Wordpress{..} =
   useAttrs (a "endpoint") customFill
   where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
           do let key = EndpointKey endpoint
-             res <- liftIO $ cachingGetRetry key
+             res <- liftIO $ try (cachingGetRetry key)
              case fmap decode res of
-               Left code -> do
-                 let notification = "Encountered status code " <> tshow code
-                                   <> " when querying \"" <> endpoint <> "\"."
-                 liftIO $ wpLogger notification
-                 return $ "<!-- " <> notification <> " -->"
                Right (Just (json :: Value)) ->
                  unFill (jsonToFill json) attrs (path, tpl) lib
                Right Nothing -> do
                  let notification = "Unable to decode JSON for endpoint \"" <> endpoint
                  liftIO $ wpLogger $ notification <> ": " <> tshow res
                  return $ "<!-- " <> notification <> "-->"
+               Left (e :: SomeException) -> do
+                 let notification = "Encountered error: " <> tshow e <> " when querying wpPosts."
+                 liftIO $ wpLogger notification
+                 return $ "<!-- " <> notification <> " -->"
 
 jsonToFill :: Value -> Fill s
 jsonToFill (Object o) =
@@ -120,7 +120,7 @@ wpPostsFill wp@Wordpress{..} extraFields wpLens = Fill $ \attrs tpl lib ->
      let postsQuery = parseQueryNode (Map.toList attrs)
      filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
      let wpKey = mkWPKey filters postsQuery
-     res <- liftIO $ cachingGetRetry wpKey
+     res <- liftIO $ try (cachingGetRetry wpKey)
      case fmap decode res of
        Right (Just posts) -> do
          let postsW = extractPostIds posts
@@ -129,10 +129,12 @@ wpPostsFill wp@Wordpress{..} extraFields wpLens = Fill $ \attrs tpl lib ->
                        . noDuplicates requestPostSet $ postsW
          addPostIds wpLens (map fst postsND)
          unFill (wpPostsHelper extraFields (map snd postsND)) mempty tpl lib
-       Right Nothing -> return ""
-       Left code -> do
-         let notification = "Encountered status code " <> tshow code
-                            <> " when querying wpPosts."
+       Right Nothing -> do
+         let notification = "Unable to decode JSON for wpPosts"
+         liftIO $ wpLogger $ notification <> ": " <> tshow res
+         return $ "<!-- " <> notification <> "-->"
+       Left (e :: SomeException) -> do
+         let notification = "Encountered error: " <> tshow e <> " when querying wpPosts."
          liftIO $ wpLogger notification
          return $ "<!-- " <> notification <> " -->"
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
@@ -330,13 +332,12 @@ wpGetPost wpLens wpKey =
 
 getPost :: Wordpress b -> WPKey -> IO (Maybe Object)
 getPost Wordpress{..} wpKey = decodePost <$> cachingGetRetry wpKey
-  where decodePost :: Either StatusCode Text -> Maybe Object
-        decodePost (Right t) =
+  where decodePost :: Text -> Maybe Object
+        decodePost t =
           do post' <- decodeJson t
              case post' of
               Just (post:_) -> Just post
               _ -> Nothing
-        decodePost (Left code) = Nothing
 
 
 transformName :: Text -> Text
