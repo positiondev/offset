@@ -1,8 +1,6 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TemplateHaskell   #-}
 
 module Main where
 
@@ -46,178 +44,18 @@ import           Web.Offset.Cache.Redis
 import           Web.Offset.Splices       (wpPostsHelper)
 import           Web.Offset.Types
 
-----------------------------------------------------------
--- Section 1: Example application used for testing.     --
-----------------------------------------------------------
-
-data Ctxt = Ctxt { _req       :: FnRequest
-                 , _redis     :: R.Connection
-                 , _wordpress :: Wordpress Ctxt
-                 , _wpsubs    :: Substitutions Ctxt
-                 , _lib       :: Library Ctxt
-                 }
-
-makeLenses ''Ctxt
-
-instance RequestContext Ctxt where
-  requestLens = req
-
-enc a = TL.toStrict . TL.decodeUtf8 . encode $ a
-
-article1 :: Value
-article1 = object [ "id" .= (1 :: Int)
-                  , "title" .= object ["rendered" .= ("Foo bar" :: Text)]
-                  , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
-                  ]
-
-article2 = object [ "id" .= (2 :: Int)
-                  , "title" .= object ["rendered" .= ("The post" :: Text)]
-                  , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
-                  ]
-
-page1 = object [ "id" .= (3 :: Int)
-               , "title" .= object ["rendered" .= ("Page foo" :: Text)]
-               , "content" .= object ["rendered" .= ("<b>rendered</b> page content" :: Text)]
-               ]
-
-customFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-featured" [F "width"
-                                                                                     ,F "height"
-                                                                                     ,F "url"]
-                                                                   ,N "single-featured" [F "width"
-                                                                                        ,F "height"
-                                                                                        ,F "url"]]]]]
-
-tplLibrary :: Library Ctxt
-tplLibrary =
-  M.fromList [(["single"], parse "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp>")
-             ,(["single-page"], parse "<wpPage name=a-first-page />")
-             ,(["many"], parse "<wpPosts limit=2><wpTitle/></wpPosts>")
-             ,(["many1"], parse "<wpPosts><wpTitle/></wpPosts>")
-             ,(["many2"], parse "<wpPosts offset=1 limit=1><wpTitle/></wpPosts>")
-             ,(["many3"], parse "<wpPosts offset=0 limit=1><wpTitle/></wpPosts>")
-             ,(["page1"], parse "<wpPosts limit=10 page=1><wpTitle/></wpPosts>")
-             ,(["page2"], parse "<wpPosts limit=10 page=2><wpTitle/></wpPosts>")
-             ,(["num1"], parse "<wpPosts num=2><wpTitle/></wpPosts>")
-             ,(["num2"], parse "<wpPosts num=2 page=2 limit=1><wpTitle/></wpPosts>")
-             ,(["num3"], parse "<wpPosts num=1 page=3><wpTitle/></wpPosts>")
-             ,(["tag1"], parse "<wpPosts tags=\"tag1\" limit=10><wpTitle/></wpPosts>")
-             ,(["tag2"], parse "<wpPosts limit=10><wpTitle/></wpPosts>")
-             ,(["tag3"], parse "<wpPosts tags=\"+tag1\" limit=10><wpTitle/></wpPosts>")
-             ,(["tag4"], parse "<wpPosts tags=\"-tag1\" limit=1><wpTitle/></wpPosts>")
-             ,(["tag5"], parse "<wpPosts tags=\"+tag1\" limit=1><wpTitle/></wpPosts>")
-             ,(["tag6"], parse "<wpPosts tags=\"+tag1,-tag2\" limit=1><wpTitle/></wpPosts>")
-             ,(["tag7"], parse "<wpPosts tags=\"+tag1,+tag2\" limit=1><wpTitle/></wpPosts>")
-             ,(["cat1"], parse "<wpPosts categories=\"cat1\" limit=10><wpTitle/></wpPosts>")
-             ,(["cat2"], parse "<wpPosts limit=10><wpTitle/></wpPosts>")
-             ,(["cat3"], parse "<wpPosts categories=\"-cat1\" limit=10><wpTitle/></wpPosts>")
-             ,(["department"], parse "<wpPosts departments=\"sports\"><wpTitle/></wpPosts>")
-             ,(["author-date"], parse "Hello<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
-             ,(["fields"], parse "<wp><wpPosts limit=1 categories=\"-cat1\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
-             ,(["custom-endpoint-object"], parse "<wpCustom endpoint=\"wp/v2/taxonomies\"><wpCategory><wpRestBase /></wpCategory></wpCustom>")
-             ,(["custom-endpoint-array"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpDate /></wpCustom>")
-             ,(["custom-endpoint-enter-the-matrix"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpCustom endpoint=\"wp/v2/posts/${wpId}\"><wpDate /></wpCustom></wpCustom>")
-               ]
-
-renderLarceny :: Ctxt ->
-                 Text ->
-                 IO (Maybe Text)
-renderLarceny ctxt name =
-  do let tpl = M.lookup [name] tplLibrary
-     case tpl of
-       Just t -> do
-         rendered <- evalStateT (runTemplate t [name] (ctxt ^. wpsubs) tplLibrary) ctxt
-         return $ Just rendered
-       _ -> return Nothing
-
-fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO (Either StatusCode Text)
-fauxRequester _ "/wp/v2/tags" [("slug", "home-featured")] =
-  return $ Right $ enc [object [ "id" .= (177 :: Int)
-                       , "slug" .= ("home-featured" :: Text)
-                       ]]
-fauxRequester _ "/wp/v2/tags" [("slug", "featured-global")] =
-  return $ Right $ enc [object [ "id" .= (160 :: Int)
-                       , "slug" .= ("featured-global" :: Text)
-                       ]]
-fauxRequester _ "/wp/v2/categories" [("slug", "bookmarx")] =
-  return $ Right $ enc [object [ "id" .= (159 :: Int)
-                       , "slug" .= ("bookmarx" :: Text)
-                       , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
-                       ] ]
-fauxRequester _ "/jacobin/featured-content/editors-picks" [] =
-  return $ Right $ enc [object [ "post_date" .= ("2013-04-26 10:11:52" :: Text)
-                       , "date" .= ("2014-04-26 10:11:52" :: Text)
-                       , "post_date_gmt" .= ("2015-04-26 15:11:52" :: Text)
-                       ]]
-fauxRequester _ "/wp/v2/pages" [("slug", "a-first-page")] =
-  return $ Right $ enc [page1]
-fauxRequester _ "/dev/null" [] =
-  return $ Right $ enc [object ["this_is_null" .= Null]]
-fauxRequester mRecord rqPath rqParams = do
-  case mRecord of
-    Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
-    Nothing -> return ()
-  return $ Right $ enc [article1]
-  where mkUrlUnescape url params =
-             url <> "?"
-          <> T.intercalate "&" (map (\(k, v) -> k <> "=" <> v) params)
-
-initializer requester cache endpoint =
-  do rconn <- R.connect R.defaultConnectInfo
-     let wpconf = def { wpConfEndpoint = endpoint
-                      , wpConfLogger = Nothing
-                      , wpConfRequester = requester
-                      , wpConfExtraFields = []
-                      , wpConfCacheBehavior = cache
-                   }
-     let getUri :: StateT Ctxt IO Text
-         getUri = do ctxt <- S.get
-                     return (T.decodeUtf8 . rawPathInfo . fst . getRequest $ ctxt)
-     (wp,wpSubs) <- initWordpress wpconf rconn getUri wordpress
-     return (Ctxt defaultFnRequest rconn wp wpSubs mempty)
-
-initFauxRequestNoCache =
-  initializer (Right $ Requester (fauxRequester Nothing)) NoCache ""
-
-initNoRequestWithCache =
-  initializer (Right $ Requester (\_ _ -> return (Right "") )) (CacheSeconds 60) ""
-
-----------------------------------------------------------
--- Section 2: Test suite against application.           --
-----------------------------------------------------------
+import           Common
 
 runTests :: IO ()
 runTests = hspec $ do
   Misc.tests
   larcenyFillTests
+  cacheTests
   queryTests
   liveTests
 
 main :: IO ()
 main = runTests
-
-type TemplateName = Text
-type TemplateText = Text
-type TemplateUrl = Text
-
-clearRedisCache :: Ctxt -> IO Bool
-clearRedisCache ctxt = R.runRedis (_redis ctxt) (rdelstar "wordpress:*")
-
-unobj :: Value -> Object
-unobj (Object x) = x
-unobj _ = error "Not an object"
-
-toTpl tpl = parse (TL.fromStrict tpl)
-
-ignoreWhitespace = T.replace " " ""
-
-shouldRender :: TemplateText
-             -> Text
-             -> Expectation
-shouldRender t output = do
-  ctxt <- initFauxRequestNoCache
-  let s = _wpsubs ctxt
-  rendered <- evalStateT (runTemplate (toTpl t) [] s mempty) ctxt
-  ignoreWhitespace rendered `shouldBe` ignoreWhitespace output
 
 larcenyFillTests = do
   describe "<wpPosts>" $
@@ -282,37 +120,15 @@ larcenyFillTests = do
       \    <wpDate /> \
       \ </wpCustomDate>" `shouldRender` "04/26/13"
 
-
-
 -- Caching tests
-
-wpCacheGet' wordpress wpKey = do
-  let WordpressInt{..} = cacheInternals wordpress
-  liftIO $ wpCacheGet wpKey
-
-wpCacheSet'' wordpress wpKey o = do
-  let WordpressInt{..} = cacheInternals wordpress
-  wpCacheSet wpKey o
-
-wpCacheSet' wordpress wpKey o = do
-  let WordpressInt{..} = cacheInternals wordpress
-  liftIO $ wpCacheSet wpKey o
-
-wpExpireAggregates' wordpress = do
-  let Wordpress{..} = wordpress
-  liftIO wpExpireAggregates
-
-wpExpirePost' wordpress k = do
-  let Wordpress{..} = wordpress
-  liftIO $ wpExpirePost k
 
 cacheTests = do
   describe "should grab post from cache if it's there" $
-      it "should do a thing" $ do
+      it "should render the post even w/o json source" $ do
         let (Object a2) = article2
         ctxt <- liftIO initNoRequestWithCache
         wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2001" "10" "the-post")
-                                        (enc a2)
+                                          (enc [a2])
         ("single", ctxt) `shouldRenderAtUrlContaining` ("/2001/10/the-post/", "The post")
 
   describe "caching" $ do
@@ -367,19 +183,6 @@ cacheTests = do
          wpCacheSet' (view wordpress ctxt) key (enc article1)
          wpCacheGet' (view wordpress ctxt) key >>= shouldBe (Just (enc article1))
 
-shouldQueryTo :: TemplateText -> [Text] -> Spec
-shouldQueryTo hQuery wpQuery =
-  it ("should query from " <> T.unpack hQuery) $ do
-      record <- liftIO $ newMVar []
-      ctxt <- liftIO $ initializer
-                         (Right $ Requester $ fauxRequester (Just record))
-                         NoCache
-                         ""
-      let s = _wpsubs ctxt
-      evalStateT (runTemplate (toTpl hQuery) [] s mempty) ctxt
-      x <- liftIO $ tryTakeMVar record
-      x `shouldBe` Just wpQuery
-
 queryTests =
   describe "generate queries from <wpPosts>" $ do
       "<wpPosts></wpPosts>" `shouldQueryTo`
@@ -416,46 +219,6 @@ queryTests =
         replicate 2 "/wp/v2/posts?categories[]=159&offset=0&per_page=20"
       "<wpPage name=blah />" `shouldQueryTo`
         ["/wp/v2/pages?slug=blah"]
-
-rendersDifferentlyFrom :: (TemplateName, Ctxt)
-                       -> TemplateName
-                       -> Expectation
-rendersDifferentlyFrom (name1, ctxt) name2 = do
-  rendered1 <- renderLarceny ctxt name1
-  rendered2 <- renderLarceny ctxt name2
-  ignoreWhitespace <$> rendered1 `shouldNotBe` ignoreWhitespace <$> rendered2
-
-rendersSameAs :: (TemplateName, Ctxt)
-              -> TemplateName
-              -> Expectation
-rendersSameAs (name1, ctxt) name2 = do
-  rendered1 <- renderLarceny ctxt name1
-  rendered2 <- renderLarceny ctxt name2
-  ignoreWhitespace <$> rendered1 `shouldBe` ignoreWhitespace <$> rendered2
-
-shouldRenderContaining :: (TemplateName, Ctxt) -> Text -> Expectation
-shouldRenderContaining (template, ctxt) match = do
-    rendered <- renderLarceny ctxt template
-    let rendered' = fromMaybe "" rendered
-    (match `T.isInfixOf` rendered') `shouldBe` True
-
-shouldNotRenderContaining :: (TemplateName, Ctxt) -> Text -> Expectation
-shouldNotRenderContaining (template, ctxt) match = do
-    rendered <- renderLarceny ctxt template
-    let rendered' = fromMaybe "" rendered
-    (match `T.isInfixOf` rendered') `shouldBe` False
-
-shouldRenderAtUrlContaining :: (TemplateName, Ctxt)
-                            -> (TemplateUrl, Text)
-                            -> Expectation
-shouldRenderAtUrlContaining (template, ctxt) (url, match) = do
-    let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 url }
-    let ctxt' = setRequest ctxt
-                 $ (\(x,y) -> (requestWithUrl, y)) defaultFnRequest
-    let s = _wpsubs ctxt
-    rendered <- renderLarceny ctxt' template
-    let rendered' = fromMaybe "" rendered
-    (match `T.isInfixOf` rendered') `shouldBe` True
 
 liveTests :: Spec
 liveTests =
@@ -502,5 +265,5 @@ liveTests =
          ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-01"
          ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-02"
          ("custom-endpoint-array", ctxt) `shouldRenderContaining` "2014-10-15"
-       it "should be able to reference fields from the custom endpoint in another custom endpoint query" $ do
+       it "should be able to reference fields from the custom endpoint in another custom endpoint query" $
          ("custom-endpoint-array", ctxt) `rendersSameAs` "custom-endpoint-enter-the-matrix"
