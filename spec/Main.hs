@@ -4,45 +4,24 @@
 
 module Main where
 
-import           Prelude                  hiding ((++))
+import           Prelude                 hiding ((++))
 
-import           Blaze.ByteString.Builder
-import           Configuration.Dotenv     (loadFile)
 import           Control.Concurrent.MVar
-import           Control.Lens             hiding ((.=))
-import           Control.Monad            (mplus, void, when)
-import           Control.Monad.State      (StateT, evalStateT)
-import qualified Control.Monad.State      as S
-import           Control.Monad.Trans      (liftIO)
-import           Data.Aeson               hiding (Success)
-import           Data.Default
-import qualified Data.HashMap.Strict      as HM
-import qualified Data.Map                 as M
-import           Data.Maybe
+import           Control.Lens            hiding ((.=))
+import           Control.Monad           (void)
+import           Control.Monad.State     (evalStateT)
+import           Control.Monad.Trans     (liftIO)
+import           Data.Aeson              hiding (Success)
 import           Data.Monoid
-import qualified Data.Set                 as Set
-import           Data.Text                (Text, pack, unpack)
-import qualified Data.Text                as T
-import qualified Data.Text.Encoding       as T
-import qualified Data.Text.Lazy           as TL
-import qualified Data.Text.Lazy.Encoding  as TL
-import qualified Database.Redis           as R
+import qualified Data.Set                as Set
+import qualified Data.Text.Encoding      as T
 import qualified Misc
-import           Network.Wai              (Application, Response,
-                                           defaultRequest, pathInfo,
-                                           rawPathInfo)
-import           System.Directory         (doesFileExist)
-import           System.Environment       (lookupEnv)
+import           Network.Wai             (defaultRequest, rawPathInfo)
 import           Test.Hspec
-import           Test.Hspec.Core.Spec     (Result (..))
-import qualified Text.XmlHtml             as X
 import           Web.Fn
 import           Web.Larceny
 
 import           Web.Offset
-import           Web.Offset.Cache.Redis
-import           Web.Offset.Splices       (wpPostsHelper)
-import           Web.Offset.Types
 
 import           Common
 
@@ -57,6 +36,8 @@ runTests = hspec $ do
 main :: IO ()
 main = runTests
 
+--larcenyFillTests :: SpecM () ()
+larcenyFillTests :: Spec
 larcenyFillTests = do
   describe "<wpPosts>" $ do
     it "should show the title, id, and excerpt" $ do
@@ -90,16 +71,16 @@ larcenyFillTests = do
                         (CacheSeconds 10)
                         ""
       let ctxt' = setRequest ctxt
-            $ (\(x,y) -> (requestWithUrl, y)) defaultFnRequest
+            $ (\(_,y) -> (requestWithUrl, y)) defaultFnRequest
       let s = _wpsubs ctxt'
       let tpl = toTpl "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp"
-      evalStateT (runTemplate tpl [] s mempty) ctxt'
+      void $ evalStateT (runTemplate tpl [] s mempty) ctxt'
       liftIO (tryTakeMVar record) `shouldReturn` Just ["/wp/v2/posts?slug=the-post"]
     it "should render stuff" $ do
       ctxt <- initFauxRequestNoCache
       let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 "/2009/10/the-post/"}
       let ctxt' = setRequest ctxt
-                 $ (\(x,y) -> (requestWithUrl, y)) defaultFnRequest
+                 $ (\(_,y) -> (requestWithUrl, y)) defaultFnRequest
       let s = view wpsubs ctxt'
       let tpl = toTpl "<wp><wpNoPostDuplicates/><wpPostByPermalink><wpTitle/></wpPostByPermalink><wpPosts limit=1><wpTitle/></wpPosts></wp>"
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
@@ -128,6 +109,7 @@ larcenyFillTests = do
 
 -- Caching tests
 
+cacheTests :: Spec
 cacheTests = do
   describe "should grab post from cache if it's there" $
       it "should render the post even w/o json source" $ do
@@ -144,44 +126,44 @@ cacheTests = do
       p `shouldBe` Nothing
     it "should find something if there is a post in cache" $ do
       ctxt <- initNoRequestWithCache
-      wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
-                                  (enc article1)
+      void $ wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+                                          (enc article1)
       p <- wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
       p `shouldBe` (Just $ enc article1)
     it "should not find single post after expire handler is called" $ do
          ctxt <- initNoRequestWithCache
-         wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
-                                     (enc article1)
-         wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         void $ wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+                                                  (enc article1)
+         void $ wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
          wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
            >>= shouldBe Nothing
     it "should find post aggregates in cache" $
       do ctxt <- initNoRequestWithCache
          let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
-         wpCacheSet' (view wordpress ctxt) key ("[" <> enc article1 <> "]")
-         wpCacheGet' (view wordpress ctxt) key
+         void $ wpCacheSet' (view wordpress ctxt) key ("[" <> enc article1 <> "]")
+         void $ wpCacheGet' (view wordpress ctxt) key
            >>= shouldBe (Just $ "[" <> enc article1 <> "]")
     it "should not find post aggregates after expire handler is called" $
       do ctxt <- initNoRequestWithCache
          let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
-         wpCacheSet' (view wordpress ctxt) key ("[" <> enc article1 <> "]")
-         wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         void $ wpCacheSet' (view wordpress ctxt) key ("[" <> enc article1 <> "]")
+         void $ wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
          wpCacheGet' (view wordpress ctxt) key
            >>= shouldBe Nothing
     it "should find single post after expiring aggregates" $
       do ctxt <- initNoRequestWithCache
-         wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         void $ wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
                           (enc article1)
-         wpExpireAggregates' (view wordpress ctxt)
+         void $ wpExpireAggregates' (view wordpress ctxt)
          wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
            >>= shouldNotBe Nothing
     it "should find a different single post after expiring another" $
       do ctxt <- initNoRequestWithCache
          let key1 = PostByPermalinkKey "2000" "1" "the-article"
              key2 = PostByPermalinkKey "2001" "2" "another-article"
-         wpCacheSet' (view wordpress ctxt) key1 (enc article1)
-         wpCacheSet' (view wordpress ctxt) key2 (enc article2)
-         wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         void $ wpCacheSet' (view wordpress ctxt) key1 (enc article1)
+         void $ wpCacheSet' (view wordpress ctxt) key2 (enc article2)
+         void $ wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
          wpCacheGet' (view wordpress ctxt) key2 >>= shouldBe (Just (enc article2))
     it "should be able to cache and retrieve post" $
       do ctxt <- initNoRequestWithCache
@@ -189,6 +171,7 @@ cacheTests = do
          wpCacheSet' (view wordpress ctxt) key (enc article1)
          wpCacheGet' (view wordpress ctxt) key >>= shouldBe (Just (enc article1))
 
+queryTests :: Spec
 queryTests =
   describe "generate queries from <wpPosts>" $ do
       "<wpPosts></wpPosts>" `shouldQueryTo`
@@ -230,7 +213,7 @@ liveTests :: Spec
 liveTests =
   describe "live tests (which require running wordpress server)" $ do
     ctxt <- runIO $ initializer (Left ("offset", "111")) NoCache "http://localhost:5555/wp-json"
-    runIO $ clearRedisCache ctxt
+    void $ runIO $ clearRedisCache ctxt
     do it "should have title on page" $
          ("single", ctxt)
          `shouldRenderAtUrlContaining` ("/2014/10/a-first-post", "A first post")

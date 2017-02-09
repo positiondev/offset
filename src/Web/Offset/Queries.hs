@@ -24,13 +24,13 @@ getSpecId taxDict spec =
        (TaxRes (i,_):_) -> i
 
 lookupSpecId :: Wordpress b -> TaxonomyName -> TaxSpec -> IO (Maybe TaxSpecId)
-lookupSpecId wp@Wordpress{..} taxName spec =
+lookupSpecId Wordpress{..} taxName spec =
   case spec of
    TaxPlus slug -> (fmap . fmap) (\(TaxRes (i, _)) -> TaxPlusId i) (idFor taxName slug)
    TaxMinus slug -> (fmap . fmap) (\(TaxRes (i, _)) -> TaxMinusId i) (idFor taxName slug)
   where
     idFor :: Text -> Text -> IO (Maybe TaxRes)
-    idFor taxName slug = do
+    idFor _ slug = do
       let key = TaxSlugKey taxName slug
       let cacheSettings = cacheInternals { wpCacheSet = wpCacheSetInt (runRedis cacheInternals)
                                                                       (CacheSeconds (12 * 60 * 60)) }
@@ -47,7 +47,7 @@ lookupSpecId wp@Wordpress{..} taxName spec =
           wpLogger $ "No id found in lookupSpecId for: " <> tshow spec
           return Nothing
         Right (Just [taxRes]) -> return $ Just taxRes
-        Right (Just (x:xs)) ->  do
+        Right (Just (_:_)) ->  do
           wpLogger $ "JSON response in lookupSpecId for: " <> tshow spec
                      <> " contains multiple results: " <> tshow resp
           return Nothing

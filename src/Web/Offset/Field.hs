@@ -3,20 +3,32 @@
 
 module Web.Offset.Field where
 
-import           Control.Applicative ((<$>))
-import           Control.Monad.State
-import           Data.Monoid         ((<>))
-import           Data.Text           (Text)
-import qualified Data.Text           as T
+import           Data.Maybe       (fromMaybe)
+import           Data.Monoid      ((<>))
+import           Data.Text        (Text)
+import qualified Data.Text        as T
+import           Data.Time.Clock  (UTCTime)
+import           Data.Time.Format (defaultTimeLocale, formatTime, parseTimeM)
 import           Web.Larceny
 
--- TODO(dbp 2014-10-14): date should be parsed and nested.
 data Field s = F Text -- A single flat field
              | P Text (Text -> Fill s) -- A customly parsed flat field
              | N Text [Field s] -- A nested object field
              | C Text [Text] -- A nested text field that is found by following the specified path
              | CN Text [Text] [Field s] -- A nested set of fields that is found by follwing the specified path
              | M Text [Field s] -- A list field, where each element is an object
+
+-- NOTE(dbp 2014-11-07): We define equality that is 'good enough' for testing.
+-- In truth, our definition is wrong because of the functions inside of 'P' variants.
+-- NOTE(emh 2017-02-09): Moving this to Field to avoid orphan instance (even though we
+-- want this to be orphaned!). This eq instance is only for testing!!
+instance Eq (Field s) where
+  F t1 == F t2 = t1 == t2
+  P t1 _ == P t2 _ = t1 == t2
+  N t1 n1 == N t2 n2 = t1 == t2 && n1 == n2
+  M t1 m1 == M t2 m2 = t1 == t2 && m1 == m2
+  _ == _ = True
+
 
 mergeFields :: [Field s] -> [Field s] -> [Field s]
 mergeFields fo [] = fo
@@ -27,7 +39,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
         overrideInList v fl (m:ms) = if matchesName m fl
                                      then mergeField m fl : overrideInList True fl ms
                                      else m : overrideInList v fl ms
-        matchesName a b = getName a == getName b
+        matchesName c d = getName c == getName d
         getName (F t) = t
         getName (P t _) = t
         getName (N t _) = t
@@ -74,7 +86,7 @@ postFields = [F "id"
 wpDateFill :: Text -> Fill s
 wpDateFill date =
   let wpFormat = "%Y-%m-%dT%H:%M:%S"
-      parsedDate = trace (T.unpack ("Date: " <> date)) $ parseTimeM False
+      parsedDate = parseTimeM False
                     defaultTimeLocale
                     (T.unpack wpFormat)
                     (T.unpack date) :: Maybe UTCTime in
@@ -85,7 +97,7 @@ wpDateFill date =
                                   , ("wpFullDate", datePartFill "%D"  d) ] in
                 fillChildrenWith dateSubs
     Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
-  where datePartFill defaultFormat date =
+  where datePartFill defaultFormat utcTime =
           useAttrs (a "format") $ \mf ->
                    let f = fromMaybe defaultFormat mf in
-                   textFill $ T.pack $ formatTime defaultTimeLocale (T.unpack f) date
+                   textFill $ T.pack $ formatTime defaultTimeLocale (T.unpack f) utcTime

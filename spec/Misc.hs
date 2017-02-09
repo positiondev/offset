@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell   #-}
 
 module Misc where
 
@@ -14,14 +13,7 @@ shouldTransformTo :: Text -> Text -> Spec
 shouldTransformTo from to =
   it (T.unpack ("should convert " <> from <> " to " <> to)) $ transformName from `shouldBe` to
 
--- NOTE(dbp 2014-11-07): We define equality that is 'good enough' for testing.
--- In truth, our definition is wrong because of the functions inside of 'P' variants.
-instance Eq (Field s) where
-  F t1 == F t2 = t1 == t2
-  P t1 _ == P t2 _ = t1 == t2
-  N t1 n1 == N t2 n2 = t1 == t2 && n1 == n2
-  M t1 m1 == M t2 m2 = t1 == t2 && m1 == m2
-
+tests :: Spec
 tests = do
   describe "mergeFields" $ do
     it "should be able to right-bias merge two Field trees" $

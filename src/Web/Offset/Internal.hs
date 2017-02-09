@@ -34,11 +34,12 @@ wpRequestInt runHTTP endpt key =
 buildParams :: WPKey -> [(Text, Text)]
 buildParams (PostsKey filters) = params
   where params = Set.toList $ Set.map mkFilter filters
-        mkFilter (TaxFilter taxName (TaxPlusId i)) = (taxName <> "[]", tshow i)
-        mkFilter (TaxFilter taxName (TaxMinusId i)) = (taxName <> "_exclude[]", tshow i)
+        mkFilter (TaxFilter taxonomyName (TaxPlusId i)) = (taxonomyName <> "[]", tshow i)
+        mkFilter (TaxFilter taxonomyName (TaxMinusId i)) = (taxonomyName <> "_exclude[]", tshow i)
         mkFilter (NumFilter num) = ("per_page", tshow num)
         mkFilter (OffsetFilter offset) = ("offset", tshow offset)
         mkFilter (UserFilter user) = ("author[]", user)
+buildParams _ = []
 
 wpLogInt :: Maybe (Text -> IO ()) -> Text -> IO ()
 wpLogInt logger msg = case logger of
