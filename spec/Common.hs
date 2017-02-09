@@ -68,16 +68,19 @@ enc a = TL.toStrict . TL.decodeUtf8 . encode $ a
 
 article1 :: Value
 article1 = object [ "id" .= (1 :: Int)
+                  , "date" .= ("2014-10-20T07:00:00" :: Text)
                   , "title" .= object ["rendered" .= ("Foo bar" :: Text)]
                   , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
                   ]
 
 article2 = object [ "id" .= (2 :: Int)
+                  , "date" .= ("2014-10-20T07:00:00" :: Text)
                   , "title" .= object ["rendered" .= ("The post" :: Text)]
                   , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
                   ]
 
 page1 = object [ "id" .= (3 :: Int)
+               , "date" .= ("2014-10-20T07:00:00" :: Text)
                , "title" .= object ["rendered" .= ("Page foo" :: Text)]
                , "content" .= object ["rendered" .= ("<b>rendered</b> page content" :: Text)]
                ]
