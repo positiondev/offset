@@ -46,12 +46,12 @@ wordpressSubs ::   Wordpress b
                  -> Substitutions s
 wordpressSubs wp extraFields getURI wpLens =
   subs [ ("wpPosts", wpPostsFill wp extraFields wpLens)
-        , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
-        , ("wpPage", wpPageFill wpLens)
-        , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
-        , ("wp", wpPrefetch wp extraFields getURI wpLens)
-        , ("wpCustom", wpCustomFill wp)
-        , ("wpCustomDate", wpCustomDateFill)]
+       , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
+       , ("wpPage", wpPageFill wpLens)
+       , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
+       , ("wp", wpPrefetch wp extraFields getURI wpLens)
+       , ("wpCustom", wpCustomFill wp)
+       , ("wpCustomDate", wpCustomDateFill)]
 
 wpCustomDateFill :: Fill s
 wpCustomDateFill =
