@@ -5,9 +5,12 @@ module Web.Offset.Field where
 
 import           Control.Applicative ((<$>))
 import           Control.Monad.State
+import           Data.Maybe          (fromMaybe)
 import           Data.Monoid         ((<>))
 import           Data.Text           (Text)
 import qualified Data.Text           as T
+import           Data.Time.Clock     (UTCTime)
+import           Data.Time.Format    (defaultTimeLocale, formatTime, parseTimeM)
 import           Web.Larceny
 
 -- TODO(dbp 2014-10-14): date should be parsed and nested.
@@ -74,7 +77,7 @@ postFields = [F "id"
 wpDateFill :: Text -> Fill s
 wpDateFill date =
   let wpFormat = "%Y-%m-%dT%H:%M:%S"
-      parsedDate = trace (T.unpack ("Date: " <> date)) $ parseTimeM False
+      parsedDate = parseTimeM False
                     defaultTimeLocale
                     (T.unpack wpFormat)
                     (T.unpack date) :: Maybe UTCTime in
