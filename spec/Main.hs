@@ -58,11 +58,17 @@ main :: IO ()
 main = runTests
 
 larcenyFillTests = do
-  describe "<wpPosts>" $
+  describe "<wpPosts>" $ do
     it "should show the title, id, and excerpt" $ do
       "<wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo bar"
       "<wpPosts><wpId/></wpPosts>" `shouldRender` "1"
       "<wpPosts><wpExcerpt/></wpPosts>" `shouldRender` "summary"
+    it "should allow formating of dates" $
+      "<wpPosts> \
+      \  <wpDate> \
+      \    <wpMonth format=\"%B\"/> <wpDay format=\"%-d\"/>, <wpYear /> \
+      \  </wpDate> \
+      \</wpPosts>" `shouldRender` "October 20, 2014"
   describe "<wpPage>" $
     it "should show the content" $
       "<wpPage name=a-first-page />" `shouldRender` "<b>rendered</b> page content"
@@ -109,7 +115,7 @@ larcenyFillTests = do
       \ </wpCustomDate>" `shouldRender` "26~04~2013"
     it "should format a date field with the format strings it's given" $
       "<wpCustomDate date=\"2013-04-26 10:11:52\" wp_format=\"%Y-%m-%d %H:%M:%S\"> \
-      \   <wpMonth format_out=\"%B\"/> <wpDay format_out=\"%-d\"/>, <wpYear /> \
+      \   <wpMonth format=\"%B\"/> <wpDay format=\"%-d\"/>, <wpYear /> \
       \ </wpCustomDate>" `shouldRender` "April 26, 2013"
     it "should use default WordPress date format if none specified" $
       "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
@@ -117,7 +123,7 @@ larcenyFillTests = do
       \ </wpCustomDate>" `shouldRender` "26~04~2013"
     it "should allow formatting the whole date in a single tag" $
       "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
-      \    <wpDate /> \
+      \    <wpFullDate /> \
       \ </wpCustomDate>" `shouldRender` "04/26/13"
 
 -- Caching tests

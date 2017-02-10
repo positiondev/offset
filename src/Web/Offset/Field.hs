@@ -5,9 +5,12 @@ module Web.Offset.Field where
 
 import           Control.Applicative ((<$>))
 import           Control.Monad.State
+import           Data.Maybe          (fromMaybe)
 import           Data.Monoid         ((<>))
 import           Data.Text           (Text)
 import qualified Data.Text           as T
+import           Data.Time.Clock     (UTCTime)
+import           Data.Time.Format    (defaultTimeLocale, formatTime, parseTimeM)
 import           Web.Larceny
 
 -- TODO(dbp 2014-10-14): date should be parsed and nested.
@@ -55,7 +58,7 @@ postFields = [F "id"
              ,F "type"
              ,F "author"
              ,C "content" ["content", "rendered"]
-             ,P "date" dateSplice
+             ,P "date" wpDateFill
              ,F "slug"
              ,C "excerpt" ["excerpt", "rendered"]
              ,N "custom_fields" [F "test"]
@@ -71,12 +74,21 @@ postFields = [F "id"
                         ,M "post_tag" [F "id", F "name", F "slug", F "count"]]
              ]
 
-dateSplice :: Text -> Fill s
-dateSplice date =
-  let (y,m,d) = parseDate date in
-  fillChildrenWith $ subs [ ("wpYear", textFill y)
-                          , ("wpMonth", textFill m)
-                          , ("wpDay", textFill d)]
-  where parseDate :: Text -> (Text,Text,Text)
-        parseDate = tuplify . T.splitOn "-" . T.takeWhile (/= 'T')
-        tuplify (y:m:d:_) = (y,m,d)
+wpDateFill :: Text -> Fill s
+wpDateFill date =
+  let wpFormat = "%Y-%m-%dT%H:%M:%S"
+      parsedDate = parseTimeM False
+                    defaultTimeLocale
+                    (T.unpack wpFormat)
+                    (T.unpack date) :: Maybe UTCTime in
+  case parsedDate of
+    Just d -> let dateSubs = subs [ ("wpYear",     datePartFill "%0Y" d)
+                                  , ("wpMonth",    datePartFill "%m"  d)
+                                  , ("wpDay",      datePartFill "%d"  d)
+                                  , ("wpFullDate", datePartFill "%D"  d) ] in
+                fillChildrenWith dateSubs
+    Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
+  where datePartFill defaultFormat date =
+          useAttrs (a "format") $ \mf ->
+                   let f = fromMaybe defaultFormat mf in
+                   textFill $ T.pack $ formatTime defaultTimeLocale (T.unpack f) date
