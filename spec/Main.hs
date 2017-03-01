@@ -50,9 +50,6 @@ larcenyFillTests = do
       \    <wpMonth format=\"%B\"/> <wpDay format=\"%-d\"/>, <wpYear /> \
       \  </wpDate> \
       \</wpPosts>" `shouldRender` "October 20, 2014"
-    it "should render customly parsed fields" $
-      "<wpPosts><wpDepartments><name /></wpDepartments></wpPosts>"
-      `shouldRender` "some department"
   describe "<wpPage>" $
     it "should show the content" $
       "<wpPage name=a-first-page />" `shouldRender` "<b>rendered</b> page content"

@@ -1,8 +1,5 @@
 # Changelog
 
-## February 27 2017
- * Add "PN" and "PM" for custom-parsed fields with objects and lists
-
 ## February 9 2017
 
  * Add "format" attribute to `wpDate` in `wpPosts`
