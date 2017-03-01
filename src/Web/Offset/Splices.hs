@@ -24,8 +24,6 @@ import           Data.Scientific         (floatingOrInteger)
 import qualified Data.Set                as Set
 import           Data.Text               (Text)
 import qualified Data.Text               as T
-import Data.Time.Clock (UTCTime)
-import           Data.Time.Format        (parseTimeM, formatTime, defaultTimeLocale)
 import qualified Data.Vector             as V
 import           Web.Larceny
 
