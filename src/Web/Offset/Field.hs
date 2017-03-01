@@ -6,6 +6,7 @@ module Web.Offset.Field where
 import           Control.Applicative ((<$>))
 import           Control.Monad.State
 import           Data.Maybe          (fromMaybe)
+import           Data.Aeson          (Object)
 import           Data.Monoid         ((<>))
 import           Data.Text           (Text)
 import qualified Data.Text           as T
@@ -16,6 +17,8 @@ import           Web.Larceny
 -- TODO(dbp 2014-10-14): date should be parsed and nested.
 data Field s = F Text -- A single flat field
              | P Text (Text -> Fill s) -- A customly parsed flat field
+             | PN Text (Object -> Fill s) -- A customly parsed nested field
+             | PM Text ([Object] -> Fill s) -- A customly parsed list field
              | N Text [Field s] -- A nested object field
              | C Text [Text] -- A nested text field that is found by following the specified path
              | CN Text [Text] [Field s] -- A nested set of fields that is found by follwing the specified path
@@ -33,6 +36,8 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
         matchesName a b = getName a == getName b
         getName (F t) = t
         getName (P t _) = t
+        getName (PN t _) = t
+        getName (PM t _) = t
         getName (N t _) = t
         getName (C t _) = t
         getName (CN t _ _) = t
