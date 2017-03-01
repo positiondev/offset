@@ -182,6 +182,10 @@ postSubs extra object = subs (map (buildSplice object) (mergeFields postFields e
           (transformName n, textFill $ getText n o)
         buildSplice o (P n fill') =
           (transformName n, fill' $ getText n o)
+        buildSplice o (PN n fill') =
+          (transformName n, fill' (unObj . M.lookup n $ o))
+        buildSplice o (PM n fill') =
+          (transformName n, fill' (unArray . M.lookup n $ o))
         buildSplice o (N n fs) =
           (transformName n, fillChildrenWith $ subs
                             (map (buildSplice (unObj . M.lookup n $ o)) fs))
