@@ -3,6 +3,7 @@
 
 module Web.Offset.Field where
 
+import           Data.Aeson       (Object)
 import           Data.Maybe       (fromMaybe)
 import           Data.Monoid      ((<>))
 import           Data.Text        (Text)
@@ -13,6 +14,8 @@ import           Web.Larceny
 
 data Field s = F Text -- A single flat field
              | P Text (Text -> Fill s) -- A customly parsed flat field
+             | PN Text (Object -> Fill s) -- A customly parsed nested field
+             | PM Text ([Object] -> Fill s) -- A customly parsed list field
              | N Text [Field s] -- A nested object field
              | C Text [Text] -- A nested text field that is found by following the specified path
              | CN Text [Text] [Field s] -- A nested set of fields that is found by follwing the specified path
@@ -42,6 +45,8 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
         matchesName c d = getName c == getName d
         getName (F t) = t
         getName (P t _) = t
+        getName (PN t _) = t
+        getName (PM t _) = t
         getName (N t _) = t
         getName (C t _) = t
         getName (CN t _ _) = t
@@ -55,6 +60,8 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
 instance Show (Field s) where
   show (F t) = "F(" <> T.unpack t <> ")"
   show (P t _) = "P(" <> T.unpack t <> ",{code})"
+  show (PN t _) = "PN(" <> T.unpack t <> ",{code})"
+  show (PM t _) = "PM(" <> T.unpack t <> ",{code})"
   show (N t n) = "N(" <> T.unpack t <> "," <> show n <> ")"
   show (C t p) = "C(" <> T.unpack t <> ":" <> T.unpack (T.intercalate "/" p) <> ")"
   show (CN t p fs) = "C(" <> T.unpack t <> "," <> T.unpack (T.intercalate "/" p) <> ","<> show fs <> ")"

@@ -14,6 +14,7 @@ import qualified Control.Monad.State     as S
 import           Control.Monad.Trans     (liftIO)
 import           Data.Aeson              hiding (Success)
 import           Data.Default
+import qualified Data.HashMap.Strict     as HM
 import qualified Data.Map                as M
 import           Data.Maybe
 import           Data.Monoid
@@ -57,6 +58,7 @@ article1 = object [ "id" .= (1 :: Int)
                   , "date" .= ("2014-10-20T07:00:00" :: Text)
                   , "title" .= object ["rendered" .= ("Foo bar" :: Text)]
                   , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
+                  , "departments" .= [ object [ "name" .= ("some department" :: Text)]]
                   ]
 
 article2 :: Value
@@ -79,7 +81,17 @@ customFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-featu
                                                                                      ,F "url"]
                                                                    ,N "single-featured" [F "width"
                                                                                         ,F "height"
-                                                                                        ,F "url"]]]]]
+                                                                                        ,F "url"]]]]
+               ,PM "departments" departmentFill ]
+
+departmentFill :: [Object] -> Fill s
+departmentFill objs =
+  let singleText :: Object -> Text
+      singleText o = toStr $ HM.lookup "name" o
+      toStr (Just (String s)) = s
+      toStr _ = error "not a string" in
+  mapSubs (\x -> subs [("name", textFill x)])
+    (map singleText objs)
 
 tplLibrary :: Library Ctxt
 tplLibrary =
@@ -161,7 +173,7 @@ initializer requester cache endpoint =
      let wpconf = def { wpConfEndpoint = endpoint
                       , wpConfLogger = Nothing
                       , wpConfRequester = requester
-                      , wpConfExtraFields = []
+                      , wpConfExtraFields = customFields
                       , wpConfCacheBehavior = cache
                    }
      let getUri :: StateT Ctxt IO Text
