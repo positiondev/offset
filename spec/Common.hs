@@ -6,46 +6,32 @@
 
 module Common where
 
-import           Prelude                  hiding ((++))
-
-import           Blaze.ByteString.Builder
-import           Configuration.Dotenv     (loadFile)
-import           Control.Concurrent       (forkIO)
 import           Control.Concurrent.MVar
-import           Control.Exception        (throw)
-import           Control.Lens             hiding ((.=))
-import           Control.Monad            (mplus, void, when)
-import           Control.Monad.State      (StateT, evalStateT)
-import qualified Control.Monad.State      as S
-import           Control.Monad.Trans      (liftIO)
-import           Data.Aeson               hiding (Success)
+import           Control.Lens            hiding ((.=))
+import           Control.Monad           (void)
+import           Control.Monad.State     (StateT, evalStateT)
+import qualified Control.Monad.State     as S
+import           Control.Monad.Trans     (liftIO)
+import           Data.Aeson              hiding (Success)
 import           Data.Default
-import qualified Data.HashMap.Strict      as HM
-import qualified Data.Map                 as M
+import qualified Data.HashMap.Strict     as HM
+import qualified Data.Map                as M
 import           Data.Maybe
 import           Data.Monoid
-import qualified Data.Set                 as Set
-import           Data.Text                (Text, pack, unpack)
-import qualified Data.Text                as T
-import qualified Data.Text.Encoding       as T
-import qualified Data.Text.Lazy           as TL
-import qualified Data.Text.Lazy.Encoding  as TL
-import qualified Database.Redis           as R
-import qualified Misc
-import           Network.Wai              (Application, Response,
-                                           defaultRequest, pathInfo,
-                                           rawPathInfo)
-import           System.Directory         (doesFileExist)
-import           System.Environment       (lookupEnv)
+import           Data.Text               (Text)
+import qualified Data.Text               as T
+import qualified Data.Text.Encoding      as T
+import qualified Data.Text.Lazy          as TL
+import qualified Data.Text.Lazy.Encoding as TL
+import qualified Database.Redis          as R
+import           Network.Wai             (defaultRequest, rawPathInfo)
+import           Prelude                 hiding ((++))
 import           Test.Hspec
-import           Test.Hspec.Core.Spec     (Result (..))
-import qualified Text.XmlHtml             as X
 import           Web.Fn
 import           Web.Larceny
 
 import           Web.Offset
 import           Web.Offset.Cache.Redis
-import           Web.Offset.Splices       (wpPostsHelper)
 import           Web.Offset.Types
 
 ----------------------------------------------------------
@@ -64,7 +50,8 @@ makeLenses ''Ctxt
 instance RequestContext Ctxt where
   requestLens = req
 
-enc a = TL.toStrict . TL.decodeUtf8 . encode $ a
+enc :: ToJSON r => r -> Text
+enc val = TL.toStrict . TL.decodeUtf8 . encode $ val
 
 article1 :: Value
 article1 = object [ "id" .= (1 :: Int)
@@ -74,18 +61,21 @@ article1 = object [ "id" .= (1 :: Int)
                   , "departments" .= [ object [ "name" .= ("some department" :: Text)]]
                   ]
 
+article2 :: Value
 article2 = object [ "id" .= (2 :: Int)
                   , "date" .= ("2014-10-20T07:00:00" :: Text)
                   , "title" .= object ["rendered" .= ("The post" :: Text)]
                   , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
                   ]
 
+page1 :: Value
 page1 = object [ "id" .= (3 :: Int)
                , "date" .= ("2014-10-20T07:00:00" :: Text)
                , "title" .= object ["rendered" .= ("Page foo" :: Text)]
                , "content" .= object ["rendered" .= ("<b>rendered</b> page content" :: Text)]
                ]
 
+customFields :: [Field s]
 customFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-featured" [F "width"
                                                                                      ,F "height"
                                                                                      ,F "url"]
@@ -177,6 +167,7 @@ fauxRequester mRecord rqPath rqParams = do
              url <> "?"
           <> T.intercalate "&" (map (\(k, v) -> k <> "=" <> v) params)
 
+initializer :: Either UserPassword Requester -> CacheBehavior -> Text -> IO Ctxt
 initializer requester cache endpoint =
   do rconn <- R.connect R.defaultConnectInfo
      let wpconf = def { wpConfEndpoint = endpoint
@@ -191,9 +182,11 @@ initializer requester cache endpoint =
      (wp,wpSubs) <- initWordpress wpconf rconn getUri wordpress
      return (Ctxt defaultFnRequest rconn wp wpSubs mempty)
 
+initFauxRequestNoCache :: IO Ctxt
 initFauxRequestNoCache =
   initializer (Right $ Requester (fauxRequester Nothing)) NoCache ""
 
+initNoRequestWithCache :: IO Ctxt
 initNoRequestWithCache =
   initializer (Right $ Requester (\_ _ -> return (Right "") )) (CacheSeconds 600) ""
 
@@ -214,8 +207,10 @@ unobj :: Value -> Object
 unobj (Object x) = x
 unobj _ = error "Not an object"
 
+toTpl :: Text -> Template s
 toTpl tpl = parse (TL.fromStrict tpl)
 
+ignoreWhitespace :: Text -> Text
 ignoreWhitespace = T.replace " " ""
 
 shouldRender :: TemplateText
@@ -229,20 +224,22 @@ shouldRender t output = do
 
 -- Caching helpers
 
-wpCacheGet' wordpress wpKey = do
-  let WordpressInt{..} = cacheInternals wordpress
+wpCacheGet' :: S.MonadIO m => Wordpress b -> WPKey -> m (Maybe Text)
+wpCacheGet' wordpress' wpKey = do
+  let WordpressInt{..} = cacheInternals wordpress'
   liftIO $ wpCacheGet wpKey
 
-wpCacheSet' wordpress wpKey o = do
-  let WordpressInt{..} = cacheInternals wordpress
+wpCacheSet' :: S.MonadIO m => Wordpress b -> WPKey -> Text -> m ()
+wpCacheSet' wordpress' wpKey o = do
+  let WordpressInt{..} = cacheInternals wordpress'
   liftIO $ wpCacheSet wpKey o
 
-wpExpireAggregates' wordpress = do
-  let Wordpress{..} = wordpress
+wpExpireAggregates' :: S.MonadIO m => Wordpress t -> m Bool
+wpExpireAggregates' Wordpress{..} =
   liftIO wpExpireAggregates
 
-wpExpirePost' wordpress k = do
-  let Wordpress{..} = wordpress
+wpExpirePost' :: S.MonadIO m => Wordpress t -> WPKey -> m Bool
+wpExpirePost'  Wordpress{..} k =
   liftIO $ wpExpirePost k
 
 {-
@@ -270,7 +267,7 @@ shouldQueryTo hQuery wpQuery =
                          NoCache
                          ""
       let s = _wpsubs ctxt
-      evalStateT (runTemplate (toTpl hQuery) [] s mempty) ctxt
+      void $ evalStateT (runTemplate (toTpl hQuery) [] s mempty) ctxt
       x <- liftIO $ tryTakeMVar record
       x `shouldBe` Just wpQuery
 
@@ -312,8 +309,7 @@ shouldRenderAtUrlContaining :: (TemplateName, Ctxt)
 shouldRenderAtUrlContaining (template, ctxt) (url, match) = do
     let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 url }
     let ctxt' = setRequest ctxt
-                 $ (\(x,y) -> (requestWithUrl, y)) defaultFnRequest
-    let s = _wpsubs ctxt
+                 $ (\(_,x) -> (requestWithUrl, x)) defaultFnRequest
     rendered <- renderLarceny ctxt' template
     let rendered' = fromMaybe "" rendered
     (match `T.isInfixOf` rendered') `shouldBe` True

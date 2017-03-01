@@ -4,18 +4,16 @@
 
 module Web.Offset.Cache where
 
-import           Control.Concurrent       as CC
-import qualified Control.Concurrent.Async as CC
-import           Control.Concurrent.MVar
-import           Control.Monad            (void)
-import           Data.Map                 (Map)
-import qualified Data.Map                 as Map
-import           Data.Monoid              ((<>))
-import qualified Data.Set                 as Set
-import           Data.Text                (Text)
-import qualified Data.Text                as T
-import           Data.Time.Clock          (UTCTime, diffUTCTime, getCurrentTime)
-import           Database.Redis           (Redis)
+import           Control.Concurrent     as CC
+import           Control.Monad          (void)
+import           Data.Map               (Map)
+import qualified Data.Map               as Map
+import           Data.Monoid            ((<>))
+import qualified Data.Set               as Set
+import           Data.Text              (Text)
+import qualified Data.Text              as T
+import           Data.Time.Clock        (UTCTime, diffUTCTime, getCurrentTime)
+import           Database.Redis         (Redis)
 
 import           Web.Offset.Cache.Redis
 import           Web.Offset.Cache.Types
@@ -53,7 +51,7 @@ retryUnless action =
                    retryUnless action
 
 errorUnless :: Text -> IO (CacheResult a) -> IO (Either StatusCode a)
-errorUnless msg action =
+errorUnless _ action =
   do ma <- action
      case ma of
       Successful a -> return $ Right a

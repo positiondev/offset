@@ -11,26 +11,20 @@ import           Control.Monad.State
 import           Control.Applicative     ((<|>))
 import           Control.Lens            hiding (children)
 import           Control.Concurrent.MVar
-import           Control.Monad           (void, sequence)
-import           Control.Monad.Trans     (lift, liftIO)
-import           Data.Aeson              hiding (decode, encode)
+import           Data.Aeson              hiding (decode, encode, json, object)
 import qualified Data.Attoparsec.Text    as A
 import           Data.Char               (toUpper)
 import qualified Data.HashMap.Strict     as M
 import qualified Data.Map as Map
 import           Data.IntSet             (IntSet)
 import qualified Data.IntSet             as IntSet
-import           Data.Map.Syntax
 import           Data.Maybe              (fromJust, fromMaybe, catMaybes)
 import           Data.Monoid
 import           Data.Scientific         (floatingOrInteger)
 import qualified Data.Set                as Set
 import           Data.Text               (Text)
 import qualified Data.Text               as T
-import Data.Time.Clock (UTCTime)
-import           Data.Time.Format        (parseTimeM, formatTime, defaultTimeLocale)
 import qualified Data.Vector             as V
-import qualified Text.XmlHtml            as X
 import           Web.Larceny
 
 import           Web.Offset.Field
@@ -57,25 +51,13 @@ wpCustomDateFill :: Fill s
 wpCustomDateFill =
   useAttrs (a "wp_format" % a "date") customDateFill
   where customDateFill mWPFormat date =
-          let wpFormat = fromMaybe "%Y-%m-%d %H:%M:%S" mWPFormat
-              parsedDate = parseTimeM False
-                                      defaultTimeLocale
-                                      (T.unpack wpFormat)
-                                      (T.unpack date) :: Maybe UTCTime in
-          case parsedDate of
-              Just d -> let dateSubs = subs [ ("wpYear",     datePartFill "%0Y" d)
-                                            , ("wpMonth",    datePartFill "%m" d)
-                                            , ("wpDay",      datePartFill "%d" d)
-                                            , ("wpFullDate", datePartFill "%D" d) ] in
-                        fillChildrenWith dateSubs
+          let wpFormat = fromMaybe "%Y-%m-%d %H:%M:%S" mWPFormat in
+          case parseWPDate wpFormat date of
+              Just d -> fillChildrenWith $ datePartSubs d
               Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
-        datePartFill defaultFormat date =
-                useAttrs (a "format") $ \mf ->
-                   let f = fromMaybe defaultFormat mf in
-                   textFill $ T.pack $ formatTime defaultTimeLocale (T.unpack f) date
 
 wpCustomFill :: Wordpress b -> Fill s
-wpCustomFill wp@Wordpress{..} =
+wpCustomFill Wordpress{..} =
   useAttrs (a "endpoint") customFill
   where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
           do let key = EndpointKey endpoint
@@ -95,7 +77,7 @@ wpCustomFill wp@Wordpress{..} =
 
 jsonToFill :: Value -> Fill s
 jsonToFill (Object o) =
-  Fill $ \attrs (path, tpl) lib -> runTemplate tpl path objectSubstitutions lib
+  Fill $ \_ (path, tpl) lib -> runTemplate tpl path objectSubstitutions lib
   where objectSubstitutions =
           subs $ map (\k -> (transformName k,
                              jsonToFill (fromJust (M.lookup k o))))
@@ -105,8 +87,8 @@ jsonToFill (Array v) =
            V.foldr mappend "" <$> V.mapM (\e -> unFill (jsonToFill e) attrs (path, tpl) lib) v
 jsonToFill (String s) = textFill s
 jsonToFill (Number n) = case floatingOrInteger n of
-                          Left r -> textFill $ tshow r
-                          Right i -> textFill $ tshow i
+                          Left r -> textFill $ tshow (r :: Double)
+                          Right i -> textFill $ tshow (i :: Integer)
 jsonToFill (Bool b) = textFill $ tshow b
 jsonToFill (Null) = textFill "<!-- JSON field found, but value is null. -->"
 
@@ -115,25 +97,24 @@ wpPostsFill :: Wordpress b
             -> [Field s]
             -> WPLens b s
             -> Fill s
-wpPostsFill wp@Wordpress{..} extraFields wpLens = Fill $ \attrs tpl lib ->
-  do let dictKeys = taxDictKeys $ filterTaxonomies (Map.toList attrs)
-     let postsQuery = parseQueryNode (Map.toList attrs)
+wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
+  do let postsQuery = parseQueryNode (Map.toList attrs)
      filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
      let wpKey = mkWPKey filters postsQuery
-     res <- liftIO $ cachingGetRetry wpKey
+     res <- liftIO $ cachingGetRetry wp wpKey
      case fmap decode res of
        Right (Just posts) -> do
          let postsW = extractPostIds posts
-         Wordpress{..} <- use wpLens
+         wp' <- use wpLens
          let postsND = take (qlimit postsQuery)
-                       . noDuplicates requestPostSet $ postsW
+                       . noDuplicates (requestPostSet wp') $ postsW
          addPostIds wpLens (map fst postsND)
          unFill (wpPostsHelper extraFields (map snd postsND)) mempty tpl lib
        Right Nothing -> return ""
        Left code -> do
          let notification = "Encountered status code " <> tshow code
                             <> " when querying wpPosts."
-         liftIO $ wpLogger notification
+         liftIO $ wpLogger wp notification
          return $ "<!-- " <> notification <> " -->"
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         noDuplicates Nothing = id
@@ -220,10 +201,11 @@ postSubs extra object = subs (map (buildSplice object) (mergeFields postFields e
         unObj _ = M.empty
         unArray (Just (Array v)) = map (unObj . Just) $ V.toList v
         unArray _ = []
-        traverseObject pth o = foldl (\o x -> unObj . M.lookup x $ o) o pth
+        traverseObject pth o = foldl (\o' x -> unObj . M.lookup x $ o') o pth
         getText n o = case M.lookup n o of
                         Just (String t) -> t
-                        Just (Number i) -> either tshow tshow (floatingOrInteger i)
+                        Just (Number i) -> either (tshow :: Double -> Text)
+                                                  (tshow :: Integer -> Text) (floatingOrInteger i)
                         _ -> ""
 
 -- * -- Internal -- * --
@@ -240,7 +222,7 @@ parseQueryNode attrs =
 filterTaxonomies :: [(Text, Text)] -> [TaxSpecList]
 filterTaxonomies attrs =
   let reservedTerms = ["limit", "num", "offset", "page", "user"]
-      taxAttrs = filter (\(a, b) -> (a `notElem` reservedTerms)) attrs in
+      taxAttrs = filter (\(k, _) -> (k `notElem` reservedTerms)) attrs in
   map attrToTaxSpecList taxAttrs
 
 taxDictKeys :: [TaxSpecList] -> [WPKey]
@@ -267,14 +249,15 @@ wpPrefetch :: Wordpress b
            -> StateT s IO Text
            -> WPLens b s
            -> Fill s
-wpPrefetch wp extra uri wpLens = Fill $ \ _m t@(p, tpl) l -> do
+wpPrefetch wp extra uri wpLens = Fill $ \ _m (p, tpl) l -> do
     Wordpress{..} <- use wpLens
     mKeys <- liftIO $ newMVar []
-    runTemplate tpl p (prefetchSubs wp mKeys) l
+    void $ runTemplate tpl p (prefetchSubs wp mKeys) l
     wpKeys <- liftIO $ readMVar mKeys
     void $ liftIO $ concurrently $ map cachingGet wpKeys
     runTemplate tpl p (wordpressSubs wp extra uri wpLens) l
 
+prefetchSubs :: Wordpress b -> MVar [WPKey] -> Substitutions s
 prefetchSubs wp mkeys =
   subs [ ("wpPosts", wpPostsPrefetch wp mkeys)
        , ("wpPage", useAttrs (a"name") $ wpPagePrefetch mkeys) ]
@@ -340,7 +323,7 @@ getPost Wordpress{..} wpKey = decodePost <$> cachingGetRetry wpKey
              case post' of
               Just (post:_) -> Just post
               _ -> Nothing
-        decodePost (Left code) = Nothing
+        decodePost (Left _) = Nothing
 
 
 transformName :: Text -> Text

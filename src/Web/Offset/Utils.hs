@@ -2,12 +2,10 @@
 
 module Web.Offset.Utils where
 
-import           Control.Concurrent       as CC
 import qualified Control.Concurrent.Async as CC
 import           Data.Aeson               (FromJSON, ToJSON)
 import qualified Data.Aeson               as J
 import           Data.Maybe
-import           Data.Monoid
 import           Data.Text                (Text)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
