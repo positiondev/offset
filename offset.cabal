@@ -60,6 +60,20 @@ Test-Suite test-offset
     hs-source-dirs: spec, src
     main-is: Main.hs
     other-modules: Misc
+                 , Common
+                 , Web.Offset
+                 , Web.Offset.Cache
+                 , Web.Offset.Cache.Redis
+                 , Web.Offset.Cache.Types
+                 , Web.Offset.Field
+                 , Web.Offset.HTTP
+                 , Web.Offset.Init
+                 , Web.Offset.Internal
+                 , Web.Offset.Posts
+                 , Web.Offset.Queries
+                 , Web.Offset.Splices
+                 , Web.Offset.Types
+                 , Web.Offset.Utils
     build-depends:     base
                      , aeson
                      , async

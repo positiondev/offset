@@ -12,10 +12,9 @@
 module Web.Offset.Types where
 
 import           Control.Lens           hiding (children)
-import           Control.Monad          (mzero)
 import           Control.Monad.State
 import           Data.Aeson             (FromJSON, Value (..), parseJSON, (.:))
-import qualified Data.HashMap.Strict    as M
+import           Data.Default
 import           Data.IntSet            (IntSet)
 import           Data.List              (intercalate)
 import           Data.Maybe             (catMaybes, isJust)
@@ -51,6 +50,13 @@ data WordpressConfig m =
                      , wpConfExtraFields   :: [Field m]
                      , wpConfLogger        :: Maybe (Text -> IO ())
                      }
+
+instance Default (WordpressConfig m) where
+  def = WordpressConfig "http://127.0.0.1:8080/wp-json"
+                        (Left ("offset", "111"))
+                        (CacheSeconds 600)
+                        []
+                        Nothing
 
 data WordpressInt b =
      WordpressInt { wpCacheGet    :: WPKey -> IO (Maybe Text)
