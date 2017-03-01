@@ -83,21 +83,26 @@ postFields = [F "id"
                         ,M "post_tag" [F "id", F "name", F "slug", F "count"]]
              ]
 
-wpDateFill :: Text -> Fill s
-wpDateFill date =
-  let wpFormat = "%Y-%m-%dT%H:%M:%S"
-      parsedDate = parseTimeM False
-                    defaultTimeLocale
-                    (T.unpack wpFormat)
-                    (T.unpack date) :: Maybe UTCTime in
-  case parsedDate of
-    Just d -> let dateSubs = subs [ ("wpYear",     datePartFill "%0Y" d)
-                                  , ("wpMonth",    datePartFill "%m"  d)
-                                  , ("wpDay",      datePartFill "%d"  d)
-                                  , ("wpFullDate", datePartFill "%D"  d) ] in
-                fillChildrenWith dateSubs
-    Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
+datePartSubs :: UTCTime -> Substitutions s
+datePartSubs date = subs [ ("wpYear",     datePartFill "%0Y" date)
+                         , ("wpMonth",    datePartFill "%m"  date)
+                         , ("wpDay",      datePartFill "%d"  date)
+                         , ("wpFullDate", datePartFill "%D"  date) ]
   where datePartFill defaultFormat utcTime =
           useAttrs (a "format") $ \mf ->
                    let f = fromMaybe defaultFormat mf in
                    textFill $ T.pack $ formatTime defaultTimeLocale (T.unpack f) utcTime
+
+parseWPDate :: Text -> Text -> Maybe UTCTime
+parseWPDate wpFormat date =
+  parseTimeM False
+             defaultTimeLocale
+             (T.unpack wpFormat)
+             (T.unpack date) :: Maybe UTCTime
+
+wpDateFill :: Text -> Fill s
+wpDateFill date =
+  let wpFormat = "%Y-%m-%dT%H:%M:%S" in
+  case parseWPDate wpFormat date of
+    Just d -> fillChildrenWith $ datePartSubs d
+    Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"

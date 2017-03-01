@@ -53,22 +53,10 @@ wpCustomDateFill :: Fill s
 wpCustomDateFill =
   useAttrs (a "wp_format" % a "date") customDateFill
   where customDateFill mWPFormat date =
-          let wpFormat = fromMaybe "%Y-%m-%d %H:%M:%S" mWPFormat
-              parsedDate = parseTimeM False
-                                      defaultTimeLocale
-                                      (T.unpack wpFormat)
-                                      (T.unpack date) :: Maybe UTCTime in
-          case parsedDate of
-              Just d -> let dateSubs = subs [ ("wpYear",     datePartFill "%0Y" d)
-                                            , ("wpMonth",    datePartFill "%m" d)
-                                            , ("wpDay",      datePartFill "%d" d)
-                                            , ("wpFullDate", datePartFill "%D" d) ] in
-                        fillChildrenWith dateSubs
+          let wpFormat = fromMaybe "%Y-%m-%d %H:%M:%S" mWPFormat in
+          case parseWPDate wpFormat date of
+              Just d -> fillChildrenWith $ datePartSubs d
               Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
-        datePartFill defaultFormat date =
-                useAttrs (a "format") $ \mf ->
-                   let f = fromMaybe defaultFormat mf in
-                   textFill $ T.pack $ formatTime defaultTimeLocale (T.unpack f) date
 
 wpCustomFill :: Wordpress b -> Fill s
 wpCustomFill Wordpress{..} =
