@@ -57,10 +57,11 @@ wpCustomDateFill =
               Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
 
 wpCustomFill :: Wordpress b -> Fill s
-wpCustomFill Wordpress{..} =
-  useAttrs (a "endpoint") customFill
-  where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
-          do let key = EndpointKey endpoint
+wpCustomFill wp@Wordpress{..} =
+  useAttrs (a "endpoint" % a "num" % a "offset") customFill
+  where customFill endpoint num offset = Fill $ \attrs (path, tpl) lib ->
+          do taxFilters <- liftIO $ mkFilters wp (filterTaxonomies (Map.toList attrs))
+             let key = mkCustomKey endpoint num offset taxFilters
              res <- liftIO $ cachingGetRetry key
              case fmap decode res of
                Left code -> do
@@ -74,6 +75,15 @@ wpCustomFill Wordpress{..} =
                  let notification = "Unable to decode JSON for endpoint \"" <> endpoint
                  liftIO $ wpLogger $ notification <> ": " <> tshow res
                  return $ "<!-- " <> notification <> "-->"
+
+mkCustomKey :: Text -> Maybe Int -> Maybe Int -> [Filter] -> WPKey
+mkCustomKey endpoint num offset taxFilters  =
+  let filters = mkCustomFilters num offset taxFilters in
+  EndpointKey endpoint filters
+  where mkCustomFilters num offset taxFilters =
+          let maybeInsert oldSet mFilter = maybe oldSet (`Set.insert` oldSet) mFilter
+              allFilters = (NumFilter <$> num) : (OffsetFilter <$> offset) : map Just taxFilters in
+          foldl maybeInsert mempty allFilters
 
 jsonToFill :: Value -> Fill s
 jsonToFill (Object o) =

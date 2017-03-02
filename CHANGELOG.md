@@ -1,5 +1,8 @@
 # Changelog
 
+## March 2 2017
+ * Use filters with wpCustom
+
 ## February 27 2017
  * Add "PN" and "PM" for custom-parsed fields with objects and lists
 
