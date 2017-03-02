@@ -156,6 +156,8 @@ fauxRequester _ "/jacobin/featured-content/editors-picks" [] =
                        ]]
 fauxRequester _ "/wp/v2/pages" [("slug", "a-first-page")] =
   return $ Right $ enc [page1]
+fauxRequester _ "/custom/endpoint" [("offset", "20")] =
+  return $ Right $ enc [object ["content" .= ("good job offsetting!" :: Text) ]]
 fauxRequester _ "/dev/null" [] =
   return $ Right $ enc [object ["this_is_null" .= Null]]
 fauxRequester mRecord rqPath rqParams = do

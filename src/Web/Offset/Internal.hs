@@ -39,7 +39,6 @@ buildParams filters = params
         mkFilter (NumFilter num) = ("per_page", tshow num)
         mkFilter (OffsetFilter offset) = ("offset", tshow offset)
         mkFilter (UserFilter user) = ("author[]", user)
-buildParams _ = []
 
 wpLogInt :: Maybe (Text -> IO ()) -> Text -> IO ()
 wpLogInt logger msg = case logger of

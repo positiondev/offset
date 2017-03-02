@@ -211,6 +211,8 @@ queryTests =
         replicate 2 "/wp/v2/posts?categories[]=159&offset=0&per_page=20"
       "<wpPage name=blah />" `shouldQueryTo`
         ["/wp/v2/pages?slug=blah"]
+      "<wpCustom endpoint=\"/custom/endpoint\" offset=20><wpContent /></wpCustom>" `shouldQueryTo`
+        ["//custom/endpoint?offset=20"]
 
 liveTests :: Spec
 liveTests =
