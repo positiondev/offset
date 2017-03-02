@@ -60,7 +60,7 @@ wpCustomFill :: Wordpress b -> Fill s
 wpCustomFill Wordpress{..} =
   useAttrs (a "endpoint") customFill
   where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
-          do let key = EndpointKey endpoint
+          do let key = EndpointKey endpoint mempty
              res <- liftIO $ cachingGetRetry key
              case fmap decode res of
                Left code -> do

@@ -22,17 +22,17 @@ wpRequestInt runHTTP endpt key =
   case key of
    TaxDictKey resName ->          req (defaultEndpoint <> "/" <> resName) []
    PostByPermalinkKey _ _ slug -> req (defaultEndpoint <> "/posts") [("slug", slug)]
-   PostsKey{} ->                  req (defaultEndpoint <> "/posts") (buildParams key)
+   PostsKey filters ->                  req (defaultEndpoint <> "/posts") (buildParams filters)
    PostKey i ->                   req (defaultEndpoint <> "/posts/" <> tshow i) []
    PageKey s ->                   req (defaultEndpoint <> "/pages") [("slug", s)]
    AuthorKey i ->                 req (defaultEndpoint <> "/users/" <> tshow i) []
    TaxSlugKey tName tSlug ->      req (defaultEndpoint <> "/" <> tName) [("slug", tSlug)]
-   EndpointKey endpoint ->        req ("/" <> endpoint) []
+   EndpointKey endpoint filters ->        req ("/" <> endpoint) (buildParams filters)
   where req path = unRequester runHTTP (endpt <> path)
         defaultEndpoint = "/wp/v2"
 
-buildParams :: WPKey -> [(Text, Text)]
-buildParams (PostsKey filters) = params
+buildParams :: Set.Set Filter -> [(Text, Text)]
+buildParams filters = params
   where params = Set.toList $ Set.map mkFilter filters
         mkFilter (TaxFilter taxonomyName (TaxPlusId i)) = (taxonomyName <> "[]", tshow i)
         mkFilter (TaxFilter taxonomyName (TaxMinusId i)) = (taxonomyName <> "_exclude[]", tshow i)

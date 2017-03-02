@@ -118,5 +118,6 @@ formatKey = format
         format (AuthorKey n) = ns "author:" <> tshow n
         format (TaxDictKey t) = ns "tax_dict:" <> t
         format (TaxSlugKey tn ts) = ns "tax_slug:" <> tn <> ":" <> ts
-        format (EndpointKey e) = ns "endpoint:" <> e
+        format (EndpointKey e filters ) =
+          ns "endpoint:" <> e <> T.intercalate "_" (map tshow $ Set.toAscList filters)
         ns k = "wordpress:" <> k
