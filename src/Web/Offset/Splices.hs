@@ -60,8 +60,7 @@ wpCustomFill :: Wordpress b -> Fill s
 wpCustomFill wp@Wordpress{..} =
   useAttrs (a "endpoint" % a "num" % a "offset") customFill
   where customFill endpoint num offset = Fill $ \attrs (path, tpl) lib ->
-          do let taxSpecs = filterTaxonomies (Map.toList attrs)
-             taxFilters <- liftIO $ mkFilters wp taxSpecs
+          do taxFilters <- liftIO $ mkFilters wp (filterTaxonomies (Map.toList attrs))
              let key = mkCustomKey endpoint num offset taxFilters
              res <- liftIO $ cachingGetRetry key
              case fmap decode res of
@@ -77,16 +76,14 @@ wpCustomFill wp@Wordpress{..} =
                  liftIO $ wpLogger $ notification <> ": " <> tshow res
                  return $ "<!-- " <> notification <> "-->"
 
-mkCustomFilters :: Maybe Int -> Maybe Int -> [Filter] -> Set.Set Filter
-mkCustomFilters num offset taxFilters =
-  let maybeAdd oldSet mThing = maybe oldSet (`Set.insert` oldSet) mThing
-      things = (NumFilter <$> num) : (OffsetFilter <$> offset) : map Just taxFilters in
-  foldl maybeAdd mempty things
-
 mkCustomKey :: Text -> Maybe Int -> Maybe Int -> [Filter] -> WPKey
 mkCustomKey endpoint num offset taxFilters  =
   let filters = mkCustomFilters num offset taxFilters in
   EndpointKey endpoint filters
+  where mkCustomFilters num offset taxFilters =
+          let maybeInsert oldSet mFilter = maybe oldSet (`Set.insert` oldSet) mFilter
+              allFilters = (NumFilter <$> num) : (OffsetFilter <$> offset) : map Just taxFilters in
+          foldl maybeInsert mempty allFilters
 
 jsonToFill :: Value -> Fill s
 jsonToFill (Object o) =
