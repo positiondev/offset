@@ -6,7 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
-module Web.Offset.Posts where
+module Web.Offset.WordPress.Posts where
 
 import           Data.Aeson
 import qualified Data.HashMap.Strict as M

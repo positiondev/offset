@@ -28,7 +28,6 @@ import qualified Data.Vector             as V
 import           Web.Larceny
 
 import           Web.Offset.Field
-import           Web.Offset.Posts
 import           Web.Offset.Queries
 import           Web.Offset.Types
 import           Web.Offset.Utils

@@ -26,8 +26,8 @@ library
                 , Web.Offset.Cache
                 , Web.Offset.Cache.Types
                 , Web.Offset.Cache.Redis
-                , Web.Offset.Posts
                 , Web.Offset.Utils
+                , Web.Offset.WordPress.Posts
   -- other-extensions:
   build-depends:       aeson
                      , base < 4.9
@@ -69,11 +69,11 @@ Test-Suite test-offset
                  , Web.Offset.HTTP
                  , Web.Offset.Init
                  , Web.Offset.Internal
-                 , Web.Offset.Posts
                  , Web.Offset.Queries
                  , Web.Offset.Splices
                  , Web.Offset.Types
                  , Web.Offset.Utils
+                 , Web.Offset.WordPress.Posts
     build-depends:     base
                      , aeson
                      , async
