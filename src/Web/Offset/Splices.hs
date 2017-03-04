@@ -31,7 +31,7 @@ import           Web.Offset.Field
 import           Web.Offset.Queries
 import           Web.Offset.Types
 import           Web.Offset.Utils
-import Web.Offset.Splices.Helpers
+import           Web.Offset.Splices.Helpers
 
 cmsSubs ::   CMS b
                  -> [Field s]
@@ -55,8 +55,10 @@ wpCustomFill :: CMS b -> Fill s
 wpCustomFill CMS{..} =
   useAttrs (a "endpoint") customFill
   where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
-          do let key = EndpointKey endpoint
-             res <- liftIO $ cachingGetRetry (toCMSKey key)
+          do let key = CMSKey ("/" <> endpoint, [])
+                         ("endpoint:" <> endpoint)
+                         ("EndpointKey " <> endpoint)
+             res <- liftIO $ cachingGetRetry key
              case fmap decode res of
                Left code -> do
                  let notification = "Encountered status code " <> tshow code

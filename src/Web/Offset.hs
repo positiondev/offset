@@ -20,8 +20,6 @@ module Web.Offset (
  , Filter(..)
  , transformName
  , TaxSpec(..)
- , TagType
- , CatType
  , TaxSpecList(..)
  , Field(..)
  , mergeFields
@@ -34,3 +32,4 @@ import           Web.Offset.HTTP
 import           Web.Offset.Init
 import           Web.Offset.Splices
 import           Web.Offset.Types
+import           Web.Offset.WordPress.Types

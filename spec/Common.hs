@@ -7,25 +7,25 @@
 module Common where
 
 import           Control.Concurrent.MVar
-import           Control.Lens            hiding ((.=))
-import           Control.Monad           (void)
-import           Control.Monad.State     (StateT, evalStateT)
-import qualified Control.Monad.State     as S
-import           Control.Monad.Trans     (liftIO)
-import           Data.Aeson              hiding (Success)
+import           Control.Lens               hiding ((.=))
+import           Control.Monad              (void)
+import           Control.Monad.State        (StateT, evalStateT)
+import qualified Control.Monad.State        as S
+import           Control.Monad.Trans        (liftIO)
+import           Data.Aeson                 hiding (Success)
 import           Data.Default
-import qualified Data.HashMap.Strict     as HM
-import qualified Data.Map                as M
+import qualified Data.HashMap.Strict        as HM
+import qualified Data.Map                   as M
 import           Data.Maybe
 import           Data.Monoid
-import           Data.Text               (Text)
-import qualified Data.Text               as T
-import qualified Data.Text.Encoding      as T
-import qualified Data.Text.Lazy          as TL
-import qualified Data.Text.Lazy.Encoding as TL
-import qualified Database.Redis          as R
-import           Network.Wai             (defaultRequest, rawPathInfo)
-import           Prelude                 hiding ((++))
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import qualified Data.Text.Encoding         as T
+import qualified Data.Text.Lazy             as TL
+import qualified Data.Text.Lazy.Encoding    as TL
+import qualified Database.Redis             as R
+import           Network.Wai                (defaultRequest, rawPathInfo)
+import           Prelude                    hiding ((++))
 import           Test.Hspec
 import           Web.Fn
 import           Web.Larceny
@@ -33,6 +33,7 @@ import           Web.Larceny
 import           Web.Offset
 import           Web.Offset.Cache.Redis
 import           Web.Offset.Types
+import           Web.Offset.WordPress.Types
 
 ----------------------------------------------------------
 -- Section 1: Example application used for testing.     --

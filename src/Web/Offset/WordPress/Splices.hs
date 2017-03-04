@@ -31,8 +31,9 @@ import           Web.Offset.Field
 import           Web.Offset.Queries
 import           Web.Offset.WordPress.Posts
 import           Web.Offset.Types
+import Web.Offset.WordPress.Types
 import           Web.Offset.Utils
-import Web.Offset.Splices
+import           Web.Offset.Splices
 import           Web.Offset.WordPress.Field
 
 wordPressSubs ::   CMS b
