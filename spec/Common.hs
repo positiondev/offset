@@ -120,9 +120,9 @@ tplLibrary =
              ,(["department"], parse "<wpPosts departments=\"sports\"><wpTitle/></wpPosts>")
              ,(["author-date"], parse "Hello<wp><wpPostByPermalink><wpAuthor><wpName/></wpAuthor><wpDate><wpYear/>/<wpMonth/></wpDate></wpPostByPermalink></wp>")
              ,(["fields"], parse "<wp><wpPosts limit=1 categories=\"-cat1\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
-             ,(["custom-endpoint-object"], parse "<wpCustom endpoint=\"wp/v2/taxonomies\"><wpCategory><wpRestBase /></wpCategory></wpCustom>")
-             ,(["custom-endpoint-array"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpDate /></wpCustom>")
-             ,(["custom-endpoint-enter-the-matrix"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpCustom endpoint=\"wp/v2/posts/${wpId}\"><wpDate /></wpCustom></wpCustom>")
+             ,(["custom-endpoint-object"], parse "<cmsCustom endpoint=\"wp/v2/taxonomies\"><cmsCategory><cmsRestBase /></cmsCategory></cmsCustom>")
+             ,(["custom-endpoint-array"], parse "<cmsCustom endpoint=\"wp/v2/posts\"><cmsDate /></cmsCustom>")
+             ,(["custom-endpoint-enter-the-matrix"], parse "<cmsCustom endpoint=\"wp/v2/posts\"><cmsCustom endpoint=\"wp/v2/posts/${wpId}\"><cmsDate /></cmsCustom></cmsCustom>")
                ]
 
 renderLarceny :: Ctxt ->

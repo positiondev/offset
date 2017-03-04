@@ -15,6 +15,7 @@ import           Web.Larceny
 
 import           Web.Offset.Field
 import           Web.Offset.Splices.Helpers
+import           Web.Offset.Types
 import           Web.Offset.Utils
 
 postFields :: [Field s]
@@ -44,5 +45,5 @@ wpDateFill :: Text -> Fill s
 wpDateFill date =
   let wpFormat = "%Y-%m-%dT%H:%M:%S" in
   case parseDate wpFormat date of
-    Just d -> fillChildrenWith $ datePartSubs d
+    Just d -> fillChildrenWith $ datePartSubs (Prefix "wp") d
     Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"

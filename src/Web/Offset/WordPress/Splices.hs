@@ -48,6 +48,9 @@ wordPressSubs wp extraFields getURI cmsLens =
        , ("wpNoPostDuplicates", wpNoPostDuplicatesFill cmsLens)
        , ("wp", wpPrefetch wp extraFields getURI cmsLens)]
 
+wpFieldSubs :: [Field s] -> Object -> Substitutions s
+wpFieldSubs extraFields = fieldSubs (Prefix "wp") (mergeFields postFields extraFields)
+
 wpPostsFill :: CMS b
             -> [Field s]
             -> CMSLens b s
@@ -88,7 +91,7 @@ mkFilters wp specLists =
 wpPostsHelper :: [Field s]
               -> [Object]
               -> Fill s
-wpPostsHelper extraFields postsND = mapSubs (fieldSubs (mergeFields postFields extraFields)) postsND
+wpPostsHelper extraFields postsND = mapSubs (wpFieldSubs extraFields) postsND
 
 wpPostByPermalinkFill :: [Field s]
                       -> StateT s IO Text
@@ -103,7 +106,7 @@ wpPostByPermalinkFill extraFields getURI cmsLens = maybeFillChildrenWith' $
          do res <- cmsGetSingle cmsLens (toCMSKey $ PostByPermalinkKey year month slug)
             case res of
               Just post -> do addPostIds cmsLens [fst (extractPostId post)]
-                              return $ Just (fieldSubs (mergeFields postFields extraFields) post)
+                              return $ Just (wpFieldSubs extraFields post)
               _ -> return Nothing
 
 wpNoPostDuplicatesFill :: CMSLens b s -> Fill s

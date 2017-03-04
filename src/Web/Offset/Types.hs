@@ -67,6 +67,12 @@ data CMSInt b =
             , runRedis      :: RunRedis
             }
 
+data BlankPrefix = DefaultPrefix | Prefix Text
+
+toPrefix :: BlankPrefix -> Text
+toPrefix DefaultPrefix = "cms"
+toPrefix (Prefix p) = p
+
 data CMSKey = CMSKey { cRequestUrl :: (Text, [(Text, Text)])
                      , cFormatKey  :: Text
                      , cShow       :: Text }

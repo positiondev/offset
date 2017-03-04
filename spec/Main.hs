@@ -91,24 +91,24 @@ larcenyFillTests = do
 
   describe "<wpCustom>" $
     it "should render an HTML comment if JSON field is null" $
-      "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
-  describe "<wpCustomDate>" $ do
+      "<cmsCustom endpoint=\"dev/null\"><cmsThisIsNull /></cmsCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
+  describe "<cmsCustomDate>" $ do
     it "should parse a date field with the format string it's given" $
-      "<wpCustomDate date=\"2013-04-26 10:11:52\" wp_format=\"%Y-%m-%d %H:%M:%S\"> \
-      \   <wpDay />~<wpMonth />~<wpYear /> \
-      \ </wpCustomDate>" `shouldRender` "26~04~2013"
+      "<cmsCustomDate date=\"2013-04-26 10:11:52\" format=\"%Y-%m-%d %H:%M:%S\"> \
+      \   <cmsDay />~<cmsMonth />~<cmsYear /> \
+      \ </cmsCustomDate>" `shouldRender` "26~04~2013"
     it "should format a date field with the format strings it's given" $
-      "<wpCustomDate date=\"2013-04-26 10:11:52\" wp_format=\"%Y-%m-%d %H:%M:%S\"> \
-      \   <wpMonth format=\"%B\"/> <wpDay format=\"%-d\"/>, <wpYear /> \
-      \ </wpCustomDate>" `shouldRender` "April 26, 2013"
+      "<cmsCustomDate date=\"2013-04-26 10:11:52\" format=\"%Y-%m-%d %H:%M:%S\"> \
+      \   <cmsMonth format=\"%B\"/> <cmsDay format=\"%-d\"/>, <cmsYear /> \
+      \ </cmsCustomDate>" `shouldRender` "April 26, 2013"
     it "should use default WordPress date format if none specified" $
-      "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
-      \    <wpDay />~<wpMonth />~<wpYear /> \
-      \ </wpCustomDate>" `shouldRender` "26~04~2013"
+      "<cmsCustomDate date=\"2013-04-26 10:11:52\"> \
+      \    <cmsDay />~<cmsMonth />~<cmsYear /> \
+      \ </cmsCustomDate>" `shouldRender` "26~04~2013"
     it "should allow formatting the whole date in a single tag" $
-      "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
-      \    <wpFullDate /> \
-      \ </wpCustomDate>" `shouldRender` "04/26/13"
+      "<cmsCustomDate date=\"2013-04-26 10:11:52\"> \
+      \    <cmsFullDate /> \
+      \ </cmsCustomDate>" `shouldRender` "04/26/13"
 
 -- Caching tests
 

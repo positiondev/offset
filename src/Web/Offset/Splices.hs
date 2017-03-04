@@ -13,7 +13,6 @@ import           Control.Lens            hiding (children)
 import           Control.Concurrent.MVar
 import           Data.Aeson              hiding (decode, encode, json, object)
 import qualified Data.Attoparsec.Text    as A
-import           Data.Char               (toUpper)
 import qualified Data.HashMap.Strict     as M
 import qualified Data.Map as Map
 import           Data.IntSet             (IntSet)
@@ -32,26 +31,26 @@ import           Web.Offset.Types
 import           Web.Offset.Utils
 import           Web.Offset.Splices.Helpers
 
-cmsSubs ::   CMS b
-                 -> [Field s]
-                 -> StateT s IO Text
-                 -> CMSLens b s
-                 -> Substitutions s
+cmsSubs :: CMS b
+        -> [Field s]
+        -> StateT s IO Text
+        -> CMSLens b s
+        -> Substitutions s
 cmsSubs wp extraFields getURI cmsLens =
-  subs [ ("wpCustom", wpCustomFill wp)
-       , ("wpCustomDate", wpCustomDateFill)]
+  subs [ ("cmsCustom", cmsCustomFill wp)
+       , ("cmsCustomDate", cmsCustomDateFill)]
 
-wpCustomDateFill :: Fill s
-wpCustomDateFill =
-  useAttrs (a "wp_format" % a "date") customDateFill
-  where customDateFill mWPFormat date =
-          let wpFormat = fromMaybe "%Y-%m-%d %H:%M:%S" mWPFormat in
-          case parseDate wpFormat date of
-              Just d -> fillChildrenWith $ datePartSubs d
+cmsCustomDateFill :: Fill s
+cmsCustomDateFill =
+  useAttrs (a "format" % a "date") customDateFill
+  where customDateFill mFormat date =
+          let format = fromMaybe "%Y-%m-%d %H:%M:%S" mFormat in
+          case parseDate format date of
+              Just d -> fillChildrenWith $ datePartSubs DefaultPrefix d
               Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
 
-wpCustomFill :: CMS b -> Fill s
-wpCustomFill CMS{..} =
+cmsCustomFill :: CMS b -> Fill s
+cmsCustomFill CMS{..} =
   useAttrs (a "endpoint") customFill
   where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
           do let key = CMSKey ("/" <> endpoint, [])
@@ -75,7 +74,7 @@ jsonToFill :: Value -> Fill s
 jsonToFill (Object o) =
   Fill $ \_ (path, tpl) lib -> runTemplate tpl path objectSubstitutions lib
   where objectSubstitutions =
-          subs $ map (\k -> (transformName k,
+          subs $ map (\k -> (transformName DefaultPrefix k,
                              jsonToFill (fromJust (M.lookup k o))))
                      (M.keys o)
 jsonToFill (Array v) =
@@ -88,26 +87,26 @@ jsonToFill (Number n) = case floatingOrInteger n of
 jsonToFill (Bool b) = textFill $ tshow b
 jsonToFill (Null) = textFill "<!-- JSON field found, but value is null. -->"
 
-fieldSubs :: [Field s] -> Object -> Substitutions s
-fieldSubs fields object = subs (map (buildSplice object) fields)
+fieldSubs :: BlankPrefix -> [Field s] -> Object -> Substitutions s
+fieldSubs prefix fields object = subs (map (buildSplice object) fields)
   where buildSplice o (F n) =
-          (transformName n, textFill $ getText n o)
+          (transformNameP n, textFill $ getText n o)
         buildSplice o (P n fill') =
-          (transformName n, fill' $ getText n o)
+          (transformNameP n, fill' $ getText n o)
         buildSplice o (PN n fill') =
-          (transformName n, fill' (unObj . M.lookup n $ o))
+          (transformNameP n, fill' (unObj . M.lookup n $ o))
         buildSplice o (PM n fill') =
-          (transformName n, fill' (unArray . M.lookup n $ o))
+          (transformNameP n, fill' (unArray . M.lookup n $ o))
         buildSplice o (N n fs) =
-          (transformName n, fillChildrenWith $ subs
+          (transformNameP n, fillChildrenWith $ subs
                             (map (buildSplice (unObj . M.lookup n $ o)) fs))
         buildSplice o (C n path) =
-          (transformName n, textFill (getText (last path) . traverseObject (init path) $ o))
+          (transformNameP n, textFill (getText (last path) . traverseObject (init path) $ o))
         buildSplice o (CN n path fs) =
-          (transformName n, fillChildrenWith $ subs
+          (transformNameP n, fillChildrenWith $ subs
                             (map (buildSplice (traverseObject path o)) fs))
         buildSplice o (M n fs) =
-          (transformName n,
+          (transformNameP n,
             mapSubs (\oinner -> subs $ map (buildSplice oinner) fs)
                     (unArray . M.lookup n $ o))
 
@@ -121,6 +120,7 @@ fieldSubs fields object = subs (map (buildSplice object) fields)
                         Just (Number i) -> either (tshow :: Double -> Text)
                                                   (tshow :: Integer -> Text) (floatingOrInteger i)
                         _ -> ""
+        transformNameP = transformName prefix
 
 -- * -- Internal -- * --
 
@@ -138,12 +138,5 @@ getSingle CMS{..} wpKey = decodeObj <$> cachingGetRetry wpKey
               Just (obj:_) -> Just obj
               _ -> Nothing
         decodeObj (Left _) = Nothing
-
-transformName :: Text -> Text
-transformName = T.append "wp" . snd . T.foldl f (True, "")
-  where f (True, rest) next = (False, T.snoc rest (toUpper next))
-        f (False, rest) '_' = (True, rest)
-        f (False, rest) '-' = (True, rest)
-        f (False, rest) next = (False, T.snoc rest next)
 
 {-# ANN module ("HLint: ignore Eta reduce" :: String) #-}
