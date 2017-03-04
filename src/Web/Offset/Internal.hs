@@ -20,8 +20,3 @@ import           Web.Offset.Utils
 cmsRequestInt :: Requester -> Text -> CMSKey -> IO (Either StatusCode Text)
 cmsRequestInt runHTTP endpt key = req (cRequestUrl key)
   where req (path, params) = unRequester runHTTP (endpt <> path) params
-
-cmsLogInt :: Maybe (Text -> IO ()) -> Text -> IO ()
-cmsLogInt logger msg = case logger of
-                         Nothing -> return ()
-                         Just f -> f msg

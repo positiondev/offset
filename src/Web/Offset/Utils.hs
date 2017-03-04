@@ -55,3 +55,8 @@ parseDate format date =
              defaultTimeLocale
              (T.unpack format)
              (T.unpack date) :: Maybe UTCTime
+
+useLogger :: Maybe (Text -> IO ()) -> Text -> IO ()
+useLogger logger msg = case logger of
+                         Nothing -> return ()
+                         Just f -> f msg

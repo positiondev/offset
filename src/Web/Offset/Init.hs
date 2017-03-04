@@ -16,6 +16,7 @@ import           Web.Offset.HTTP
 import           Web.Offset.Internal
 import           Web.Offset.Splices
 import           Web.Offset.Types
+import           Web.Offset.Utils
 import           Web.Offset.WordPress.Splices
 
 initCMS :: CMSConfig s
@@ -25,7 +26,7 @@ initCMS :: CMSConfig s
         -> IO (CMS b, Substitutions s)
 initCMS cmsconf redis getURI cmsLens = do
   let rrunRedis = R.runRedis redis
-  let logf = cmsLogInt $ cmsConfLogger cmsconf
+  let logf = useLogger $ cmsConfLogger cmsconf
   let wpReq = case cmsConfRequest cmsconf of
                 Left (u,p) -> wreqRequester logf u p
                 Right r -> r
