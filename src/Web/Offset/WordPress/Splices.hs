@@ -100,7 +100,7 @@ wpPostByPermalinkFill extraFields getURI cmsLens = maybeFillChildrenWith' $
      case mperma of
        Nothing -> return Nothing
        Just (year, month, slug) ->
-         do res <- wpGetPost cmsLens (toCMSKey $ PostByPermalinkKey year month slug)
+         do res <- cmsGetSingle cmsLens (toCMSKey $ PostByPermalinkKey year month slug)
             case res of
               Just post -> do addPostIds cmsLens [fst (extractPostId post)]
                               return $ Just (fieldSubs (mergeFields postFields extraFields) post)
@@ -120,7 +120,7 @@ wpPageFill cmsLens =
   useAttrs (a "name") pageFill
   where pageFill Nothing = textFill ""
         pageFill (Just slug) = textFill' $
-         do res <- wpGetPost cmsLens (toCMSKey $ PageKey slug)
+         do res <- cmsGetSingle cmsLens (toCMSKey $ PageKey slug)
             return $ case res of
                        Just page -> case M.lookup "content" page of
                                       Just (Object o) -> case M.lookup "rendered" o of

@@ -13,8 +13,8 @@ module Web.Offset (
  , Requester(..)
  , CacheBehavior(..)
  , initCMS
- , wpGetPost
- , getPost
+ , cmsGetSingle
+ , getSingle
  , CMSKey(..)
  , WPKey(..)
  , Filter(..)

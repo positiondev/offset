@@ -124,20 +124,20 @@ fieldSubs fields object = subs (map (buildSplice object) fields)
 
 -- * -- Internal -- * --
 
-wpGetPost :: (MonadState s m, MonadIO m) => CMSLens b s -> CMSKey -> m (Maybe Object)
-wpGetPost cmsLens wpKey =
+cmsGetSingle :: (MonadState s m, MonadIO m) => CMSLens b s -> CMSKey -> m (Maybe Object)
+cmsGetSingle cmsLens wpKey =
   do wp <- use cmsLens
-     liftIO $ getPost wp wpKey
+     liftIO $ getSingle wp wpKey
 
-getPost :: CMS b -> CMSKey -> IO (Maybe Object)
-getPost CMS{..} wpKey = decodePost <$> cachingGetRetry wpKey
-  where decodePost :: Either StatusCode Text -> Maybe Object
-        decodePost (Right t) =
-          do post' <- decodeJson t
-             case post' of
-              Just (post:_) -> Just post
+getSingle :: CMS b -> CMSKey -> IO (Maybe Object)
+getSingle CMS{..} wpKey = decodeObj <$> cachingGetRetry wpKey
+  where decodeObj :: Either StatusCode Text -> Maybe Object
+        decodeObj (Right t) =
+          do obj' <- decodeJson t
+             case obj' of
+              Just (obj:_) -> Just obj
               _ -> Nothing
-        decodePost (Left _) = Nothing
+        decodeObj (Left _) = Nothing
 
 transformName :: Text -> Text
 transformName = T.append "wp" . snd . T.foldl f (True, "")
