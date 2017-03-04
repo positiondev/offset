@@ -28,44 +28,44 @@ import           Web.Offset.Field
 import           Web.Offset.HTTP
 import           Web.Offset.Utils
 
-data Wordpress b =
-     Wordpress { requestPostSet     :: Maybe IntSet
-               , wpExpireAggregates :: IO Bool
-               , wpExpirePost       :: WPKey -> IO Bool
-               , cachingGet         :: WPKey -> IO (CacheResult Text)
-               , cachingGetRetry    :: WPKey -> IO (Either StatusCode Text)
-               , cachingGetError    :: WPKey -> IO (Either StatusCode Text)
-               , wpLogger           :: Text -> IO ()
-               , cacheInternals     :: WordpressInt (StateT b IO Text)
-               }
+data CMS b =
+     CMS { requestPostSet      :: Maybe IntSet
+         , cmsExpireAggregates :: IO Bool
+         , cmsExpirePost       :: CMSKey -> IO Bool
+         , cachingGet          :: CMSKey -> IO (CacheResult Text)
+         , cachingGetRetry     :: CMSKey -> IO (Either StatusCode Text)
+         , cachingGetError     :: CMSKey -> IO (Either StatusCode Text)
+         , cmsLogger           :: Text -> IO ()
+         , cacheInternals      :: CMSInt (StateT b IO Text)
+         }
 
-type WPLens b s = Lens' s (Wordpress b)
+type CMSLens b s = Lens' s (CMS b)
 
 type UserPassword = (Text, Text)
 
-data WordpressConfig m =
-     WordpressConfig { wpConfEndpoint      :: Text
-                     , wpConfRequester     :: Either UserPassword Requester
-                     , wpConfCacheBehavior :: CacheBehavior
-                     , wpConfExtraFields   :: [Field m]
-                     , wpConfLogger        :: Maybe (Text -> IO ())
-                     }
+data CMSConfig m =
+     CMSConfig { cmsConfEndpoint      :: Text
+               , cmsConfRequest       :: Either UserPassword Requester
+               , cmsConfCacheBehavior :: CacheBehavior
+               , cmsConfExtraFields   :: [Field m]
+               , cmsConfLogger        :: Maybe (Text -> IO ())
+               }
 
-instance Default (WordpressConfig m) where
-  def = WordpressConfig "http://127.0.0.1:8080/wp-json"
-                        (Left ("offset", "111"))
-                        (CacheSeconds 600)
-                        []
-                        Nothing
+instance Default (CMSConfig m) where
+  def = CMSConfig "http://127.0.0.1:8080/wp-json"
+                  (Left ("offset", "111"))
+                  (CacheSeconds 600)
+                  []
+                  Nothing
 
-data WordpressInt b =
-     WordpressInt { wpCacheGet    :: WPKey -> IO (Maybe Text)
-                  , wpCacheSet    :: WPKey -> Text -> IO ()
-                  , startReqMutex :: WPKey -> IO Bool
-                  , wpRequest     :: WPKey -> IO (Either StatusCode Text)
-                  , stopReqMutex  :: WPKey -> IO ()
-                  , runRedis      :: RunRedis
-                  }
+data CMSInt b =
+     CMSInt { cmsCacheGet   :: CMSKey -> IO (Maybe Text)
+            , cmsCacheSet   :: CMSKey -> Text -> IO ()
+            , startReqMutex :: CMSKey -> IO Bool
+            , cmsRequest    :: CMSKey -> IO (Either StatusCode Text)
+            , stopReqMutex  :: CMSKey -> IO ()
+            , runRedis      :: RunRedis
+            }
 
 data TaxSpec = TaxPlus Text | TaxMinus Text deriving (Eq, Ord)
 
@@ -105,15 +105,15 @@ instance Show Filter where
   show (OffsetFilter n) = "offset_" ++ show n
   show (UserFilter u) = T.unpack $ "user_" <> u
 
-data WPKey = PostKey Int
-           | PostByPermalinkKey Year Month Slug
-           | PostsKey (Set Filter)
-           | PageKey Text
-           | AuthorKey Int
-           | TaxDictKey Text
-           | TaxSlugKey TaxonomyName Slug
-           | EndpointKey Text
-           deriving (Eq, Show, Ord)
+data CMSKey = PostKey Int
+            | PostByPermalinkKey Year Month Slug
+            | PostsKey (Set Filter)
+            | PageKey Text
+            | AuthorKey Int
+            | TaxDictKey Text
+            | TaxSlugKey TaxonomyName Slug
+            | EndpointKey Text
+            deriving (Eq, Show, Ord)
 
 tagChars :: String
 tagChars = ['a'..'z'] ++ "-" ++ digitChars

@@ -20,7 +20,7 @@ import           Web.Offset.Cache.Types
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
-startReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO Bool
+startReqMutexInt :: MVar (Map CMSKey UTCTime) -> CMSKey -> IO Bool
 startReqMutexInt activeMV wpKey =
   do now <- getCurrentTime
      modifyMVar activeMV $ \a ->
@@ -30,14 +30,14 @@ startReqMutexInt activeMV wpKey =
           else return (Map.insert wpKey now active, False)
   where filterCurrent now = Map.filter (\v -> diffUTCTime now v < 1)
 
-stopReqMutexInt :: MVar (Map WPKey UTCTime) -> WPKey -> IO ()
+stopReqMutexInt :: MVar (Map CMSKey UTCTime) -> CMSKey -> IO ()
 stopReqMutexInt activeMV wpKey =
   modifyMVar_ activeMV $ return . Map.delete wpKey
 
-cachingGetRetryInt :: WordpressInt b -> WPKey -> IO (Either StatusCode Text)
+cachingGetRetryInt :: CMSInt b -> CMSKey -> IO (Either StatusCode Text)
 cachingGetRetryInt wp = retryUnless . cachingGetInt wp
 
-cachingGetErrorInt :: WordpressInt b -> WPKey -> IO (Either StatusCode Text)
+cachingGetErrorInt :: CMSInt b -> CMSKey -> IO (Either StatusCode Text)
 cachingGetErrorInt wp wpKey = errorUnless msg (cachingGetInt wp wpKey)
   where msg = "Could not retrieve " <> tshow wpKey
 
@@ -58,11 +58,11 @@ errorUnless _ action =
       Abort code -> return $ Left code
       Retry -> return $ Left 500
 
-cachingGetInt :: WordpressInt b
-           -> WPKey
+cachingGetInt :: CMSInt b
+           -> CMSKey
            -> IO (CacheResult Text)
-cachingGetInt WordpressInt{..} wpKey =
-  do mCached <- wpCacheGet wpKey
+cachingGetInt CMSInt{..} wpKey =
+  do mCached <- cmsCacheGet wpKey
      case mCached of
        Just cached -> return $ Successful cached
        Nothing ->
@@ -70,24 +70,24 @@ cachingGetInt WordpressInt{..} wpKey =
             if running
                then return Retry
                else
-                 do o <- wpRequest wpKey
+                 do o <- cmsRequest wpKey
                     case o of
                       Left errorCode ->
                         return $ Abort errorCode
                       Right jsonBlob -> do
-                        wpCacheSet wpKey jsonBlob
+                        cmsCacheSet wpKey jsonBlob
                         stopReqMutex wpKey
                         return $ Successful jsonBlob
 
-wpCacheGetInt :: RunRedis -> CacheBehavior -> WPKey -> IO (Maybe Text)
-wpCacheGetInt runRedis b = runRedis . cacheGet b . formatKey
+cmsCacheGetInt :: RunRedis -> CacheBehavior -> CMSKey -> IO (Maybe Text)
+cmsCacheGetInt runRedis b = runRedis . cacheGet b . formatKey
 
 cacheGet :: CacheBehavior -> Text -> Redis (Maybe Text)
 cacheGet NoCache _ = return Nothing
 cacheGet _ key = rget key
 
-wpCacheSetInt :: RunRedis -> CacheBehavior -> WPKey -> Text -> IO ()
-wpCacheSetInt runRedis b key = void . runRedis . cacheSet b (formatKey key)
+cmsCacheSetInt :: RunRedis -> CacheBehavior -> CMSKey -> Text -> IO ()
+cmsCacheSetInt runRedis b key = void . runRedis . cacheSet b (formatKey key)
 
 cacheSet :: CacheBehavior -> Text -> Text -> Redis Bool
 cacheSet b k v =
@@ -102,13 +102,13 @@ wpExpireAggregatesInt runRedis = runRedis expireAggregates
 expireAggregates :: Redis Bool
 expireAggregates = rdelstar "wordpress:posts:*"
 
-wpExpirePostInt :: RunRedis -> WPKey -> IO Bool
+wpExpirePostInt :: RunRedis -> CMSKey -> IO Bool
 wpExpirePostInt runRedis = runRedis . expire
 
-expire :: WPKey -> Redis Bool
+expire :: CMSKey -> Redis Bool
 expire key = rdel [formatKey key] >> expireAggregates
 
-formatKey :: WPKey -> Text
+formatKey :: CMSKey -> Text
 formatKey = format
   where format (PostByPermalinkKey y m s) = ns "post_perma:" <> y <> "_" <> m <> "_" <> s
         format (PostsKey filters) =

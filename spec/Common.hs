@@ -38,11 +38,11 @@ import           Web.Offset.Types
 -- Section 1: Example application used for testing.     --
 ----------------------------------------------------------
 
-data Ctxt = Ctxt { _req       :: FnRequest
-                 , _redis     :: R.Connection
-                 , _wordpress :: Wordpress Ctxt
-                 , _wpsubs    :: Substitutions Ctxt
-                 , _lib       :: Library Ctxt
+data Ctxt = Ctxt { _req     :: FnRequest
+                 , _redis   :: R.Connection
+                 , _cms     :: CMS Ctxt
+                 , _cmssubs :: Substitutions Ctxt
+                 , _lib     :: Library Ctxt
                  }
 
 makeLenses ''Ctxt
@@ -131,7 +131,7 @@ renderLarceny ctxt name =
   do let tpl = M.lookup [name] tplLibrary
      case tpl of
        Just t -> do
-         rendered <- evalStateT (runTemplate t [name] (ctxt ^. wpsubs) tplLibrary) ctxt
+         rendered <- evalStateT (runTemplate t [name] (ctxt ^. cmssubs) tplLibrary) ctxt
          return $ Just rendered
        _ -> return Nothing
 
@@ -170,17 +170,17 @@ fauxRequester mRecord rqPath rqParams = do
 initializer :: Either UserPassword Requester -> CacheBehavior -> Text -> IO Ctxt
 initializer requester cache endpoint =
   do rconn <- R.connect R.defaultConnectInfo
-     let wpconf = def { wpConfEndpoint = endpoint
-                      , wpConfLogger = Nothing
-                      , wpConfRequester = requester
-                      , wpConfExtraFields = customFields
-                      , wpConfCacheBehavior = cache
+     let wpconf = def { cmsConfEndpoint = endpoint
+                      , cmsConfLogger = Nothing
+                      , cmsConfRequest = requester
+                      , cmsConfExtraFields = customFields
+                      , cmsConfCacheBehavior = cache
                    }
      let getUri :: StateT Ctxt IO Text
          getUri = do ctxt <- S.get
                      return (T.decodeUtf8 . rawPathInfo . fst . getRequest $ ctxt)
-     (wp,wpSubs) <- initWordpress wpconf rconn getUri wordpress
-     return (Ctxt defaultFnRequest rconn wp wpSubs mempty)
+     (cms', cmssubs) <- initCMS wpconf rconn getUri cms
+     return (Ctxt defaultFnRequest rconn cms' cmssubs mempty)
 
 initFauxRequestNoCache :: IO Ctxt
 initFauxRequestNoCache =
@@ -218,29 +218,29 @@ shouldRender :: TemplateText
              -> Expectation
 shouldRender t output = do
   ctxt <- initFauxRequestNoCache
-  let s = _wpsubs ctxt
+  let s = _cmssubs ctxt
   rendered <- evalStateT (runTemplate (toTpl t) [] s mempty) ctxt
   ignoreWhitespace rendered `shouldBe` ignoreWhitespace output
 
 -- Caching helpers
 
-wpCacheGet' :: S.MonadIO m => Wordpress b -> WPKey -> m (Maybe Text)
-wpCacheGet' wordpress' wpKey = do
-  let WordpressInt{..} = cacheInternals wordpress'
-  liftIO $ wpCacheGet wpKey
+cmsCacheGet' :: S.MonadIO m => CMS b -> CMSKey -> m (Maybe Text)
+cmsCacheGet' cms' wpKey = do
+  let CMSInt{..} = cacheInternals cms'
+  liftIO $ cmsCacheGet wpKey
 
-wpCacheSet' :: S.MonadIO m => Wordpress b -> WPKey -> Text -> m ()
-wpCacheSet' wordpress' wpKey o = do
-  let WordpressInt{..} = cacheInternals wordpress'
-  liftIO $ wpCacheSet wpKey o
+cmsCacheSet' :: S.MonadIO m => CMS b -> CMSKey -> Text -> m ()
+cmsCacheSet' cms' wpKey o = do
+  let CMSInt{..} = cacheInternals cms'
+  liftIO $ cmsCacheSet wpKey o
 
-wpExpireAggregates' :: S.MonadIO m => Wordpress t -> m Bool
-wpExpireAggregates' Wordpress{..} =
-  liftIO wpExpireAggregates
+cmsExpireAggregates' :: S.MonadIO m => CMS t -> m Bool
+cmsExpireAggregates' CMS{..} =
+  liftIO cmsExpireAggregates
 
-wpExpirePost' :: S.MonadIO m => Wordpress t -> WPKey -> m Bool
-wpExpirePost'  Wordpress{..} k =
-  liftIO $ wpExpirePost k
+cmsExpirePost' :: S.MonadIO m => CMS t -> CMSKey -> m Bool
+cmsExpirePost'  CMS{..} k =
+  liftIO $ cmsExpirePost k
 
 {-
 shouldRenderAtUrlContaining' :: (TemplateName, Ctxt)
@@ -250,7 +250,7 @@ shouldRenderAtUrlContaining' (template, ctxt) (url, match) = do
     let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 url }
     let ctxt' = setRequest ctxt
                  $ (\(x,y) -> (requestWithUrl, y)) defaultFnRequest
-    let s = _wpsubs ctxt
+    let s = _cmssubs ctxt
     rendered <- renderLarceny ctxt' template
     print rendered
     let rendered' = fromMaybe "" rendered
@@ -263,10 +263,10 @@ shouldQueryTo hQuery wpQuery =
   it ("should query from " <> T.unpack hQuery) $ do
       record <- liftIO $ newMVar []
       ctxt <- liftIO $ initializer
-                         (Right $ Requester $ fauxRequester (Just record))
-                         NoCache
-                         ""
-      let s = _wpsubs ctxt
+                       (Right $ Requester $ fauxRequester (Just record))
+                       NoCache
+                       ""
+      let s = _cmssubs ctxt
       void $ evalStateT (runTemplate (toTpl hQuery) [] s mempty) ctxt
       x <- liftIO $ tryTakeMVar record
       x `shouldBe` Just wpQuery

@@ -17,8 +17,8 @@ import           Web.Offset.HTTP
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
-wpRequestInt :: Requester -> Text -> WPKey -> IO (Either StatusCode Text)
-wpRequestInt runHTTP endpt key =
+cmsRequestInt :: Requester -> Text -> CMSKey -> IO (Either StatusCode Text)
+cmsRequestInt runHTTP endpt key =
   case key of
    TaxDictKey resName ->          req (defaultEndpoint <> "/" <> resName) []
    PostByPermalinkKey _ _ slug -> req (defaultEndpoint <> "/posts") [("slug", slug)]
@@ -31,7 +31,7 @@ wpRequestInt runHTTP endpt key =
   where req path = unRequester runHTTP (endpt <> path)
         defaultEndpoint = "/wp/v2"
 
-buildParams :: WPKey -> [(Text, Text)]
+buildParams :: CMSKey -> [(Text, Text)]
 buildParams (PostsKey filters) = params
   where params = Set.toList $ Set.map mkFilter filters
         mkFilter (TaxFilter taxonomyName (TaxPlusId i)) = (taxonomyName <> "[]", tshow i)
@@ -41,7 +41,7 @@ buildParams (PostsKey filters) = params
         mkFilter (UserFilter user) = ("author[]", user)
 buildParams _ = []
 
-wpLogInt :: Maybe (Text -> IO ()) -> Text -> IO ()
-wpLogInt logger msg = case logger of
-                    Nothing -> return ()
-                    Just f -> f msg
+cmsLogInt :: Maybe (Text -> IO ()) -> Text -> IO ()
+cmsLogInt logger msg = case logger of
+                         Nothing -> return ()
+                         Just f -> f msg

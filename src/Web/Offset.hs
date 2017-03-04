@@ -9,14 +9,14 @@
 {-# LANGUAGE TypeSynonymInstances  #-}
 
 module Web.Offset (
-   Wordpress(..)
- , WordpressConfig(..)
+   CMS(..)
+ , CMSConfig(..)
  , Requester(..)
  , CacheBehavior(..)
- , initWordpress
+ , initCMS
  , wpGetPost
  , getPost
- , WPKey(..)
+ , CMSKey(..)
  , Filter(..)
  , transformName
  , TaxSpec(..)

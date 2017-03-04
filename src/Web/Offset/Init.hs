@@ -16,33 +16,33 @@ import           Web.Offset.Internal
 import           Web.Offset.Splices
 import           Web.Offset.Types
 
-initWordpress :: WordpressConfig s
-              -> R.Connection
-              -> StateT s IO Text
-              -> WPLens b s
-              -> IO (Wordpress b, Substitutions s)
-initWordpress wpconf redis getURI wpLens = do
+initCMS :: CMSConfig s
+           -> R.Connection
+           -> StateT s IO Text
+           -> CMSLens b s
+           -> IO (CMS b, Substitutions s)
+initCMS cmsconf redis getURI cmsLens = do
   let rrunRedis = R.runRedis redis
-  let logf = wpLogInt $ wpConfLogger wpconf
-  let wpReq = case wpConfRequester wpconf of
+  let logf = cmsLogInt $ cmsConfLogger cmsconf
+  let wpReq = case cmsConfRequest cmsconf of
                 Left (u,p) -> wreqRequester logf u p
                 Right r -> r
   active <- newMVar Map.empty
-  let wpInt = WordpressInt{ wpRequest = wpRequestInt wpReq (wpConfEndpoint wpconf)
-                          , wpCacheSet = wpCacheSetInt rrunRedis (wpConfCacheBehavior wpconf)
-                          , wpCacheGet = wpCacheGetInt rrunRedis (wpConfCacheBehavior wpconf)
-                          , startReqMutex = startReqMutexInt active
-                          , stopReqMutex = stopReqMutexInt active
-                          , runRedis = rrunRedis
-                          }
-  let wp = Wordpress{ requestPostSet = Nothing
-                    , wpExpireAggregates = wpExpireAggregatesInt rrunRedis
-                    , wpExpirePost = wpExpirePostInt rrunRedis
-                    , cachingGet = cachingGetInt wpInt
-                    , cachingGetRetry = cachingGetRetryInt wpInt
-                    , cachingGetError = cachingGetErrorInt wpInt
-                    , cacheInternals = wpInt
-                    , wpLogger = logf
-                    }
-  let extraFields = wpConfExtraFields wpconf
-  return (wp, wordpressSubs wp extraFields getURI wpLens)
+  let cmsInt = CMSInt{ cmsRequest = cmsRequestInt wpReq (cmsConfEndpoint cmsconf)
+                     , cmsCacheSet = cmsCacheSetInt rrunRedis (cmsConfCacheBehavior cmsconf)
+                     , cmsCacheGet = cmsCacheGetInt rrunRedis (cmsConfCacheBehavior cmsconf)
+                     , startReqMutex = startReqMutexInt active
+                     , stopReqMutex = stopReqMutexInt active
+                     , runRedis = rrunRedis
+                     }
+  let cms = CMS{ requestPostSet = Nothing
+               , cmsExpireAggregates = wpExpireAggregatesInt rrunRedis
+               , cmsExpirePost = wpExpirePostInt rrunRedis
+               , cachingGet = cachingGetInt cmsInt
+               , cachingGetRetry = cachingGetRetryInt cmsInt
+               , cachingGetError = cachingGetErrorInt cmsInt
+               , cacheInternals = cmsInt
+               , cmsLogger = logf
+               }
+  let extraFields = cmsConfExtraFields cmsconf
+  return (cms, wordpressSubs cms extraFields getURI cmsLens)

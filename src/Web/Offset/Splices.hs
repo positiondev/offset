@@ -33,17 +33,17 @@ import           Web.Offset.Queries
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
-wordpressSubs ::   Wordpress b
+wordpressSubs ::   CMS b
                  -> [Field s]
                  -> StateT s IO Text
-                 -> WPLens b s
+                 -> CMSLens b s
                  -> Substitutions s
-wordpressSubs wp extraFields getURI wpLens =
-  subs [ ("wpPosts", wpPostsFill wp extraFields wpLens)
-       , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
-       , ("wpPage", wpPageFill wpLens)
-       , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
-       , ("wp", wpPrefetch wp extraFields getURI wpLens)
+wordpressSubs wp extraFields getURI cmsLens =
+  subs [ ("wpPosts", wpPostsFill wp extraFields cmsLens)
+       , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI cmsLens)
+       , ("wpPage", wpPageFill cmsLens)
+       , ("wpNoPostDuplicates", wpNoPostDuplicatesFill cmsLens)
+       , ("wp", wpPrefetch wp extraFields getURI cmsLens)
        , ("wpCustom", wpCustomFill wp)
        , ("wpCustomDate", wpCustomDateFill)]
 
@@ -56,8 +56,8 @@ wpCustomDateFill =
               Just d -> fillChildrenWith $ datePartSubs d
               Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
 
-wpCustomFill :: Wordpress b -> Fill s
-wpCustomFill Wordpress{..} =
+wpCustomFill :: CMS b -> Fill s
+wpCustomFill CMS{..} =
   useAttrs (a "endpoint") customFill
   where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
           do let key = EndpointKey endpoint
@@ -66,13 +66,13 @@ wpCustomFill Wordpress{..} =
                Left code -> do
                  let notification = "Encountered status code " <> tshow code
                                    <> " when querying \"" <> endpoint <> "\"."
-                 liftIO $ wpLogger notification
+                 liftIO $ cmsLogger notification
                  return $ "<!-- " <> notification <> " -->"
                Right (Just (json :: Value)) ->
                  unFill (jsonToFill json) attrs (path, tpl) lib
                Right Nothing -> do
                  let notification = "Unable to decode JSON for endpoint \"" <> endpoint
-                 liftIO $ wpLogger $ notification <> ": " <> tshow res
+                 liftIO $ cmsLogger $ notification <> ": " <> tshow res
                  return $ "<!-- " <> notification <> "-->"
 
 jsonToFill :: Value -> Fill s
@@ -93,34 +93,34 @@ jsonToFill (Bool b) = textFill $ tshow b
 jsonToFill (Null) = textFill "<!-- JSON field found, but value is null. -->"
 
 
-wpPostsFill :: Wordpress b
+wpPostsFill :: CMS b
             -> [Field s]
-            -> WPLens b s
+            -> CMSLens b s
             -> Fill s
-wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
+wpPostsFill wp extraFields cmsLens = Fill $ \attrs tpl lib ->
   do let postsQuery = parseQueryNode (Map.toList attrs)
      filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
-     let wpKey = mkWPKey filters postsQuery
+     let wpKey = mkCMSKey filters postsQuery
      res <- liftIO $ cachingGetRetry wp wpKey
      case fmap decode res of
        Right (Just posts) -> do
          let postsW = extractPostIds posts
-         wp' <- use wpLens
+         wp' <- use cmsLens
          let postsND = take (qlimit postsQuery)
                        . noDuplicates (requestPostSet wp') $ postsW
-         addPostIds wpLens (map fst postsND)
+         addPostIds cmsLens (map fst postsND)
          unFill (wpPostsHelper extraFields (map snd postsND)) mempty tpl lib
        Right Nothing -> return ""
        Left code -> do
          let notification = "Encountered status code " <> tshow code
                             <> " when querying wpPosts."
-         liftIO $ wpLogger wp notification
+         liftIO $ cmsLogger wp notification
          return $ "<!-- " <> notification <> " -->"
   where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         noDuplicates Nothing = id
         noDuplicates (Just wpPostIdSet) = filter (\(wpId,_) -> IntSet.notMember wpId wpPostIdSet)
 
-mkFilters :: Wordpress b -> [TaxSpecList] -> IO [Filter]
+mkFilters :: CMS b -> [TaxSpecList] -> IO [Filter]
 mkFilters wp specLists =
   concat <$> mapM (\(TaxSpecList tName list) -> catMaybes <$> mapM (toFilter tName) list) specLists
   where toFilter :: TaxonomyName -> TaxSpec -> IO (Maybe Filter)
@@ -137,35 +137,35 @@ wpPostsHelper extraFields postsND = mapSubs (postSubs extraFields) postsND
 
 wpPostByPermalinkFill :: [Field s]
                       -> StateT s IO Text
-                      -> WPLens b s
+                      -> CMSLens b s
                       -> Fill s
-wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
+wpPostByPermalinkFill extraFields getURI cmsLens = maybeFillChildrenWith' $
   do uri <- getURI
      let mperma = parsePermalink uri
      case mperma of
        Nothing -> return Nothing
        Just (year, month, slug) ->
-         do res <- wpGetPost wpLens (PostByPermalinkKey year month slug)
+         do res <- wpGetPost cmsLens (PostByPermalinkKey year month slug)
             case res of
-              Just post -> do addPostIds wpLens [fst (extractPostId post)]
+              Just post -> do addPostIds cmsLens [fst (extractPostId post)]
                               return $ Just (postSubs extraFields post)
               _ -> return Nothing
 
-wpNoPostDuplicatesFill :: WPLens b s -> Fill s
-wpNoPostDuplicatesFill wpLens = textFill' $
-  do w@Wordpress{..} <- use wpLens
+wpNoPostDuplicatesFill :: CMSLens b s -> Fill s
+wpNoPostDuplicatesFill cmsLens = textFill' $
+  do w@CMS{..} <- use cmsLens
      case requestPostSet of
-       Nothing -> assign wpLens
+       Nothing -> assign cmsLens
                     w{requestPostSet = Just IntSet.empty}
        Just _ -> return ()
      return ""
 
-wpPageFill :: WPLens b s -> Fill s
-wpPageFill wpLens =
+wpPageFill :: CMSLens b s -> Fill s
+wpPageFill cmsLens =
   useAttrs (a "name") pageFill
   where pageFill Nothing = textFill ""
         pageFill (Just slug) = textFill' $
-         do res <- wpGetPost wpLens (PageKey slug)
+         do res <- wpGetPost cmsLens (PageKey slug)
             return $ case res of
                        Just page -> case M.lookup "content" page of
                                       Just (Object o) -> case M.lookup "rendered" o of
@@ -225,7 +225,7 @@ filterTaxonomies attrs =
       taxAttrs = filter (\(k, _) -> (k `notElem` reservedTerms)) attrs in
   map attrToTaxSpecList taxAttrs
 
-taxDictKeys :: [TaxSpecList] -> [WPKey]
+taxDictKeys :: [TaxSpecList] -> [CMSKey]
 taxDictKeys = map (\(TaxSpecList tName _) -> TaxDictKey tName)
 
 mkPostsQuery :: Maybe Int
@@ -244,35 +244,35 @@ mkPostsQuery l n o p ts us =
               , quser = us
               }
 
-wpPrefetch :: Wordpress b
+wpPrefetch :: CMS b
            -> [Field s]
            -> StateT s IO Text
-           -> WPLens b s
+           -> CMSLens b s
            -> Fill s
-wpPrefetch wp extra uri wpLens = Fill $ \ _m (p, tpl) l -> do
-    Wordpress{..} <- use wpLens
+wpPrefetch wp extra uri cmsLens = Fill $ \ _m (p, tpl) l -> do
+    CMS{..} <- use cmsLens
     mKeys <- liftIO $ newMVar []
     void $ runTemplate tpl p (prefetchSubs wp mKeys) l
     wpKeys <- liftIO $ readMVar mKeys
     void $ liftIO $ concurrently $ map cachingGet wpKeys
-    runTemplate tpl p (wordpressSubs wp extra uri wpLens) l
+    runTemplate tpl p (wordpressSubs wp extra uri cmsLens) l
 
-prefetchSubs :: Wordpress b -> MVar [WPKey] -> Substitutions s
+prefetchSubs :: CMS b -> MVar [CMSKey] -> Substitutions s
 prefetchSubs wp mkeys =
   subs [ ("wpPosts", wpPostsPrefetch wp mkeys)
        , ("wpPage", useAttrs (a"name") $ wpPagePrefetch mkeys) ]
 
-wpPostsPrefetch :: Wordpress b
-                -> MVar [WPKey]
+wpPostsPrefetch :: CMS b
+                -> MVar [CMSKey]
                 -> Fill s
 wpPostsPrefetch wp mKeys = Fill $ \attrs _ _ ->
   do let postsQuery = parseQueryNode (Map.toList attrs)
      filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
-     let key = mkWPKey filters postsQuery
+     let key = mkCMSKey filters postsQuery
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""
 
-wpPagePrefetch :: MVar [WPKey]
+wpPagePrefetch :: MVar [CMSKey]
                -> Text
                -> Fill s
 wpPagePrefetch mKeys name = textFill' $
@@ -280,10 +280,10 @@ wpPagePrefetch mKeys name = textFill' $
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""
 
-mkWPKey :: [Filter]
+mkCMSKey :: [Filter]
     -> WPQuery
-    -> WPKey
-mkWPKey taxFilters WPPostsQuery{..} =
+    -> CMSKey
+mkCMSKey taxFilters WPPostsQuery{..} =
   let page = if qpage < 1 then 1 else qpage
       offset = qnum * (page - 1) + qoffset
   in PostsKey (Set.fromList $ [ NumFilter qnum , OffsetFilter offset]
@@ -310,13 +310,13 @@ parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
                            ,T.reverse $ T.pack htnom
                            ,T.reverse $ T.pack guls)
 
-wpGetPost :: (MonadState s m, MonadIO m) => WPLens b s -> WPKey -> m (Maybe Object)
-wpGetPost wpLens wpKey =
-  do wp <- use wpLens
+wpGetPost :: (MonadState s m, MonadIO m) => CMSLens b s -> CMSKey -> m (Maybe Object)
+wpGetPost cmsLens wpKey =
+  do wp <- use cmsLens
      liftIO $ getPost wp wpKey
 
-getPost :: Wordpress b -> WPKey -> IO (Maybe Object)
-getPost Wordpress{..} wpKey = decodePost <$> cachingGetRetry wpKey
+getPost :: CMS b -> CMSKey -> IO (Maybe Object)
+getPost CMS{..} wpKey = decodePost <$> cachingGetRetry wpKey
   where decodePost :: Either StatusCode Text -> Maybe Object
         decodePost (Right t) =
           do post' <- decodeJson t
@@ -333,11 +333,10 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
         f (False, rest) '-' = (True, rest)
         f (False, rest) next = (False, T.snoc rest next)
 
--- Move this into Init.hs (should retrieve from Wordpress data structure)
-addPostIds :: (MonadState s m, MonadIO m) => WPLens b s -> [Int] -> m ()
-addPostIds wpLens ids =
-  do w@Wordpress{..} <- use wpLens
-     assign wpLens
-            w{requestPostSet = (`IntSet.union` IntSet.fromList ids) <$> requestPostSet }
+addPostIds :: (MonadState s m, MonadIO m) => CMSLens b s -> [Int] -> m ()
+addPostIds cmsLens ids =
+  do cms@CMS{..} <- use cmsLens
+     assign cmsLens
+       cms{requestPostSet = (`IntSet.union` IntSet.fromList ids) <$> requestPostSet }
 
 {-# ANN module ("HLint: ignore Eta reduce" :: String) #-}
