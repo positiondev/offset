@@ -122,7 +122,7 @@ tplLibrary =
              ,(["fields"], parse "<wp><wpPosts limit=1 categories=\"-cat1\"><wpFeaturedImage><wpAttachmentMeta><wpSizes><wpThumbnail><wpUrl/></wpThumbnail></wpSizes></wpAttachmentMeta></wpFeaturedImage></wpPosts></wp>")
              ,(["custom-endpoint-object"], parse "<cmsCustom endpoint=\"wp/v2/taxonomies\"><cmsCategory><cmsRestBase /></cmsCategory></cmsCustom>")
              ,(["custom-endpoint-array"], parse "<cmsCustom endpoint=\"wp/v2/posts\"><cmsDate /></cmsCustom>")
-             ,(["custom-endpoint-enter-the-matrix"], parse "<cmsCustom endpoint=\"wp/v2/posts\"><cmsCustom endpoint=\"wp/v2/posts/${wpId}\"><cmsDate /></cmsCustom></cmsCustom>")
+             ,(["custom-endpoint-enter-the-matrix"], parse "<cmsCustom endpoint=\"wp/v2/posts\"><cmsCustom endpoint=\"wp/v2/posts/${cmsId}\"><cmsDate /></cmsCustom></cmsCustom>")
                ]
 
 renderLarceny :: Ctxt ->
