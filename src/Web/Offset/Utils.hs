@@ -49,9 +49,9 @@ concurrently (a:as) =
   do (r1, rs) <- CC.concurrently a (concurrently as)
      return (r1:rs)
 
-parseWPDate :: Text -> Text -> Maybe UTCTime
-parseWPDate wpFormat date =
+parseDate :: Text -> Text -> Maybe UTCTime
+parseDate format date =
   parseTimeM False
              defaultTimeLocale
-             (T.unpack wpFormat)
+             (T.unpack format)
              (T.unpack date) :: Maybe UTCTime

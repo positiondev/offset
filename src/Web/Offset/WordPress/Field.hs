@@ -43,6 +43,6 @@ postFields = [F "id"
 wpDateFill :: Text -> Fill s
 wpDateFill date =
   let wpFormat = "%Y-%m-%dT%H:%M:%S" in
-  case parseWPDate wpFormat date of
+  case parseDate wpFormat date of
     Just d -> fillChildrenWith $ datePartSubs d
     Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"

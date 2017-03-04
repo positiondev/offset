@@ -48,7 +48,7 @@ wpCustomDateFill =
   useAttrs (a "wp_format" % a "date") customDateFill
   where customDateFill mWPFormat date =
           let wpFormat = fromMaybe "%Y-%m-%d %H:%M:%S" mWPFormat in
-          case parseWPDate wpFormat date of
+          case parseDate wpFormat date of
               Just d -> fillChildrenWith $ datePartSubs d
               Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
 
