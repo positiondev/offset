@@ -3,7 +3,7 @@
 {-# LANGUAGE RankNTypes        #-}
 
 module Main where
-
+ 
 import           Prelude                 hiding ((++))
 
 import           Control.Concurrent.MVar
@@ -75,7 +75,7 @@ larcenyFillTests = do
                         ""
       let ctxt' = setRequest ctxt
             $ (\(_,y) -> (requestWithUrl, y)) defaultFnRequest
-      let s = _wpsubs ctxt'
+      let s = _cmssubs ctxt'
       let tpl = toTpl "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp"
       void $ evalStateT (runTemplate tpl [] s mempty) ctxt'
       liftIO (tryTakeMVar record) `shouldReturn` Just ["/wp/v2/posts?slug=the-post"]
@@ -84,31 +84,31 @@ larcenyFillTests = do
       let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 "/2009/10/the-post/"}
       let ctxt' = setRequest ctxt
                  $ (\(_,y) -> (requestWithUrl, y)) defaultFnRequest
-      let s = view wpsubs ctxt'
+      let s = view cmssubs ctxt'
       let tpl = toTpl "<wp><wpNoPostDuplicates/><wpPostByPermalink><wpTitle/></wpPostByPermalink><wpPosts limit=1><wpTitle/></wpPosts></wp>"
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Foo bar"
 
   describe "<wpCustom>" $
     it "should render an HTML comment if JSON field is null" $
-      "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
-  describe "<wpCustomDate>" $ do
+      "<cmsCustom endpoint=\"dev/null\"><cmsThisIsNull /></cmsCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
+  describe "<cmsCustomDate>" $ do
     it "should parse a date field with the format string it's given" $
-      "<wpCustomDate date=\"2013-04-26 10:11:52\" wp_format=\"%Y-%m-%d %H:%M:%S\"> \
-      \   <wpDay />~<wpMonth />~<wpYear /> \
-      \ </wpCustomDate>" `shouldRender` "26~04~2013"
+      "<cmsCustomDate date=\"2013-04-26 10:11:52\" format=\"%Y-%m-%d %H:%M:%S\"> \
+      \   <cmsDay />~<cmsMonth />~<cmsYear /> \
+      \ </cmsCustomDate>" `shouldRender` "26~04~2013"
     it "should format a date field with the format strings it's given" $
-      "<wpCustomDate date=\"2013-04-26 10:11:52\" wp_format=\"%Y-%m-%d %H:%M:%S\"> \
-      \   <wpMonth format=\"%B\"/> <wpDay format=\"%-d\"/>, <wpYear /> \
-      \ </wpCustomDate>" `shouldRender` "April 26, 2013"
+      "<cmsCustomDate date=\"2013-04-26 10:11:52\" format=\"%Y-%m-%d %H:%M:%S\"> \
+      \   <cmsMonth format=\"%B\"/> <cmsDay format=\"%-d\"/>, <cmsYear /> \
+      \ </cmsCustomDate>" `shouldRender` "April 26, 2013"
     it "should use default WordPress date format if none specified" $
-      "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
-      \    <wpDay />~<wpMonth />~<wpYear /> \
-      \ </wpCustomDate>" `shouldRender` "26~04~2013"
+      "<cmsCustomDate date=\"2013-04-26 10:11:52\"> \
+      \    <cmsDay />~<cmsMonth />~<cmsYear /> \
+      \ </cmsCustomDate>" `shouldRender` "26~04~2013"
     it "should allow formatting the whole date in a single tag" $
-      "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
-      \    <wpFullDate /> \
-      \ </wpCustomDate>" `shouldRender` "04/26/13"
+      "<cmsCustomDate date=\"2013-04-26 10:11:52\"> \
+      \    <cmsFullDate /> \
+      \ </cmsCustomDate>" `shouldRender` "04/26/13"
 
 -- Caching tests
 
@@ -118,61 +118,61 @@ cacheTests = do
       it "should render the post even w/o json source" $ do
         let (Object a2) = article2
         ctxt <- liftIO initNoRequestWithCache
-        wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2001" "10" "the-post")
+        cmsCacheSet' (view cms ctxt) (PostByPermalinkKey "2001" "10" "the-post")
                                           (enc [a2])
         ("single", ctxt) `shouldRenderAtUrlContaining` ("/2001/10/the-post/", "The post")
 
   describe "caching" $ do
     it "should find nothing for a non-existent post" $ do
       ctxt <- initNoRequestWithCache
-      p <- wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+      p <- cmsCacheGet' (view cms ctxt) (PostByPermalinkKey "2000" "1" "the-article")
       p `shouldBe` Nothing
     it "should find something if there is a post in cache" $ do
       ctxt <- initNoRequestWithCache
-      void $ wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+      void $ cmsCacheSet' (view cms ctxt) (PostByPermalinkKey "2000" "1" "the-article")
                                           (enc article1)
-      p <- wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+      p <- cmsCacheGet' (view cms ctxt) (PostByPermalinkKey "2000" "1" "the-article")
       p `shouldBe` (Just $ enc article1)
     it "should not find single post after expire handler is called" $ do
          ctxt <- initNoRequestWithCache
-         void $ wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         void $ cmsCacheSet' (view cms ctxt) (PostByPermalinkKey "2000" "1" "the-article")
                                                   (enc article1)
-         void $ wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
-         wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         void $ cmsExpirePost' (view cms ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         cmsCacheGet' (view cms ctxt) (PostByPermalinkKey "2000" "1" "the-article")
            >>= shouldBe Nothing
     it "should find post aggregates in cache" $
       do ctxt <- initNoRequestWithCache
          let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
-         void $ wpCacheSet' (view wordpress ctxt) key ("[" <> enc article1 <> "]")
-         void $ wpCacheGet' (view wordpress ctxt) key
+         void $ cmsCacheSet' (view cms ctxt) key ("[" <> enc article1 <> "]")
+         void $ cmsCacheGet' (view cms ctxt) key
            >>= shouldBe (Just $ "[" <> enc article1 <> "]")
     it "should not find post aggregates after expire handler is called" $
       do ctxt <- initNoRequestWithCache
          let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
-         void $ wpCacheSet' (view wordpress ctxt) key ("[" <> enc article1 <> "]")
-         void $ wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
-         wpCacheGet' (view wordpress ctxt) key
+         void $ cmsCacheSet' (view cms ctxt) key ("[" <> enc article1 <> "]")
+         void $ cmsExpirePost' (view cms ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         cmsCacheGet' (view cms ctxt) key
            >>= shouldBe Nothing
     it "should find single post after expiring aggregates" $
       do ctxt <- initNoRequestWithCache
-         void $ wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         void $ cmsCacheSet' (view cms ctxt) (PostByPermalinkKey "2000" "1" "the-article")
                           (enc article1)
-         void $ wpExpireAggregates' (view wordpress ctxt)
-         wpCacheGet' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         void $ cmsExpireAggregates' (view cms ctxt)
+         cmsCacheGet' (view cms ctxt) (PostByPermalinkKey "2000" "1" "the-article")
            >>= shouldNotBe Nothing
     it "should find a different single post after expiring another" $
       do ctxt <- initNoRequestWithCache
          let key1 = PostByPermalinkKey "2000" "1" "the-article"
              key2 = PostByPermalinkKey "2001" "2" "another-article"
-         void $ wpCacheSet' (view wordpress ctxt) key1 (enc article1)
-         void $ wpCacheSet' (view wordpress ctxt) key2 (enc article2)
-         void $ wpExpirePost' (view wordpress ctxt) (PostByPermalinkKey "2000" "1" "the-article")
-         wpCacheGet' (view wordpress ctxt) key2 >>= shouldBe (Just (enc article2))
+         void $ cmsCacheSet' (view cms ctxt) key1 (enc article1)
+         void $ cmsCacheSet' (view cms ctxt) key2 (enc article2)
+         void $ cmsExpirePost' (view cms ctxt) (PostByPermalinkKey "2000" "1" "the-article")
+         cmsCacheGet' (view cms ctxt) key2 >>= shouldBe (Just (enc article2))
     it "should be able to cache and retrieve post" $
       do ctxt <- initNoRequestWithCache
          let key = PostKey 200
-         wpCacheSet' (view wordpress ctxt) key (enc article1)
-         wpCacheGet' (view wordpress ctxt) key >>= shouldBe (Just (enc article1))
+         cmsCacheSet' (view cms ctxt) key (enc article1)
+         cmsCacheGet' (view cms ctxt) key >>= shouldBe (Just (enc article1))
 
 queryTests :: Spec
 queryTests =

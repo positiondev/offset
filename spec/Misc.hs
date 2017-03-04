@@ -9,9 +9,16 @@ import qualified Data.Text           as T
 import           Test.Hspec
 import           Web.Offset
 
+import           Web.Offset.Types
+import           Web.Offset.Utils
+
+shouldWPTransformTo :: Text -> Text -> Spec
+shouldWPTransformTo from to =
+  it (T.unpack ("should convert " <> from <> " to " <> to)) $ transformName (Prefix "wp") from `shouldBe` to
+
 shouldTransformTo :: Text -> Text -> Spec
 shouldTransformTo from to =
-  it (T.unpack ("should convert " <> from <> " to " <> to)) $ transformName from `shouldBe` to
+  it (T.unpack ("should convert " <> from <> " to " <> to)) $ transformName DefaultPrefix from `shouldBe` to
 
 tests :: Spec
 tests = do
@@ -40,10 +47,16 @@ tests = do
         `shouldBe` [N "featured_image" [N "attachment_meta" [F "standard"
                                                             ,F "mag-featured"]]]
   describe "transformName" $ do
-    "ID" `shouldTransformTo` "wpID"
-    "title" `shouldTransformTo` "wpTitle"
-    "post_tag" `shouldTransformTo` "wpPostTag"
-    "mag-featured" `shouldTransformTo` "wpMagFeatured"
+    describe "with wp prefix" $ do
+      "ID" `shouldWPTransformTo` "wpID"
+      "title" `shouldWPTransformTo` "wpTitle"
+      "post_tag" `shouldWPTransformTo` "wpPostTag"
+      "mag-featured" `shouldWPTransformTo` "wpMagFeatured"
+    describe "without prefix" $ do
+      "ID" `shouldTransformTo` "cmsID"
+      "title" `shouldTransformTo` "cmsTitle"
+      "mag-featured" `shouldTransformTo` "cmsMagFeatured"
+
   describe "tag-specs" $ do
     it "should parse bare tag plus" $
       read "foo-bar" `shouldBe` (TaxPlus "foo-bar")

@@ -4,24 +4,22 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
 module Web.Offset (
-   Wordpress(..)
- , WordpressConfig(..)
+   CMS(..)
+ , CMSConfig(..)
  , Requester(..)
  , CacheBehavior(..)
- , initWordpress
- , wpGetPost
- , getPost
+ , initCMS
+ , cmsGetSingle
+ , getSingle
+ , CMSKey(..)
  , WPKey(..)
  , Filter(..)
  , transformName
  , TaxSpec(..)
- , TagType
- , CatType
  , TaxSpecList(..)
  , Field(..)
  , mergeFields
@@ -33,4 +31,6 @@ import           Web.Offset.Field
 import           Web.Offset.HTTP
 import           Web.Offset.Init
 import           Web.Offset.Splices
+import           Web.Offset.Splices.Helpers
 import           Web.Offset.Types
+import           Web.Offset.WordPress.Types

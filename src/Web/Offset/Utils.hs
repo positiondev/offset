@@ -11,6 +11,9 @@ import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Lazy           as TL
 import qualified Data.Text.Lazy.Encoding  as TL
+import           Data.Time.Clock          (UTCTime)
+import           Data.Time.Format         (defaultTimeLocale, formatTime,
+                                           parseTimeM)
 
 readSafe :: Read a => Text -> Maybe a
 readSafe = fmap fst . listToMaybe . reads . T.unpack
@@ -45,3 +48,15 @@ concurrently [a] =
 concurrently (a:as) =
   do (r1, rs) <- CC.concurrently a (concurrently as)
      return (r1:rs)
+
+parseDate :: Text -> Text -> Maybe UTCTime
+parseDate format date =
+  parseTimeM False
+             defaultTimeLocale
+             (T.unpack format)
+             (T.unpack date) :: Maybe UTCTime
+
+useLogger :: Maybe (Text -> IO ()) -> Text -> IO ()
+useLogger logger msg = case logger of
+                         Nothing -> return ()
+                         Just f -> f msg
