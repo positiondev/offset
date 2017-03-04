@@ -1,15 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-module Web.Offset.Queries where
+module Web.Offset.WordPress.Queries where
 
 import           Data.Monoid
-import           Data.Text              (Text)
+import           Data.Text                  (Text)
 
 import           Web.Offset.Cache
 import           Web.Offset.Cache.Types
 import           Web.Offset.Types
 import           Web.Offset.Utils
+import           Web.Offset.WordPress.Types
 
 getSpecId :: TaxDict -> TaxSpec -> TaxSpecId
 getSpecId taxDict spec =

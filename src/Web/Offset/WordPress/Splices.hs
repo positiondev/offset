@@ -28,8 +28,8 @@ import qualified Data.Vector             as V
 import           Web.Larceny
 
 import           Web.Offset.Field
-import           Web.Offset.Queries
 import           Web.Offset.WordPress.Posts
+import           Web.Offset.WordPress.Queries
 import           Web.Offset.Types
 import Web.Offset.WordPress.Types
 import           Web.Offset.Utils

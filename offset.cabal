@@ -21,13 +21,16 @@ library
                 , Web.Offset.Field
                 , Web.Offset.Init
                 , Web.Offset.Splices
-                , Web.Offset.Queries
+                , Web.Offset.Splices.Helpers
                 , Web.Offset.HTTP
                 , Web.Offset.Cache
                 , Web.Offset.Cache.Types
                 , Web.Offset.Cache.Redis
                 , Web.Offset.Utils
+                , Web.Offset.WordPress.Field
                 , Web.Offset.WordPress.Posts
+                , Web.Offset.WordPress.Queries
+                , Web.Offset.WordPress.Splices
                 , Web.Offset.WordPress.Types
   -- other-extensions:
   build-depends:       aeson
@@ -70,11 +73,14 @@ Test-Suite test-offset
                  , Web.Offset.HTTP
                  , Web.Offset.Init
                  , Web.Offset.Internal
-                 , Web.Offset.Queries
                  , Web.Offset.Splices
+                 , Web.Offset.Splices.Helpers
                  , Web.Offset.Types
                  , Web.Offset.Utils
+                 , Web.Offset.WordPress.Field
                  , Web.Offset.WordPress.Posts
+                 , Web.Offset.WordPress.Queries
+                 , Web.Offset.WordPress.Splices
                  , Web.Offset.WordPress.Types
     build-depends:     base
                      , aeson
