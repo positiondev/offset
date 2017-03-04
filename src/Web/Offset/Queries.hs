@@ -34,7 +34,7 @@ lookupSpecId CMS{..} taxName spec =
       let key = TaxSlugKey taxName slug
       let cacheSettings = cacheInternals { cmsCacheSet = cmsCacheSetInt (runRedis cacheInternals)
                                                                       (CacheSeconds (12 * 60 * 60)) }
-      resp <- cachingGetErrorInt cacheSettings key
+      resp <- cachingGetErrorInt cacheSettings (toCMSKey key)
       case fmap decodeJson resp of
         Left errCode -> do
           cmsLogger $ "Cache lookup returned HTTP error code " <> tshow errCode

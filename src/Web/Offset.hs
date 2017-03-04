@@ -4,7 +4,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
@@ -17,6 +16,7 @@ module Web.Offset (
  , wpGetPost
  , getPost
  , CMSKey(..)
+ , WPKey(..)
  , Filter(..)
  , transformName
  , TaxSpec(..)

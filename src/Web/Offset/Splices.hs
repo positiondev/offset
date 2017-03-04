@@ -61,7 +61,7 @@ wpCustomFill CMS{..} =
   useAttrs (a "endpoint") customFill
   where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
           do let key = EndpointKey endpoint
-             res <- liftIO $ cachingGetRetry key
+             res <- liftIO $ cachingGetRetry (toCMSKey key)
              case fmap decode res of
                Left code -> do
                  let notification = "Encountered status code " <> tshow code
@@ -100,8 +100,8 @@ wpPostsFill :: CMS b
 wpPostsFill wp extraFields cmsLens = Fill $ \attrs tpl lib ->
   do let postsQuery = parseQueryNode (Map.toList attrs)
      filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
-     let wpKey = mkCMSKey filters postsQuery
-     res <- liftIO $ cachingGetRetry wp wpKey
+     let wpKey = mkWPKey filters postsQuery
+     res <- liftIO $ cachingGetRetry wp (toCMSKey wpKey)
      case fmap decode res of
        Right (Just posts) -> do
          let postsW = extractPostIds posts
@@ -145,7 +145,7 @@ wpPostByPermalinkFill extraFields getURI cmsLens = maybeFillChildrenWith' $
      case mperma of
        Nothing -> return Nothing
        Just (year, month, slug) ->
-         do res <- wpGetPost cmsLens (PostByPermalinkKey year month slug)
+         do res <- wpGetPost cmsLens (toCMSKey $ PostByPermalinkKey year month slug)
             case res of
               Just post -> do addPostIds cmsLens [fst (extractPostId post)]
                               return $ Just (postSubs extraFields post)
@@ -165,7 +165,7 @@ wpPageFill cmsLens =
   useAttrs (a "name") pageFill
   where pageFill Nothing = textFill ""
         pageFill (Just slug) = textFill' $
-         do res <- wpGetPost cmsLens (PageKey slug)
+         do res <- wpGetPost cmsLens (toCMSKey $ PageKey slug)
             return $ case res of
                        Just page -> case M.lookup "content" page of
                                       Just (Object o) -> case M.lookup "rendered" o of
@@ -226,7 +226,7 @@ filterTaxonomies attrs =
   map attrToTaxSpecList taxAttrs
 
 taxDictKeys :: [TaxSpecList] -> [CMSKey]
-taxDictKeys = map (\(TaxSpecList tName _) -> TaxDictKey tName)
+taxDictKeys = map (\(TaxSpecList tName _) -> toCMSKey $ TaxDictKey tName)
 
 mkPostsQuery :: Maybe Int
              -> Maybe Int
@@ -254,25 +254,25 @@ wpPrefetch wp extra uri cmsLens = Fill $ \ _m (p, tpl) l -> do
     mKeys <- liftIO $ newMVar []
     void $ runTemplate tpl p (prefetchSubs wp mKeys) l
     wpKeys <- liftIO $ readMVar mKeys
-    void $ liftIO $ concurrently $ map cachingGet wpKeys
+    void $ liftIO $ concurrently $ map cachingGet (map toCMSKey wpKeys)
     runTemplate tpl p (wordpressSubs wp extra uri cmsLens) l
 
-prefetchSubs :: CMS b -> MVar [CMSKey] -> Substitutions s
+prefetchSubs :: CMS b -> MVar [WPKey] -> Substitutions s
 prefetchSubs wp mkeys =
   subs [ ("wpPosts", wpPostsPrefetch wp mkeys)
        , ("wpPage", useAttrs (a"name") $ wpPagePrefetch mkeys) ]
 
 wpPostsPrefetch :: CMS b
-                -> MVar [CMSKey]
+                -> MVar [WPKey]
                 -> Fill s
 wpPostsPrefetch wp mKeys = Fill $ \attrs _ _ ->
   do let postsQuery = parseQueryNode (Map.toList attrs)
      filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
-     let key = mkCMSKey filters postsQuery
+     let key = mkWPKey filters postsQuery
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""
 
-wpPagePrefetch :: MVar [CMSKey]
+wpPagePrefetch :: MVar [WPKey]
                -> Text
                -> Fill s
 wpPagePrefetch mKeys name = textFill' $
@@ -280,10 +280,10 @@ wpPagePrefetch mKeys name = textFill' $
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""
 
-mkCMSKey :: [Filter]
-    -> WPQuery
-    -> CMSKey
-mkCMSKey taxFilters WPPostsQuery{..} =
+mkWPKey :: [Filter]
+        -> WPQuery
+        -> WPKey
+mkWPKey taxFilters WPPostsQuery{..} =
   let page = if qpage < 1 then 1 else qpage
       offset = qnum * (page - 1) + qoffset
   in PostsKey (Set.fromList $ [ NumFilter qnum , OffsetFilter offset]

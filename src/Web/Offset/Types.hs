@@ -20,6 +20,7 @@ import           Data.List              (intercalate)
 import           Data.Maybe             (catMaybes, isJust)
 import           Data.Monoid            ((<>))
 import           Data.Set               (Set)
+import qualified Data.Set               as Set
 import           Data.Text              (Text)
 import qualified Data.Text              as T
 
@@ -105,15 +106,71 @@ instance Show Filter where
   show (OffsetFilter n) = "offset_" ++ show n
   show (UserFilter u) = T.unpack $ "user_" <> u
 
-data CMSKey = PostKey Int
-            | PostByPermalinkKey Year Month Slug
-            | PostsKey (Set Filter)
-            | PageKey Text
-            | AuthorKey Int
-            | TaxDictKey Text
-            | TaxSlugKey TaxonomyName Slug
-            | EndpointKey Text
-            deriving (Eq, Show, Ord)
+data CMSKey = CMSKey { cRequestUrl :: (Text, [(Text, Text)])
+                     , cFormatKey  :: Text
+                     , cShow       :: Text }
+
+instance Ord CMSKey where
+  compare key1 key2 = compare (cShow key1) (cShow key2)
+instance Eq CMSKey where
+  key1 == key2 = cShow key1 == cShow key2
+
+toCMSKey :: WPKey -> CMSKey
+toCMSKey wpKey =
+  case wpKey of
+    PostKey i ->
+      CMSKey ("/wp/v2/posts/" <> tshow i, [])
+             (ns "post:" <> tshow i)
+             (tshow wpKey)
+    PostByPermalinkKey y m s ->
+      CMSKey ("/wp/v2/posts", [("slug", s)])
+          (ns "post_perma:" <> y <> "_" <> m <> "_" <> s)
+             (tshow wpKey)
+    PostsKey filters ->
+      CMSKey ("/wp/v2/posts", buildParams' filters)
+              (ns "posts:" <> T.intercalate "_"
+                          (map tshow $ Set.toAscList filters))
+             (tshow wpKey)
+    PageKey slug ->
+      CMSKey ("/wp/v2/pages", [("slug", slug)])
+          (ns "page:" <> slug)
+             (tshow wpKey)
+    AuthorKey i ->
+      CMSKey ("/wp/v2/users/" <> tshow i, [])
+          (ns "author:" <> tshow i)
+             (tshow wpKey)
+    TaxDictKey resName ->
+      CMSKey ("/wp/v2/" <> resName, [])
+          (ns "tax_dict:" <> resName)
+             (tshow wpKey)
+    TaxSlugKey tn slug ->
+      CMSKey ("/wp/v2/" <> tn, [("slug", slug)])
+          (ns "tax_slug:" <> tn <> ":" <> slug)
+             (tshow wpKey)
+    EndpointKey endpoint ->
+      CMSKey ("/" <> endpoint, [])
+          (ns "endpoint:" <> endpoint)
+             (tshow wpKey)
+  where ns k = "wordpress:" <> k
+
+buildParams' :: Set.Set Filter -> [(Text, Text)]
+buildParams' filters = params
+  where params = Set.toList $ Set.map mkFilter filters
+        mkFilter (TaxFilter taxonomyName (TaxPlusId i)) = (taxonomyName <> "[]", tshow i)
+        mkFilter (TaxFilter taxonomyName (TaxMinusId i)) = (taxonomyName <> "_exclude[]", tshow i)
+        mkFilter (NumFilter num) = ("per_page", tshow num)
+        mkFilter (OffsetFilter offset) = ("offset", tshow offset)
+        mkFilter (UserFilter user) = ("author[]", user)
+
+data WPKey = PostKey Int
+           | PostByPermalinkKey Year Month Slug
+           | PostsKey (Set Filter)
+           | PageKey Text
+           | AuthorKey Int
+           | TaxDictKey Text
+           | TaxSlugKey TaxonomyName Slug
+           | EndpointKey Text
+           deriving (Eq, Show, Ord)
 
 tagChars :: String
 tagChars = ['a'..'z'] ++ "-" ++ digitChars

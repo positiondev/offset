@@ -224,23 +224,23 @@ shouldRender t output = do
 
 -- Caching helpers
 
-cmsCacheGet' :: S.MonadIO m => CMS b -> CMSKey -> m (Maybe Text)
+cmsCacheGet' :: S.MonadIO m => CMS b -> WPKey -> m (Maybe Text)
 cmsCacheGet' cms' wpKey = do
   let CMSInt{..} = cacheInternals cms'
-  liftIO $ cmsCacheGet wpKey
+  liftIO $ cmsCacheGet (toCMSKey wpKey)
 
-cmsCacheSet' :: S.MonadIO m => CMS b -> CMSKey -> Text -> m ()
+cmsCacheSet' :: S.MonadIO m => CMS b -> WPKey -> Text -> m ()
 cmsCacheSet' cms' wpKey o = do
   let CMSInt{..} = cacheInternals cms'
-  liftIO $ cmsCacheSet wpKey o
+  liftIO $ cmsCacheSet (toCMSKey wpKey) o
 
 cmsExpireAggregates' :: S.MonadIO m => CMS t -> m Bool
 cmsExpireAggregates' CMS{..} =
   liftIO cmsExpireAggregates
 
-cmsExpirePost' :: S.MonadIO m => CMS t -> CMSKey -> m Bool
-cmsExpirePost'  CMS{..} k =
-  liftIO $ cmsExpirePost k
+cmsExpirePost' :: S.MonadIO m => CMS t -> WPKey -> m Bool
+cmsExpirePost'  CMS{..} wpKey =
+  liftIO $ cmsExpirePost (toCMSKey wpKey)
 
 {-
 shouldRenderAtUrlContaining' :: (TemplateName, Ctxt)

@@ -39,7 +39,7 @@ cachingGetRetryInt wp = retryUnless . cachingGetInt wp
 
 cachingGetErrorInt :: CMSInt b -> CMSKey -> IO (Either StatusCode Text)
 cachingGetErrorInt wp wpKey = errorUnless msg (cachingGetInt wp wpKey)
-  where msg = "Could not retrieve " <> tshow wpKey
+  where msg = "Could not retrieve " <> cShow wpKey
 
 retryUnless :: IO (CacheResult a) -> IO (Either StatusCode a)
 retryUnless action =
@@ -80,14 +80,14 @@ cachingGetInt CMSInt{..} wpKey =
                         return $ Successful jsonBlob
 
 cmsCacheGetInt :: RunRedis -> CacheBehavior -> CMSKey -> IO (Maybe Text)
-cmsCacheGetInt runRedis b = runRedis . cacheGet b . formatKey
+cmsCacheGetInt runRedis b = runRedis . cacheGet b . cFormatKey
 
 cacheGet :: CacheBehavior -> Text -> Redis (Maybe Text)
 cacheGet NoCache _ = return Nothing
 cacheGet _ key = rget key
 
 cmsCacheSetInt :: RunRedis -> CacheBehavior -> CMSKey -> Text -> IO ()
-cmsCacheSetInt runRedis b key = void . runRedis . cacheSet b (formatKey key)
+cmsCacheSetInt runRedis b key = void . runRedis . cacheSet b (cFormatKey key)
 
 cacheSet :: CacheBehavior -> Text -> Text -> Redis Bool
 cacheSet b k v =
@@ -106,17 +106,4 @@ wpExpirePostInt :: RunRedis -> CMSKey -> IO Bool
 wpExpirePostInt runRedis = runRedis . expire
 
 expire :: CMSKey -> Redis Bool
-expire key = rdel [formatKey key] >> expireAggregates
-
-formatKey :: CMSKey -> Text
-formatKey = format
-  where format (PostByPermalinkKey y m s) = ns "post_perma:" <> y <> "_" <> m <> "_" <> s
-        format (PostsKey filters) =
-          ns "posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
-        format (PostKey n) = ns "post:" <> tshow n
-        format (PageKey s) = ns "page:" <> s
-        format (AuthorKey n) = ns "author:" <> tshow n
-        format (TaxDictKey t) = ns "tax_dict:" <> t
-        format (TaxSlugKey tn ts) = ns "tax_slug:" <> tn <> ":" <> ts
-        format (EndpointKey e) = ns "endpoint:" <> e
-        ns k = "wordpress:" <> k
+expire key = rdel [cFormatKey key] >> expireAggregates
