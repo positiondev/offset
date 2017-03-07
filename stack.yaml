@@ -3,7 +3,7 @@ packages:
 - '.'
 - location:
     git: https://github.com/positiondev/larceny
-    commit: 89bbcc035c3a2cd9889b0c0affed121ea9469e24
+    commit: abc8dfb81a744fede701a3ebf6b334d881830292
   extra-dep: true
 extra-deps:
 - aeson-0.11.2.0
@@ -22,4 +22,5 @@ extra-deps:
 - wai-extra-3.0.15.2
 - wai-session-clientsession-0.1
 - warp-3.2.6
+- html-entities-1.1.3
 resolver: lts-5.14
