@@ -54,7 +54,7 @@ wpCustomDateFill =
           let wpFormat = fromMaybe "%Y-%m-%d %H:%M:%S" mWPFormat in
           case parseWPDate wpFormat date of
               Just d -> fillChildrenWith $ datePartSubs d
-              Nothing -> textFill $ "<!-- Unable to parse date: " <> date <> " -->"
+              Nothing -> rawTextFill $ "<!-- Unable to parse date: " <> date <> " -->"
 
 wpCustomFill :: Wordpress b -> Fill s
 wpCustomFill Wordpress{..} =
@@ -85,12 +85,12 @@ jsonToFill (Object o) =
 jsonToFill (Array v) =
   Fill $ \attrs (path, tpl) lib ->
            V.foldr mappend "" <$> V.mapM (\e -> unFill (jsonToFill e) attrs (path, tpl) lib) v
-jsonToFill (String s) = textFill s
+jsonToFill (String s) = rawTextFill s
 jsonToFill (Number n) = case floatingOrInteger n of
-                          Left r -> textFill $ tshow (r :: Double)
-                          Right i -> textFill $ tshow (i :: Integer)
-jsonToFill (Bool b) = textFill $ tshow b
-jsonToFill (Null) = textFill "<!-- JSON field found, but value is null. -->"
+                          Left r -> rawTextFill $ tshow (r :: Double)
+                          Right i -> rawTextFill $ tshow (i :: Integer)
+jsonToFill (Bool b) = rawTextFill $ tshow b
+jsonToFill (Null) = rawTextFill "<!-- JSON field found, but value is null. -->"
 
 
 wpPostsFill :: Wordpress b
@@ -152,7 +152,7 @@ wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
               _ -> return Nothing
 
 wpNoPostDuplicatesFill :: WPLens b s -> Fill s
-wpNoPostDuplicatesFill wpLens = textFill' $
+wpNoPostDuplicatesFill wpLens = rawTextFill' $
   do w@Wordpress{..} <- use wpLens
      case requestPostSet of
        Nothing -> assign wpLens
@@ -163,8 +163,8 @@ wpNoPostDuplicatesFill wpLens = textFill' $
 wpPageFill :: WPLens b s -> Fill s
 wpPageFill wpLens =
   useAttrs (a "name") pageFill
-  where pageFill Nothing = textFill ""
-        pageFill (Just slug) = textFill' $
+  where pageFill Nothing = rawTextFill ""
+        pageFill (Just slug) = rawTextFill' $
          do res <- wpGetPost wpLens (PageKey slug)
             return $ case res of
                        Just page -> case M.lookup "content" page of
@@ -177,7 +177,7 @@ wpPageFill wpLens =
 postSubs :: [Field s] -> Object -> Substitutions s
 postSubs extra object = subs (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
-          (transformName n, textFill $ getText n o)
+          (transformName n, rawTextFill $ getText n o)
         buildSplice o (P n fill') =
           (transformName n, fill' $ getText n o)
         buildSplice o (PN n fill') =
@@ -188,7 +188,7 @@ postSubs extra object = subs (map (buildSplice object) (mergeFields postFields e
           (transformName n, fillChildrenWith $ subs
                             (map (buildSplice (unObj . M.lookup n $ o)) fs))
         buildSplice o (C n path) =
-          (transformName n, textFill (getText (last path) . traverseObject (init path) $ o))
+          (transformName n, rawTextFill (getText (last path) . traverseObject (init path) $ o))
         buildSplice o (CN n path fs) =
           (transformName n, fillChildrenWith $ subs
                             (map (buildSplice (traverseObject path o)) fs))
@@ -275,7 +275,7 @@ wpPostsPrefetch wp mKeys = Fill $ \attrs _ _ ->
 wpPagePrefetch :: MVar [WPKey]
                -> Text
                -> Fill s
-wpPagePrefetch mKeys name = textFill' $
+wpPagePrefetch mKeys name = rawTextFill' $
   do let key = PageKey name
      liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
      return ""

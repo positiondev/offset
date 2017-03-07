@@ -98,7 +98,7 @@ datePartSubs date = subs [ ("wpYear",     datePartFill "%0Y" date)
   where datePartFill defaultFormat utcTime =
           useAttrs (a "format") $ \mf ->
                    let f = fromMaybe defaultFormat mf in
-                   textFill $ T.pack $ formatTime defaultTimeLocale (T.unpack f) utcTime
+                   rawTextFill $ T.pack $ formatTime defaultTimeLocale (T.unpack f) utcTime
 
 parseWPDate :: Text -> Text -> Maybe UTCTime
 parseWPDate wpFormat date =

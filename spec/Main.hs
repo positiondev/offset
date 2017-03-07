@@ -41,7 +41,7 @@ larcenyFillTests :: Spec
 larcenyFillTests = do
   describe "<wpPosts>" $ do
     it "should show the title, id, and excerpt" $ do
-      "<wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo bar"
+      "<wpPosts><wpTitle/></wpPosts>" `shouldRender` "<i>Foo</i> bar"
       "<wpPosts><wpId/></wpPosts>" `shouldRender` "1"
       "<wpPosts><wpExcerpt/></wpPosts>" `shouldRender` "summary"
     it "should allow formating of dates" $
@@ -58,12 +58,12 @@ larcenyFillTests = do
       "<wpPage name=a-first-page />" `shouldRender` "<b>rendered</b> page content"
   describe "<wpNoPostDuplicates/>" $ do
     it "should not duplicate any posts after call to wpNoPostDuplicates" $
-      "<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo bar"
+      "<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "<i>Foo</i> bar"
     it "should ignore duplicates if they were rendered before wpNoPostDuplicates" $ do
-      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo barFoo bar"
-      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "Foo barFoo bar"
+      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
+      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
     it "should have no effect if it's at the end of the template" $
-      "<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>" `shouldRender` "Foo barFoo bar"
+      "<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
 
   describe "<wpPostByPermalink>" $ do
     it "should query at a certain url" $ do
@@ -87,7 +87,7 @@ larcenyFillTests = do
       let s = view wpsubs ctxt'
       let tpl = toTpl "<wp><wpNoPostDuplicates/><wpPostByPermalink><wpTitle/></wpPostByPermalink><wpPosts limit=1><wpTitle/></wpPosts></wp>"
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
-      rendered `shouldBe` "Foo bar"
+      rendered `shouldBe` "<i>Foo</i> bar"
 
   describe "<wpCustom>" $
     it "should render an HTML comment if JSON field is null" $
