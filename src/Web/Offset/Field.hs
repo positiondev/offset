@@ -13,6 +13,7 @@ import           Data.Time.Format (defaultTimeLocale, formatTime, parseTimeM)
 import           Web.Larceny
 
 data Field s = F Text -- A single flat field
+             | Q Text ToEndpoint -- A field that will make another request
              | P Text (Text -> Fill s) -- A customly parsed flat field
              | PN Text (Object -> Fill s) -- A customly parsed nested field
              | PM Text ([Object] -> Fill s) -- A customly parsed list field
@@ -21,16 +22,26 @@ data Field s = F Text -- A single flat field
              | CN Text [Text] [Field s] -- A nested set of fields that is found by follwing the specified path
              | M Text [Field s] -- A list field, where each element is an object
 
+data ToEndpoint = UseId Text | UseIncludes Text | UseSlug Text deriving (Eq, Show)
+
+toEndpoint :: ToEndpoint -> Text -> Text
+toEndpoint (UseId endpoint) id = endpoint <> id
+toEndpoint (UseIncludes endpoint) ids = endpoint <> "?includes=" <> ids
+toEndpoint (UseSlug endpoint) slug = endpoint <> "?slug=" <> slug
+
 -- NOTE(dbp 2014-11-07): We define equality that is 'good enough' for testing.
 -- In truth, our definition is wrong because of the functions inside of 'P' variants.
 -- NOTE(emh 2017-02-09): Moving this to Field to avoid orphan instance (even though we
 -- want this to be orphaned!). This eq instance is only for testing!!
 instance Eq (Field s) where
   F t1 == F t2 = t1 == t2
+  Q t1 tE1 == Q t2 tE2 = t1 == t2 && tE1 == tE2
   P t1 _ == P t2 _ = t1 == t2
+  PN t1 _ == PN t2 _ = t1 == t2
+  PM t1 _ == PM t2 _ = t1 == t2
   N t1 n1 == N t2 n2 = t1 == t2 && n1 == n2
   M t1 m1 == M t2 m2 = t1 == t2 && m1 == m2
-  _ == _ = True
+  _ == _ = True -- wait
 
 
 mergeFields :: [Field s] -> [Field s] -> [Field s]
@@ -44,6 +55,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
                                      else m : overrideInList v fl ms
         matchesName c d = getName c == getName d
         getName (F t) = t
+        getName (Q t _) = t
         getName (P t _) = t
         getName (PN t _) = t
         getName (PM t _) = t
@@ -59,6 +71,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
 
 instance Show (Field s) where
   show (F t) = "F(" <> T.unpack t <> ")"
+  show (Q t e) = "Q("<> T.unpack t <> ":" <> show e <>")"
   show (P t _) = "P(" <> T.unpack t <> ",{code})"
   show (PN t _) = "PN(" <> T.unpack t <> ",{code})"
   show (PM t _) = "PM(" <> T.unpack t <> ",{code})"

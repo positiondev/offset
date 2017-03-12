@@ -89,6 +89,18 @@ larcenyFillTests = do
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "<i>Foo</i> bar"
 
+  describe "extra request fields" $ do
+
+    it "should render stuff" $ do
+      ctxt <- initFauxRequestNoCache
+      let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 "/2009/10/the-post/"}
+      let ctxt' = setRequest ctxt
+                 $ (\(_,y) -> (requestWithUrl, y)) defaultFnRequest
+      let s = view wpsubs ctxt'
+      let tpl = toTpl "<wp><wpPostByPermalink><wpDepartment><wpName /></wpDepartment></wp>"
+      rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
+      rendered `shouldBe` "Sports"
+
   describe "<wpCustom>" $
     it "should render an HTML comment if JSON field is null" $
       "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
