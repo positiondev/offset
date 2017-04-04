@@ -87,13 +87,24 @@ cacheGet NoCache _ = return Nothing
 cacheGet _ key = rget key
 
 wpCacheSetInt :: RunRedis -> CacheBehavior -> WPKey -> Text -> IO ()
-wpCacheSetInt runRedis b key = void . runRedis . cacheSet b (formatKey key)
+wpCacheSetInt runRedis b key = void . runRedis . cacheSwitch b key
+
+cacheSwitch :: CacheBehavior -> WPKey -> Text -> Redis Bool
+cacheSwitch b k@(EndpointKey t) = cacheSetAlwaysExpire b (formatKey k)
+cacheSwitch b k = cacheSet b (formatKey k)
 
 cacheSet :: CacheBehavior -> Text -> Text -> Redis Bool
 cacheSet b k v =
   case b of
    (CacheSeconds n) -> rsetex k n v
    CacheForever -> rset k v
+   NoCache -> return True
+
+cacheSetAlwaysExpire :: CacheBehavior -> Text -> Text -> Redis Bool
+cacheSetAlwaysExpire b k v =
+  case b of
+   (CacheSeconds n) -> rsetex k n v
+   CacheForever -> rsetex k (10 * 60) v -- cache 10 minutes
    NoCache -> return True
 
 wpExpireAggregatesInt :: RunRedis -> IO Bool
