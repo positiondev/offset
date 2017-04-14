@@ -5,6 +5,7 @@
 module Web.Offset.Cache where
 
 import           Control.Concurrent     as CC
+import           Control.Logging        as L
 import           Control.Monad          (void)
 import           Data.Map               (Map)
 import qualified Data.Map               as Map
@@ -64,13 +65,15 @@ cachingGetInt :: WordpressInt b
 cachingGetInt WordpressInt{..} wpKey =
   do mCached <- wpCacheGet wpKey
      case mCached of
-       Just cached -> return $ Successful cached
+       Just cached -> do log' ("Offset: Cache Hit: " <> tshow wpKey)
+                         return $ Successful cached
        Nothing ->
          do running <- startReqMutex wpKey
             if running
                then return Retry
                else
-                 do o <- wpRequest wpKey
+                 do log' ("Offset: Cache Miss: " <> tshow wpKey)
+                    o <- wpRequest wpKey
                     case o of
                       Left errorCode ->
                         return $ Abort errorCode

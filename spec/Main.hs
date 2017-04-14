@@ -8,6 +8,7 @@ import           Prelude                 hiding ((++))
 
 import           Control.Concurrent.MVar
 import           Control.Lens            hiding ((.=))
+import           Control.Logging         (withStdoutLogging)
 import           Control.Monad           (void)
 import           Control.Monad.State     (evalStateT)
 import           Control.Monad.Trans     (liftIO)
@@ -26,7 +27,7 @@ import           Web.Offset
 import           Common
 
 runTests :: IO ()
-runTests = hspec $ do
+runTests = withStdoutLogging $ hspec $ do
   Misc.tests
   larcenyFillTests
   cacheTests
