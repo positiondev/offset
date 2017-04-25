@@ -100,7 +100,9 @@ wpExpireAggregatesInt :: RunRedis -> IO Bool
 wpExpireAggregatesInt runRedis = runRedis expireAggregates
 
 expireAggregates :: Redis Bool
-expireAggregates = rdelstar "wordpress:posts:*"
+expireAggregates = do
+  rdelstar "wordpress:endpoint:*"
+  rdelstar "wordpress:posts:*"
 
 wpExpirePostInt :: RunRedis -> WPKey -> IO Bool
 wpExpirePostInt runRedis = runRedis . expire
