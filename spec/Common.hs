@@ -190,7 +190,6 @@ initNoRequestWithCache :: IO Ctxt
 initNoRequestWithCache =
   initializer (Right $ Requester (\_ _ -> return (Right "") )) (CacheSeconds 600) ""
 
-
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
 ----------------------------------------------------------
