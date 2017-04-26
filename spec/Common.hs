@@ -59,6 +59,7 @@ article1 = object [ "id" .= (1 :: Int)
                   , "title" .= object ["rendered" .= ("<i>Foo</i> bar" :: Text)]
                   , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
                   , "departments" .= [ object [ "name" .= ("some department" :: Text)]]
+                  , "department" .= ("15" :: Text)
                   ]
 
 article2 :: Value
@@ -73,16 +74,28 @@ page1 = object [ "id" .= (3 :: Int)
                , "date" .= ("2014-10-20T07:00:00" :: Text)
                , "title" .= object ["rendered" .= ("Page foo" :: Text)]
                , "content" .= object ["rendered" .= ("<b>rendered</b> page content" :: Text)]
+               , "department" .= ("15" :: Text)
                ]
 
+department :: Value
+department = object [ "id" .= (2 :: Int)
+                    , "slug" .= ("2014-10-20T07:00:00" :: Text)
+                    , "name" .= ("Sports" :: Text)
+                    ]
+
 customFields :: [Field s]
-customFields = [N "featured_image" [N "attachment_meta" [N "sizes" [N "mag-featured" [F "width"
-                                                                                     ,F "height"
-                                                                                     ,F "url"]
-                                                                   ,N "single-featured" [F "width"
-                                                                                        ,F "height"
-                                                                                        ,F "url"]]]]
-               ,PM "departments" departmentFill ]
+customFields = [N "featured_image"
+                 [N "attachment_meta"
+                   [N "sizes"
+                     [N "mag-featured"
+                       [F "width"
+                       ,F "height"
+                       ,F "url"]
+                     ,N "single-featured" [F "width"
+                                          ,F "height"
+                                          ,F "url"]]]]
+               ,PM "departments" departmentFill
+               ,Q "department" (UseId "/wp/v2/department/") ]
 
 departmentFill :: [Object] -> Fill s
 departmentFill objs =
@@ -149,6 +162,8 @@ fauxRequester _ "/wp/v2/categories" [("slug", "bookmarx")] =
                        , "slug" .= ("bookmarx" :: Text)
                        , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
                        ] ]
+fauxRequester _ "//wp/v2/department/15" [] =
+  return $ Right $ enc department
 fauxRequester _ "/jacobin/featured-content/editors-picks" [] =
   return $ Right $ enc [object [ "post_date" .= ("2013-04-26 10:11:52" :: Text)
                        , "date" .= ("2014-04-26 10:11:52" :: Text)

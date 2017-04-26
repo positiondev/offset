@@ -24,6 +24,7 @@ module Web.Offset (
  , CatType
  , TaxSpecList(..)
  , Field(..)
+ , ToEndpoint(..)
  , mergeFields
  , attrToTaxSpecList
  ) where

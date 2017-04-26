@@ -34,10 +34,10 @@ import           Web.Offset.Types
 import           Web.Offset.Utils
 
 wordpressSubs ::   Wordpress b
-                 -> [Field s]
-                 -> StateT s IO Text
-                 -> WPLens b s
-                 -> Substitutions s
+              -> [Field s]
+              -> StateT s IO Text
+              -> WPLens b s
+              -> Substitutions s
 wordpressSubs wp extraFields getURI wpLens =
   subs [ ("wpPosts", wpPostsFill wp extraFields wpLens)
        , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
@@ -45,7 +45,7 @@ wordpressSubs wp extraFields getURI wpLens =
        , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
        , ("wp", wpPrefetch wp extraFields getURI wpLens)
        , ("wpCustom", wpCustomFill wp)
-       , ("wpCustomDate", wpCustomDateFill)]
+       , ("wpCustomDate", wpCustomDateFill) ]
 
 wpCustomDateFill :: Fill s
 wpCustomDateFill =
@@ -57,23 +57,25 @@ wpCustomDateFill =
               Nothing -> rawTextFill $ "<!-- Unable to parse date: " <> date <> " -->"
 
 wpCustomFill :: Wordpress b -> Fill s
-wpCustomFill Wordpress{..} =
-  useAttrs (a "endpoint") customFill
-  where customFill endpoint = Fill $ \attrs (path, tpl) lib ->
-          do let key = EndpointKey endpoint
-             res <- liftIO $ cachingGetRetry key
-             case fmap decode res of
-               Left code -> do
-                 let notification = "Encountered status code " <> tshow code
-                                   <> " when querying \"" <> endpoint <> "\"."
-                 liftIO $ wpLogger notification
-                 return $ "<!-- " <> notification <> " -->"
-               Right (Just (json :: Value)) ->
-                 unFill (jsonToFill json) attrs (path, tpl) lib
-               Right Nothing -> do
-                 let notification = "Unable to decode JSON for endpoint \"" <> endpoint
-                 liftIO $ wpLogger $ notification <> ": " <> tshow res
-                 return $ "<!-- " <> notification <> "-->"
+wpCustomFill wp =
+  useAttrs (a "endpoint") (customFill wp)
+
+customFill :: Wordpress b -> Text -> Fill s
+customFill Wordpress{..} endpoint = Fill $ \attrs (path, tpl) lib ->
+  do let key = EndpointKey endpoint
+     res <- liftIO $ cachingGetRetry key
+     case fmap decode res of
+       Left code -> do
+         let notification = "Encountered status code " <> tshow code
+                         <> " when querying \"" <> endpoint <> "\"."
+         liftIO $ wpLogger notification
+         return $ "<!-- " <> notification <> " -->"
+       Right (Just (json :: Value)) ->
+         unFill (jsonToFill json) attrs (path, tpl) lib
+       Right Nothing -> do
+         let notification = "Unable to decode JSON for endpoint \"" <> endpoint
+         liftIO $ wpLogger $ notification <> ": " <> tshow res
+         return $ "<!-- " <> notification <> "-->"
 
 jsonToFill :: Value -> Fill s
 jsonToFill (Object o) =
@@ -109,7 +111,7 @@ wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
          let postsND = take (qlimit postsQuery)
                        . noDuplicates (requestPostSet wp') $ postsW
          addPostIds wpLens (map fst postsND)
-         unFill (wpPostsHelper extraFields (map snd postsND)) mempty tpl lib
+         unFill (wpPostsHelper wp extraFields (map snd postsND)) mempty tpl lib
        Right Nothing -> return ""
        Left code -> do
          let notification = "Encountered status code " <> tshow code
@@ -130,10 +132,12 @@ mkFilters wp specLists =
             Just tSpecId -> return $ Just (TaxFilter tName tSpecId)
             Nothing -> return Nothing
 
-wpPostsHelper :: [Field s]
+wpPostsHelper :: Wordpress b
+              -> [Field s]
               -> [Object]
               -> Fill s
-wpPostsHelper extraFields postsND = mapSubs (postSubs extraFields) postsND
+wpPostsHelper wp extraFields postsND =
+  mapSubs (postSubs wp extraFields) postsND
 
 wpPostByPermalinkFill :: [Field s]
                       -> StateT s IO Text
@@ -151,7 +155,8 @@ wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
          do res <- wpGetPost wpLens (PostByPermalinkKey year month slug)
             case res of
               Just post -> do addPostIds wpLens [fst (extractPostId post)]
-                              return $ Just (postSubs extraFields post)
+                              wp <- use wpLens
+                              return $ Just (postSubs wp extraFields post)
               _ -> return Nothing
 
 wpNoPostDuplicatesFill :: WPLens b s -> Fill s
@@ -177,10 +182,12 @@ wpPageFill wpLens =
                                       _ -> ""
                        _ -> ""
 
-postSubs :: [Field s] -> Object -> Substitutions s
-postSubs extra object = subs (map (buildSplice object) (mergeFields postFields extra))
+postSubs :: Wordpress b -> [Field s] -> Object -> Substitutions s
+postSubs wp extra object = subs (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
           (transformName n, rawTextFill $ getText n o)
+        buildSplice o (Q n endpoint) =
+          (transformName n, customFill wp (toEndpoint endpoint $ getText n o))
         buildSplice o (P n fill') =
           (transformName n, fill' $ getText n o)
         buildSplice o (PN n fill') =
