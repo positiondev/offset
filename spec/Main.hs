@@ -174,15 +174,6 @@ cacheTests = do
          wpCacheSet' (view wordpress ctxt) key (enc article1)
          wpCacheGet' (view wordpress ctxt) key >>= shouldBe (Just (enc article1))
 
-    describe "wpCustom" $ do
-      it "should find single endpoint json after expire aggregates is called" $ do
-        ctxt <- initNoRequestWithCache
-        void $ wpCacheSet' (view wordpress ctxt) (EndpointKey "some-endpoint")
-                                                  (enc article1)
-        void $ wpExpireAggregates' (view wordpress ctxt)
-        p <- wpCacheGet' (view wordpress ctxt) (EndpointKey "some-endpoint")
-        p `shouldBe` (Just $ enc article1)
-
 queryTests :: Spec
 queryTests =
   describe "generate queries from <wpPosts>" $ do
