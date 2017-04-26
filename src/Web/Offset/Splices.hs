@@ -143,7 +143,10 @@ wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
   do uri <- getURI
      let mperma = parsePermalink uri
      case mperma of
-       Nothing -> return Nothing
+       Nothing -> do
+         w@Wordpress{..} <- use wpLens
+         liftIO $ wpLogger $ "unable to parse URI: " <> uri
+         return Nothing
        Just (year, month, slug) ->
          do res <- wpGetPost wpLens (PostByPermalinkKey year month slug)
             case res of
@@ -300,7 +303,7 @@ findDict dicts (TaxSpecList tName tList) =
 parsePermalink :: Text -> Maybe (Text, Text, Text)
 parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
   where parser = do _ <- A.option ' ' (A.char '/')
-                    guls <- A.many1 (A.letter <|> A.char '-')
+                    guls <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
                     _ <- A.char '/'
                     htnom <- A.count 2 A.digit
                     _ <- A.char '/'
