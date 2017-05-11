@@ -31,10 +31,25 @@ runTests = hspec $ do
   larcenyFillTests
   cacheTests
   queryTests
+  feedTests
   liveTests
 
 main :: IO ()
 main = runTests
+
+feedTests :: Spec
+feedTests =
+  describe "rss feed" $
+    it "should make a feed" $ do
+      ctxt <- initFauxRequestNoCache
+      let wpfeed = WPFeed
+                     "https://myurl.com"
+                     "My Blog"
+                     Nothing
+                     Nothing
+                     (renderFeedContent ctxt)
+      ft <- toXMLFeed (_wordpress ctxt) wpfeed
+      ft `shouldBe` "<?xml version='1.0' ?>\n<feed>\n  <id>https://myurl.com</id>\n  <title type=\"text\">My Blog</title>\n  <updated>2014-10-20T07:00:00Z</updated>\n  <entry>\n    <id>http://localhost/2014/10/a-fourth-post/</id>\n    <title type=\"html\">&lt;i&gt;Foo&lt;/i&gt; bar</title>\n    <updated>2014-10-20T07:00:00Z</updated>\n    <published>2014-10-20T07:00:00Z</published>\n    <summary type=\"html\">summary</summary>\n    <content type=\"html\">This is the title: &lt;i&gt;Foo&lt;/i&gt; bar</content>\n    <author>\n      <name>Emma Goldman</name>\n    </author>\n  </entry>\n</feed>\n"
 
 --larcenyFillTests :: SpecM () ()
 larcenyFillTests :: Spec

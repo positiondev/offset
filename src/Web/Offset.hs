@@ -27,6 +27,9 @@ module Web.Offset (
  , ToEndpoint(..)
  , mergeFields
  , attrToTaxSpecList
+ , feedSubs
+ , toXMLFeed
+ , WPFeed(..)
  ) where
 
 import           Web.Offset.Cache.Types
@@ -34,4 +37,5 @@ import           Web.Offset.Field
 import           Web.Offset.HTTP
 import           Web.Offset.Init
 import           Web.Offset.Splices
+import Web.Offset.Feed
 import           Web.Offset.Types

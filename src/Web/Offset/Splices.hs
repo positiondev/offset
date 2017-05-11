@@ -159,6 +159,20 @@ wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
                               return $ Just (postSubs wp extraFields post)
               _ -> return Nothing
 
+
+feedSubs :: [Field s] -> WPLens b s -> Object -> Substitutions s
+feedSubs fields lens obj=
+  subs $ [("wpPost", wpPostFromObjectFill fields lens obj)]
+
+wpPostFromObjectFill :: [Field s]
+                      -> WPLens b s
+                      -> Object
+                      -> Fill s
+wpPostFromObjectFill extraFields wpLens postObj = maybeFillChildrenWith' $
+  do  addPostIds wpLens [fst (extractPostId postObj)]
+      wp <- use wpLens
+      return $ Just (postSubs wp extraFields postObj)
+
 wpNoPostDuplicatesFill :: WPLens b s -> Fill s
 wpNoPostDuplicatesFill wpLens = rawTextFill' $
   do w@Wordpress{..} <- use wpLens
