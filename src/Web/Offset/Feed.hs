@@ -46,8 +46,8 @@ getWPEntries wp = do
         Just posts -> return posts
         Nothing -> error $ "Couldn't decode: " <> T.unpack resp
 
-allQuery :: WPQuery
-allQuery =
+allPostsQuery :: WPQuery
+allPostsQuery =
   WPPostsQuery{ qlimit = 20
               , qnum = 20
               , qoffset = 0
