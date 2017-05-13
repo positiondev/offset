@@ -1,16 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards        #-}
 
 module Web.Offset.Feed where
 
 import           Control.Monad.State
 import           Data.Aeson              hiding (decode, encode, json, object)
+import           Data.Aeson.Types (parseMaybe)
 import           Data.Maybe              (fromMaybe)
 import           Data.Monoid
 import           Text.XML.Light
 import           Data.Time.Clock
-import           Web.Atom
+import           Data.Time.Format (defaultTimeLocale, formatTime)
+import           Web.Atom hiding (Link)
+import qualified Web.Atom as A (Link(..))
 import qualified Data.Text               as T
 
 import           Web.Offset.Utils
@@ -18,19 +22,21 @@ import           Web.Offset.Field
 import           Web.Offset.Splices
 import           Web.Offset.Types
 import           Web.Offset.Date
+import           Web.Offset.Link
 
 data WPFeed =
   WPFeed { wpFeedURI :: T.Text
          , wpFeedTitle :: T.Text
          , wpFeedIcon :: Maybe T.Text
          , wpFeedLogo :: Maybe T.Text
+         , wpBuildLinks :: Object -> [Link]
          , wpRenderEntry :: Object -> IO (Maybe T.Text) }
 
 toXMLFeed :: Wordpress b -> WPFeed -> IO T.Text
-toXMLFeed wp (WPFeed uri title icon logo renderer) = do
+toXMLFeed wp (WPFeed uri title icon logo linkmaker renderer) = do
   wpEntries <- getWPEntries wp
   let mostRecentUpdate = maximum (map wpEntryUpdated wpEntries)
-  entries <- mapM (toEntry renderer) wpEntries
+  entries <- mapM (toEntry linkmaker renderer) wpEntries
   let feed = (makeFeed (unsafeURI $ T.unpack uri) (TextPlain title) mostRecentUpdate)
              { feedIcon = unsafeURI <$> T.unpack <$> icon
              , feedLogo = unsafeURI <$> T.unpack <$> logo
@@ -39,7 +45,7 @@ toXMLFeed wp (WPFeed uri title icon logo renderer) = do
 
 getWPEntries :: Wordpress b -> IO [WPEntry]
 getWPEntries wp = do
-  res <- liftIO $ cachingGetRetry wp (mkWPKey [] allQuery)
+  res <- liftIO $ cachingGetRetry wp (mkWPKey [] allPostsQuery)
   case res of
     Left statusCode -> error $ "Status code error: " ++ show statusCode
     Right resp ->
@@ -65,21 +71,36 @@ xmlgen = XMLGen
     , xmlTextNode = \t          -> Text $ CData CDataText (T.unpack t) Nothing
     , xmlElemNode = Elem }
 
-wpEntryContent :: (Object -> IO (Maybe T.Text)) -> WPEntry -> IO (Maybe (Web.Atom.Content e))
+wpEntryContent :: (Object -> IO (Maybe T.Text))
+               -> WPEntry
+               -> IO (Maybe (Web.Atom.Content e))
 wpEntryContent f wpentry =
   do rendered <- f (wpEntryJSON wpentry)
      case rendered of
        Just x -> return $ Just (InlineHTMLContent x)
        Nothing -> return Nothing
 
-toEntry :: (Object -> IO (Maybe T.Text)) -> WPEntry -> IO (Entry e)
-toEntry f e@(WPEntry uri title updated published summary authors _json) = do
-  content <- wpEntryContent f e
-  return (makeEntry (unsafeURI uri) (TextHTML title) updated)
-           { entryPublished = Just published
-           , entrySummary = Just (TextHTML summary)
-           , entryContent = content
-           , entryAuthors = map unWP authors }
+toEntry :: (Object -> [Link])
+        -> (Object -> IO (Maybe T.Text))
+        -> WPEntry
+        -> IO (Entry e)
+toEntry buildLinks renderContent entry@WPEntry{..} = do
+  content <- wpEntryContent renderContent entry
+  let baseEntry = makeEntry (unsafeURI wpEntryId) (TextHTML wpEntryTitle) wpEntryUpdated
+  return $ baseEntry { entryPublished = Just wpEntryPublished
+                     , entrySummary = Just (TextHTML wpEntrySummary)
+                     , entryContent = content
+                     , entryAuthors = map unWP wpEntryAuthors
+                     , entryLinks = map toAtomLink (buildLinks wpEntryJSON)}
+
+toAtomLink :: Link -> A.Link
+toAtomLink (Link href title) =
+  A.Link { linkHref = unsafeURI $ T.unpack href
+         , linkRel = Nothing
+         , linkType = Nothing
+         , linkHrefLang = Nothing
+         , linkTitle = Just title
+         , linkLength = Nothing }
 
 data WPEntry =
   WPEntry { wpEntryId :: String

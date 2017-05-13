@@ -59,12 +59,12 @@ article1 = object [ "id" .= (1 :: Int)
                   , "date" .= ("2014-10-20T07:00:00" :: T.Text)
                   , "modified" .= ("2014-10-20T07:00:00" :: T.Text)
                   , "guid" .= object ["rendered" .= ("http://localhost/2014/10/a-fourth-post/" :: T.Text)]
+                  , "slug" .= ("foo-bar" :: T.Text)
                   , "title" .= object ["rendered" .= ("<i>Foo</i> bar" :: T.Text)]
                   , "excerpt" .= object ["rendered" .= ("summary" :: T.Text)]
                   , "departments" .= [ object [ "name" .= ("some department" :: T.Text)]]
                   , "department" .= ("15" :: T.Text)
-                  , "authors" .= [ object ["name" .= ("Emma Goldman" :: T.Text)]]
-                  , "format" .= ("standard" :: T.Text) ]
+                  , "authors" .= [ object ["name" .= ("Emma Goldman" :: T.Text)] ] ]
 
 article2 :: Value
 article2 = object [ "id" .= (2 :: Int)
@@ -155,6 +155,10 @@ renderLarceny ctxt name =
 renderFeedContent :: Ctxt -> Object -> IO (Maybe T.Text)
 renderFeedContent ctxt obj =
   renderWith tplLibrary (feedSubs [] wordpress obj) ctxt ["feed"]
+
+buildEntryLinks :: Object -> [Link]
+buildEntryLinks o =
+  maybeToList $ permalinkBuilder "https://myurl.com" o
 
 fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO (Either StatusCode Text)
 fauxRequester _ "/wp/v2/tags" [("slug", "home-featured")] =

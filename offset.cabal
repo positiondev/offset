@@ -93,6 +93,7 @@ Test-Suite test-offset
                      , hedis
                      , directory
                      , dotenv
+                     , hspec-expectations-pretty-diff
                      , wai
                      , hspec >= 2
                      , hspec-core
