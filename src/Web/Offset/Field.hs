@@ -12,6 +12,8 @@ import           Data.Time.Clock  (UTCTime)
 import           Data.Time.Format (defaultTimeLocale, formatTime, parseTimeM)
 import           Web.Larceny
 
+import Web.Offset.Date
+
 data Field s = F Text -- A single flat field
              | Q Text ToEndpoint -- A field that will make another request
              | P Text (Text -> Fill s) -- A customly parsed flat field
@@ -112,13 +114,6 @@ datePartSubs date = subs [ ("wpYear",     datePartFill "%0Y" date)
           useAttrs (a "format") $ \mf ->
                    let f = fromMaybe defaultFormat mf in
                    rawTextFill $ T.pack $ formatTime defaultTimeLocale (T.unpack f) utcTime
-
-parseWPDate :: Text -> Text -> Maybe UTCTime
-parseWPDate wpFormat date =
-  parseTimeM False
-             defaultTimeLocale
-             (T.unpack wpFormat)
-             (T.unpack date) :: Maybe UTCTime
 
 wpDateFill :: Text -> Fill s
 wpDateFill date =

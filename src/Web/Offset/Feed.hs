@@ -17,6 +17,7 @@ import           Web.Offset.Utils
 import           Web.Offset.Field
 import           Web.Offset.Splices
 import           Web.Offset.Types
+import           Web.Offset.Date
 
 data WPFeed =
   WPFeed { wpFeedURI :: T.Text
@@ -109,9 +110,3 @@ instance FromJSON WPPerson where
   parseJSON (Object v) =
     WPPerson <$> (Person <$> v .: "name" <*> return Nothing <*> return Nothing)
   parseJSON _ = error "bad author"
-
-jsonParseDate :: Value -> UTCTime
-jsonParseDate (String t) =
-  fromMaybe (error $ "Unable to parse date: " ++ show t)
-    $ parseWPDate "%Y-%m-%dT%H:%M:%S" t
-jsonParseDate _ = error "Unable to parse date."
