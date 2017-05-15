@@ -29,19 +29,30 @@ data WPFeed =
          , wpFeedTitle :: T.Text
          , wpFeedIcon :: Maybe T.Text
          , wpFeedLogo :: Maybe T.Text
+         , wpBaseURI :: T.Text
          , wpBuildLinks :: Object -> [Link]
          , wpRenderEntry :: Object -> IO (Maybe T.Text) }
 
 toXMLFeed :: Wordpress b -> WPFeed -> IO T.Text
-toXMLFeed wp (WPFeed uri title icon logo linkmaker renderer) = do
+toXMLFeed wp wpFeed@(WPFeed uri title icon logo base linkmaker renderer) = do
   wpEntries <- getWPEntries wp
   let mostRecentUpdate = maximum (map wpEntryUpdated wpEntries)
-  entries <- mapM (toEntry linkmaker renderer) wpEntries
+  entries <- mapM (toEntry wpFeed) wpEntries
   let feed = (makeFeed (unsafeURI $ T.unpack uri) (TextPlain title) mostRecentUpdate)
              { feedIcon = unsafeURI <$> T.unpack <$> icon
              , feedLogo = unsafeURI <$> T.unpack <$> logo
              , feedEntries = entries }
   return $ T.pack $ ppTopElement $ feedXML xmlgen feed
+
+-- Copy-pasted from atom-basic docs
+xmlgen :: XMLGen Element Text.XML.Light.Content QName Attr
+xmlgen = XMLGen
+    { xmlElem     = \n as ns    -> Element n as ns Nothing
+    , xmlName     = \nsMay name -> QName (T.unpack name)
+                                          (fmap T.unpack nsMay) Nothing
+    , xmlAttr     = \k v        -> Attr k (T.unpack v)
+    , xmlTextNode = \t          -> Text $ CData CDataText (T.unpack t) Nothing
+    , xmlElemNode = Elem }
 
 getWPEntries :: Wordpress b -> IO [WPEntry]
 getWPEntries wp = do
@@ -62,36 +73,24 @@ allPostsQuery =
               , qtaxes = []
               , quser = Nothing }
 
-xmlgen :: XMLGen Element Text.XML.Light.Content QName Attr
-xmlgen = XMLGen
-    { xmlElem     = \n as ns    -> Element n as ns Nothing
-    , xmlName     = \nsMay name -> QName (T.unpack name)
-                                          (fmap T.unpack nsMay) Nothing
-    , xmlAttr     = \k v        -> Attr k (T.unpack v)
-    , xmlTextNode = \t          -> Text $ CData CDataText (T.unpack t) Nothing
-    , xmlElemNode = Elem }
-
 wpEntryContent :: (Object -> IO (Maybe T.Text))
                -> WPEntry
                -> IO (Maybe (Web.Atom.Content e))
-wpEntryContent f wpentry =
-  do rendered <- f (wpEntryJSON wpentry)
-     case rendered of
-       Just x -> return $ Just (InlineHTMLContent x)
-       Nothing -> return Nothing
+wpEntryContent renderer wpentry =
+  (fmap . fmap) InlineHTMLContent (renderer $ wpEntryJSON wpentry)
 
-toEntry :: (Object -> [Link])
-        -> (Object -> IO (Maybe T.Text))
+toEntry :: WPFeed
         -> WPEntry
         -> IO (Entry e)
-toEntry buildLinks renderContent entry@WPEntry{..} = do
-  content <- wpEntryContent renderContent entry
-  let baseEntry = makeEntry (unsafeURI wpEntryId) (TextHTML wpEntryTitle) wpEntryUpdated
+toEntry wpFeed entry@WPEntry{..} = do
+  content <- wpEntryContent (wpRenderEntry wpFeed) entry
+  let guid = entryGuid (wpBaseURI wpFeed) wpEntryId wpEntryJSON
+  let baseEntry = makeEntry guid (TextHTML wpEntryTitle) wpEntryUpdated
   return $ baseEntry { entryPublished = Just wpEntryPublished
                      , entrySummary = Just (TextHTML wpEntrySummary)
                      , entryContent = content
                      , entryAuthors = map unWP wpEntryAuthors
-                     , entryLinks = map toAtomLink (buildLinks wpEntryJSON)}
+                     , entryLinks = map toAtomLink (wpBuildLinks wpFeed wpEntryJSON)}
 
 toAtomLink :: Link -> A.Link
 toAtomLink (Link href title) =
@@ -103,7 +102,7 @@ toAtomLink (Link href title) =
          , linkLength = Nothing }
 
 data WPEntry =
-  WPEntry { wpEntryId :: String
+  WPEntry { wpEntryId :: Int
           , wpEntryTitle :: T.Text
           , wpEntryUpdated :: UTCTime
           , wpEntryPublished :: UTCTime
@@ -113,8 +112,7 @@ data WPEntry =
 
 instance FromJSON WPEntry where
   parseJSON (Object v) =
-    WPEntry <$> (do t <- v .: "guid"
-                    t .: "rendered") <*>
+    WPEntry <$> v .: "id" <*>
                 (do t <- v .: "title"
                     t .: "rendered") <*>
                 (jsonParseDate <$> (v .:"modified")) <*>
@@ -131,3 +129,10 @@ instance FromJSON WPPerson where
   parseJSON (Object v) =
     WPPerson <$> (Person <$> v .: "name" <*> return Nothing <*> return Nothing)
   parseJSON _ = error "bad author"
+
+entryGuid :: T.Text -> Int -> Object -> URI
+entryGuid baseURI wpId wpJSON =
+  unsafeURI $ T.unpack $
+    case permalinkBuilder baseURI wpJSON of
+      Just permalink -> Web.Offset.Link.linkHref permalink
+      Nothing -> baseURI <> "/posts?id=" <> tshow wpId

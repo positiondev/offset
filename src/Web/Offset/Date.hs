@@ -22,3 +22,6 @@ parseWPDate wpFormat date =
              defaultTimeLocale
              (T.unpack wpFormat)
              (T.unpack date) :: Maybe UTCTime
+
+iso8601Format :: UTCTime -> String
+iso8601Format = formatTime defaultTimeLocale "%Y-%m-%d"

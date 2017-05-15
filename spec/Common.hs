@@ -58,7 +58,6 @@ article1 :: Value
 article1 = object [ "id" .= (1 :: Int)
                   , "date" .= ("2014-10-20T07:00:00" :: T.Text)
                   , "modified" .= ("2014-10-20T07:00:00" :: T.Text)
-                  , "guid" .= object ["rendered" .= ("http://localhost/2014/10/a-fourth-post/" :: T.Text)]
                   , "slug" .= ("foo-bar" :: T.Text)
                   , "title" .= object ["rendered" .= ("<i>Foo</i> bar" :: T.Text)]
                   , "excerpt" .= object ["rendered" .= ("summary" :: T.Text)]

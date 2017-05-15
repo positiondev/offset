@@ -20,8 +20,8 @@ import           Web.Offset.Splices
 import           Web.Offset.Types
 import           Web.Offset.Date
 
-data Link = Link { feedLinkHref :: T.Text
-                 , feedLinkTitle :: T.Text } deriving (Eq, Show)
+data Link = Link { linkHref :: T.Text
+                 , linkTitle :: T.Text } deriving (Eq, Show)
 
 data Permalink =
   Permalink { pYear :: T.Text
@@ -42,12 +42,12 @@ instance FromJSON Permalink where
               jsonParseDate <$> (v .: "date")
   parseJSON _ = error "bad post"
 
-toFeedLink :: T.Text -> Permalink -> Link
-toFeedLink baseurl (Permalink y m s t) =
-  Link (baseurl </> y </> m </> s) t
+permalinkToLink :: T.Text -> Permalink -> Link
+permalinkToLink baseurl (Permalink y m s t) =
+  Link (baseurl </> y </> m </> s <> "/") t
   where a </> b = a <> "/" <> b
 
 permalinkBuilder :: T.Text -> Object -> Maybe Link
 permalinkBuilder baseurl o =
   let permalink = parseMaybe parseJSON (Object o) :: Maybe Permalink in
-  (toFeedLink baseurl) <$> permalink
+    permalinkToLink baseurl <$> permalink
