@@ -38,7 +38,11 @@ toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _) = do
              { feedIcon = unsafeURI <$> T.unpack <$> icon
              , feedLogo = unsafeURI <$> T.unpack <$> logo
              , feedEntries = entries }
-  return $ T.pack $ ppTopElement $ feedXML xmlgen feed
+  return $ T.pack $ ppTopElement $ fixNamespace $ feedXML xmlgen feed
+
+fixNamespace :: Element -> Element
+fixNamespace el@(Element _name attrs _content _line) =
+  el { elAttribs = Attr (QName "atom" Nothing (Just "xmlns")) "http://www.w3.org/2005/Atom" : attrs }
 
 -- Copy-pasted from atom-basic docs
 xmlgen :: XMLGen Element Text.XML.Light.Content QName Attr
