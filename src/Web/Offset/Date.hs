@@ -2,9 +2,8 @@
 
 module Web.Offset.Date where
 
-import           Data.Aeson       (Object, Value(..))
+import           Data.Aeson       (Value (..))
 import           Data.Maybe       (fromMaybe)
-import           Data.Monoid      ((<>))
 import           Data.Text        (Text)
 import qualified Data.Text        as T
 import           Data.Time.Clock  (UTCTime)

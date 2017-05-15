@@ -1,40 +1,36 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE RecordWildCards        #-}
+{-# LANGUAGE RecordWildCards     #-}
 
 module Web.Offset.Feed where
 
 import           Control.Monad.State
-import           Data.Aeson              hiding (decode, encode, json, object)
-import           Data.Aeson.Types (parseMaybe)
-import           Data.Maybe              (fromMaybe)
+import           Data.Aeson          hiding (decode, encode, json, object)
 import           Data.Monoid
-import           Text.XML.Light
+import qualified Data.Text           as T
 import           Data.Time.Clock
-import           Data.Time.Format (defaultTimeLocale, formatTime)
-import           Web.Atom hiding (Link)
-import qualified Web.Atom as A (Link(..))
-import qualified Data.Text               as T
+import           Text.XML.Light
+import           Web.Atom            hiding (Link)
+import qualified Web.Atom            as A (Link (..))
 
-import           Web.Offset.Utils
-import           Web.Offset.Field
-import           Web.Offset.Splices
-import           Web.Offset.Types
 import           Web.Offset.Date
 import           Web.Offset.Link
+import           Web.Offset.Splices
+import           Web.Offset.Types
+import           Web.Offset.Utils
 
 data WPFeed =
-  WPFeed { wpFeedURI :: T.Text
-         , wpFeedTitle :: T.Text
-         , wpFeedIcon :: Maybe T.Text
-         , wpFeedLogo :: Maybe T.Text
-         , wpBaseURI :: T.Text
-         , wpBuildLinks :: Object -> [Link]
+  WPFeed { wpFeedURI     :: T.Text
+         , wpFeedTitle   :: T.Text
+         , wpFeedIcon    :: Maybe T.Text
+         , wpFeedLogo    :: Maybe T.Text
+         , wpBaseURI     :: T.Text
+         , wpBuildLinks  :: Object -> [Link]
          , wpRenderEntry :: Object -> IO (Maybe T.Text) }
 
 toXMLFeed :: Wordpress b -> WPFeed -> IO T.Text
-toXMLFeed wp wpFeed@(WPFeed uri title icon logo base linkmaker renderer) = do
+toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _) = do
   wpEntries <- getWPEntries wp
   let mostRecentUpdate = maximum (map wpEntryUpdated wpEntries)
   entries <- mapM (toEntry wpFeed) wpEntries
@@ -102,13 +98,13 @@ toAtomLink (Link href title) =
          , linkLength = Nothing }
 
 data WPEntry =
-  WPEntry { wpEntryId :: Int
-          , wpEntryTitle :: T.Text
-          , wpEntryUpdated :: UTCTime
+  WPEntry { wpEntryId        :: Int
+          , wpEntryTitle     :: T.Text
+          , wpEntryUpdated   :: UTCTime
           , wpEntryPublished :: UTCTime
-          , wpEntrySummary :: T.Text
-          , wpEntryAuthors :: [WPPerson]
-          , wpEntryJSON :: Object } deriving (Eq, Show)
+          , wpEntrySummary   :: T.Text
+          , wpEntryAuthors   :: [WPPerson]
+          , wpEntryJSON      :: Object } deriving (Eq, Show)
 
 instance FromJSON WPEntry where
   parseJSON (Object v) =
