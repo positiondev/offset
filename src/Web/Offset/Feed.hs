@@ -133,6 +133,6 @@ instance FromJSON WPPerson where
 entryGuid :: T.Text -> Int -> Object -> URI
 entryGuid baseURI wpId wpJSON =
   unsafeURI $ T.unpack $
-    case permalinkBuilder baseURI wpJSON of
+    case buildPermalink baseURI wpJSON of
       Just permalink -> Web.Offset.Link.linkHref permalink
       Nothing -> baseURI <> "/posts?id=" <> tshow wpId

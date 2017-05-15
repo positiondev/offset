@@ -31,7 +31,7 @@ module Web.Offset (
  , toXMLFeed
  , WPFeed(..)
  , Link(..)
- , permalinkBuilder
+ , buildPermalink
  ) where
 
 import           Web.Offset.Cache.Types

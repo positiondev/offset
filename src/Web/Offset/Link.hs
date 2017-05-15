@@ -47,7 +47,7 @@ permalinkToLink baseurl (Permalink y m s t) =
   Link (baseurl </> y </> m </> s <> "/") t
   where a </> b = a <> "/" <> b
 
-permalinkBuilder :: T.Text -> Object -> Maybe Link
-permalinkBuilder baseurl o =
+buildPermalink :: T.Text -> Object -> Maybe Link
+buildPermalink baseurl o =
   let permalink = parseMaybe parseJSON (Object o) :: Maybe Permalink in
     permalinkToLink baseurl <$> permalink

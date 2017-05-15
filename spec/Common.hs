@@ -157,7 +157,7 @@ renderFeedContent ctxt obj =
 
 buildEntryLinks :: Object -> [Link]
 buildEntryLinks o =
-  maybeToList $ permalinkBuilder "https://myurl.com" o
+  maybeToList $ buildPermalink "https://myurl.com" o
 
 fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO (Either StatusCode Text)
 fauxRequester _ "/wp/v2/tags" [("slug", "home-featured")] =
