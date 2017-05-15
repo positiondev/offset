@@ -13,6 +13,7 @@ import           Control.Monad.State     (StateT, evalStateT)
 import qualified Control.Monad.State     as S
 import           Control.Monad.Trans     (liftIO)
 import           Data.Aeson              hiding (Success)
+import Data.Aeson.Types (parseMaybe)
 import           Data.Default
 import qualified Data.HashMap.Strict     as HM
 import qualified Data.Map                as M
@@ -55,12 +56,14 @@ enc val = TL.toStrict . TL.decodeUtf8 . encode $ val
 
 article1 :: Value
 article1 = object [ "id" .= (1 :: Int)
-                  , "date" .= ("2014-10-20T07:00:00" :: Text)
-                  , "title" .= object ["rendered" .= ("<i>Foo</i> bar" :: Text)]
-                  , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
-                  , "departments" .= [ object [ "name" .= ("some department" :: Text)]]
-                  , "department" .= ("15" :: Text)
-                  ]
+                  , "date" .= ("2014-10-20T07:00:00" :: T.Text)
+                  , "modified" .= ("2014-10-20T07:00:00" :: T.Text)
+                  , "slug" .= ("foo-bar" :: T.Text)
+                  , "title" .= object ["rendered" .= ("<i>Foo</i> bar" :: T.Text)]
+                  , "excerpt" .= object ["rendered" .= ("summary" :: T.Text)]
+                  , "departments" .= [ object [ "name" .= ("some department" :: T.Text)]]
+                  , "department" .= ("15" :: T.Text)
+                  , "authors" .= [ object ["name" .= ("Emma Goldman" :: T.Text)] ] ]
 
 article2 :: Value
 article2 = object [ "id" .= (2 :: Int)
@@ -135,7 +138,7 @@ tplLibrary =
              ,(["custom-endpoint-object"], parse "<wpCustom endpoint=\"wp/v2/taxonomies\"><wpCategory><wpRestBase /></wpCategory></wpCustom>")
              ,(["custom-endpoint-array"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpDate /></wpCustom>")
              ,(["custom-endpoint-enter-the-matrix"], parse "<wpCustom endpoint=\"wp/v2/posts\"><wpCustom endpoint=\"wp/v2/posts/${wpId}\"><wpDate /></wpCustom></wpCustom>")
-               ]
+             ,(["feed"], parse "<wpPost>This is the title: <wpTitle /></wpPost>") ]
 
 renderLarceny :: Ctxt ->
                  Text ->
@@ -147,6 +150,14 @@ renderLarceny ctxt name =
          rendered <- evalStateT (runTemplate t [name] (ctxt ^. wpsubs) tplLibrary) ctxt
          return $ Just rendered
        _ -> return Nothing
+
+renderFeedContent :: Ctxt -> Object -> IO (Maybe T.Text)
+renderFeedContent ctxt obj =
+  renderWith tplLibrary (feedSubs [] wordpress obj) ctxt ["feed"]
+
+buildEntryLinks :: Object -> [Link]
+buildEntryLinks o =
+  maybeToList $ buildPermalink "https://myurl.com" o
 
 fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO (Either StatusCode Text)
 fauxRequester _ "/wp/v2/tags" [("slug", "home-featured")] =
@@ -285,9 +296,7 @@ shouldQueryTo hQuery wpQuery =
       x <- liftIO $ tryTakeMVar record
       x `shouldBe` Just wpQuery
 
-
 -- live test helpers
-
 
 rendersDifferentlyFrom :: (TemplateName, Ctxt)
                        -> TemplateName

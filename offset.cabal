@@ -16,6 +16,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:
                   Web.Offset
+                , Web.Offset.Feed
                 , Web.Offset.Internal
                 , Web.Offset.Types
                 , Web.Offset.Field
@@ -28,6 +29,8 @@ library
                 , Web.Offset.Cache.Redis
                 , Web.Offset.Posts
                 , Web.Offset.Utils
+                , Web.Offset.Date
+                , Web.Offset.Link
   -- other-extensions:
   build-depends:       aeson
                      , base < 4.9
@@ -52,6 +55,8 @@ library
                      , attoparsec
                      , larceny
                      , scientific
+                     , atom-basic
+                     , xml
   hs-source-dirs: src
   default-language:    Haskell2010
 
@@ -62,6 +67,7 @@ Test-Suite test-offset
     other-modules: Misc
                  , Common
                  , Web.Offset
+                 , Web.Offset.Feed
                  , Web.Offset.Cache
                  , Web.Offset.Cache.Redis
                  , Web.Offset.Cache.Types
@@ -74,6 +80,8 @@ Test-Suite test-offset
                  , Web.Offset.Splices
                  , Web.Offset.Types
                  , Web.Offset.Utils
+                 , Web.Offset.Date
+                 , Web.Offset.Link
     build-depends:     base
                      , aeson
                      , async
@@ -89,6 +97,7 @@ Test-Suite test-offset
                      , hedis
                      , directory
                      , dotenv
+                     , hspec-expectations-pretty-diff
                      , wai
                      , hspec >= 2
                      , hspec-core
@@ -103,4 +112,6 @@ Test-Suite test-offset
                      , wreq >= 0.3
                      , xmlhtml >= 0.2.3.2
                      , scientific
+                     , atom-basic
+                     , xml
     default-language: Haskell2010

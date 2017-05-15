@@ -23,4 +23,5 @@ extra-deps:
 - wai-session-clientsession-0.1
 - warp-3.2.6
 - html-entities-1.1.3
+- atom-basic-0.2.4
 resolver: lts-5.14

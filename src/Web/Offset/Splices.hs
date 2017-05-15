@@ -30,6 +30,7 @@ import           Web.Larceny
 import           Web.Offset.Field
 import           Web.Offset.Posts
 import           Web.Offset.Queries
+import           Web.Offset.Date
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
@@ -158,6 +159,20 @@ wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
                               wp <- use wpLens
                               return $ Just (postSubs wp extraFields post)
               _ -> return Nothing
+
+
+feedSubs :: [Field s] -> WPLens b s -> Object -> Substitutions s
+feedSubs fields lens obj=
+  subs $ [("wpPost", wpPostFromObjectFill fields lens obj)]
+
+wpPostFromObjectFill :: [Field s]
+                      -> WPLens b s
+                      -> Object
+                      -> Fill s
+wpPostFromObjectFill extraFields wpLens postObj = maybeFillChildrenWith' $
+  do  addPostIds wpLens [fst (extractPostId postObj)]
+      wp <- use wpLens
+      return $ Just (postSubs wp extraFields postObj)
 
 wpNoPostDuplicatesFill :: WPLens b s -> Fill s
 wpNoPostDuplicatesFill wpLens = rawTextFill' $
