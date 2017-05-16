@@ -42,7 +42,7 @@ toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _) = do
 
 fixNamespace :: Element -> Element
 fixNamespace el@(Element _name attrs _content _line) =
-  el { elAttribs = Attr (QName "atom" Nothing (Just "xmlns")) "http://www.w3.org/2005/Atom" : attrs }
+  el { elAttribs = Attr (QName "xmlns" Nothing Nothing) "http://www.w3.org/2005/Atom" : attrs }
 
 -- Copy-pasted from atom-basic docs
 xmlgen :: XMLGen Element Text.XML.Light.Content QName Attr
