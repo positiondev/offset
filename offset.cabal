@@ -33,7 +33,7 @@ library
                 , Web.Offset.Link
   -- other-extensions:
   build-depends:       aeson
-                     , base < 4.9
+                     , base < 5
                      , blaze-builder
                      , data-default
                      , hedis
