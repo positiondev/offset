@@ -13,7 +13,7 @@ import           Control.Monad.State     (StateT, evalStateT)
 import qualified Control.Monad.State     as S
 import           Control.Monad.Trans     (liftIO)
 import           Data.Aeson              hiding (Success)
-import Data.Aeson.Types (parseMaybe)
+import           Data.Aeson.Types        (parseMaybe)
 import           Data.Default
 import qualified Data.HashMap.Strict     as HM
 import qualified Data.Map                as M
@@ -184,6 +184,8 @@ fauxRequester _ "/wp/v2/pages" [("slug", "a-first-page")] =
   return $ Right $ enc [page1]
 fauxRequester _ "/dev/null" [] =
   return $ Right $ enc [object ["this_is_null" .= Null]]
+fauxRequester _ "/dev/rendered_text" [] =
+  return $ Right $ enc [object ["rendered_text" .= ("<i>Jezza</i>" :: Text)]]
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
