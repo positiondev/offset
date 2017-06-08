@@ -8,6 +8,7 @@ import           Data.Text           (Text)
 import qualified Data.Text           as T
 import           Test.Hspec
 import           Web.Offset
+import           Web.Offset.Splices  (stripTags)
 
 shouldTransformTo :: Text -> Text -> Spec
 shouldTransformTo from to =
@@ -66,3 +67,8 @@ tests = do
       show (attrToTaxSpecList ("tag", "+foo-bar,-baz,-qux")) `shouldBe` "tag: +foo-bar,-baz,-qux"
     it "should add plus to bare tag pluses in list roundtrip" $
       show (attrToTaxSpecList ("tag", "foo-bar,-baz,-qux")) `shouldBe` "tag: +foo-bar,-baz,-qux"
+  describe "stripTags" $ do
+    it "should strip nested tags" $
+      stripTags "<i>Now, <b>what?</b></i>" `shouldBe` "Now, what?"
+    it "should strip malformed nested tags" $
+      stripTags "<i>Now, <b>wha<j></j>>t?</b></i>" `shouldBe` "Now, wha>t?"

@@ -4,22 +4,23 @@
 
 module Main where
 
-import           Prelude                 hiding ((++))
+import           Prelude                        hiding ((++))
 
 import           Control.Concurrent.MVar
-import           Control.Lens            hiding ((.=))
-import           Control.Monad           (void)
-import           Control.Monad.State     (evalStateT)
-import           Control.Monad.Trans     (liftIO)
-import           Data.Aeson              hiding (Success)
+import           Control.Lens                   hiding ((.=))
+import           Control.Monad                  (void)
+import           Control.Monad.State            (evalStateT)
+import           Control.Monad.Trans            (liftIO)
+import           Data.Aeson                     hiding (Success)
 import           Data.Monoid
-import qualified Data.Set                as Set
-import qualified Data.Text.Encoding      as T
+import qualified Data.Set                       as Set
+import qualified Data.Text.Encoding             as T
 import qualified Misc
-import           Network.Wai             (defaultRequest, rawPathInfo)
-import           Test.Hspec hiding (shouldBe, shouldReturn, shouldNotBe)
-import           Web.Fn
+import           Network.Wai                    (defaultRequest, rawPathInfo)
+import           Test.Hspec                     hiding (shouldBe, shouldNotBe,
+                                                 shouldReturn)
 import           Test.Hspec.Expectations.Pretty
+import           Web.Fn
 import           Web.Larceny
 
 import           Web.Offset
@@ -119,7 +120,7 @@ larcenyFillTests = do
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Sports"
 
-  describe "<wpCustom>" $
+  describe "<wpCustom>" $ do
     it "should render an HTML comment if JSON field is null" $
       "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
   describe "<wpCustomDate>" $ do
@@ -139,6 +140,9 @@ larcenyFillTests = do
       "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
       \    <wpFullDate /> \
       \ </wpCustomDate>" `shouldRender` "04/26/13"
+  describe "<stripHtml>" $ do
+    it "should strip html from content inside" $
+      "<stripHtml><b>Bold?</b> or not</stripHtml>" `shouldRender` "Bold? or not"
 
 -- Caching tests
 

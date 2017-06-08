@@ -46,7 +46,19 @@ wordpressSubs wp extraFields getURI wpLens =
        , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
        , ("wp", wpPrefetch wp extraFields getURI wpLens)
        , ("wpCustom", wpCustomFill wp)
-       , ("wpCustomDate", wpCustomDateFill) ]
+       , ("wpCustomDate", wpCustomDateFill)
+       , ("stripHtml", stripHtmlFill)]
+
+stripTags :: Text -> Text
+stripTags ""         = ""
+stripTags str = case (T.take 1 str) of
+  "<" -> stripTags $ T.drop 1 $ T.dropWhile (/= '>') str
+  _ -> (T.take 1 str) <> stripTags (T.drop 1 str)
+
+stripHtmlFill :: Fill s
+stripHtmlFill = Fill $ \attrs (path, tpl) lib -> do
+  text <- runTemplate tpl path mempty lib
+  return $ stripTags text
 
 wpCustomDateFill :: Fill s
 wpCustomDateFill =
