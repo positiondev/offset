@@ -33,16 +33,14 @@ library
                 , Web.Offset.Link
   -- other-extensions:
   build-depends:       aeson
-                     , base < 4.9
+                     , base < 5
                      , blaze-builder
                      , data-default
                      , hedis
-                     , heist >= 0.14
-                     , map-syntax
                      , lens
                      , text
                      , bytestring
-                     , wreq >= 0.3
+                     , wreq >= 0.5
                      , configurator
                      , time
                      , xmlhtml >= 0.2.3.2
@@ -86,7 +84,7 @@ Test-Suite test-offset
                      , aeson
                      , async
                      , attoparsec
-                     , base < 4.9
+                     , base < 5
                      , blaze-builder
                      , bytestring
                      , configurator
@@ -103,7 +101,6 @@ Test-Suite test-offset
                      , hspec-core
                      , larceny
                      , lens
-                     , map-syntax
                      , mtl
                      , text
                      , time
