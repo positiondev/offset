@@ -1,5 +1,10 @@
 # Changelog
 
+## July 20 2017
+ * Changed Splice creation so that "false" fields don't render (this is because WP uses "text or false" as a sort of Maybe type, as far as I can tell -- if the field is entered, it's text, if not, it's "false".)
+
+## Changelog bankruptcy
+
 ## February 27 2017
  * Add "PN" and "PM" for custom-parsed fields with objects and lists
 
