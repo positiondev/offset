@@ -133,15 +133,15 @@ larcenyFillTests = do
       "<wpCustom endpoint =\"false\"><wpPerson><wpName /></wpPerson></wpCustom>"
         `shouldRender` "<!-- JSON field found, but value is false. -->"
 
-    it "shouldn't throw Missing Blanks on missing fields inside object" $
+    it "shouldn't throw errors on missing fields inside object" $
       "<wpCustom endpoint=\"true\"><wpPerson><wpName /><wpNotThere /></wpPerson></wpCustom>"
         `shouldRender` "Ada Lovelace"
 
-    it "shouldn't throw Missing Blanks on missing fields at top level" $
+    it "shouldn't throw errors on missing fields at top level" $
       "<wpCustom endpoint=\"true\"><wpNotThere /><wpPerson><wpName /></wpPerson></wpCustom>"
         `shouldRender` "Ada Lovelace"
 
-    it "shouldn't throw Missing Blanks on missing fields with actual fields inside" $
+    it "shouldn't throw errors on missing fields with actual fields inside" $
       "<wpCustom endpoint=\"true\"><wpNotThere><wpPerson><wpName /></wpPerson></wpNotThere></wpCustom>"
         `shouldRender` ""
 
