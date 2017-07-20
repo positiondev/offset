@@ -120,9 +120,32 @@ larcenyFillTests = do
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Sports"
 
+
   describe "<wpCustom>" $ do
     it "should render an HTML comment if JSON field is null" $
       "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
+
+    it "should display fields normally if not false" $
+      "<wpCustom endpoint =\"true\"><wpPerson><wpName /></wpPerson></wpCustom>"
+        `shouldRender` "Ada Lovelace"
+
+    it "should not attempt to display fields if false" $
+      "<wpCustom endpoint =\"false\"><wpPerson><wpName /></wpPerson></wpCustom>"
+        `shouldRender` "<!-- JSON field found, but value is false. -->"
+
+    it "shouldn't throw errors on missing fields inside object" $
+      "<wpCustom endpoint=\"true\"><wpPerson><wpName /><wpNotThere /></wpPerson></wpCustom>"
+        `shouldRender` "Ada Lovelace"
+
+    it "shouldn't throw errors on missing fields at top level" $
+      "<wpCustom endpoint=\"true\"><wpNotThere /><wpPerson><wpName /></wpPerson></wpCustom>"
+        `shouldRender` "Ada Lovelace"
+
+    it "shouldn't throw errors on missing fields with actual fields inside" $
+      "<wpCustom endpoint=\"true\"><wpNotThere><wpPerson><wpName /></wpPerson></wpNotThere></wpCustom>"
+        `shouldRender` ""
+
+
   describe "<wpCustomDate>" $ do
     it "should parse a date field with the format string it's given" $
       "<wpCustomDate date=\"2013-04-26 10:11:52\" wp_format=\"%Y-%m-%d %H:%M:%S\"> \
@@ -140,6 +163,7 @@ larcenyFillTests = do
       "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
       \    <wpFullDate /> \
       \ </wpCustomDate>" `shouldRender` "04/26/13"
+
   describe "<stripHtml>" $ do
     it "should strip html from content inside" $
       "<stripHtml><b>Bold?</b> or not</stripHtml>" `shouldRender` "Bold? or not"
