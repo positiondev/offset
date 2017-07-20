@@ -104,7 +104,8 @@ jsonToFill (String s) = rawTextFill s
 jsonToFill (Number n) = case floatingOrInteger n of
                           Left r -> rawTextFill $ tshow (r :: Double)
                           Right i -> rawTextFill $ tshow (i :: Integer)
-jsonToFill (Bool b) = rawTextFill $ tshow b
+jsonToFill (Bool True) = rawTextFill $ tshow True
+jsonToFill (Bool False) = rawTextFill "<!-- JSON field found, but value is false. -->"
 jsonToFill (Null) = rawTextFill "<!-- JSON field found, but value is null. -->"
 
 

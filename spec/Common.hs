@@ -86,6 +86,12 @@ department = object [ "id" .= (2 :: Int)
                     , "name" .= ("Sports" :: Text)
                     ]
 
+boolFieldTrue :: Value
+boolFieldTrue = object [ "person" .= object [ "name" .= ("Ada Lovelace" :: Text )]]
+
+boolFieldFalse :: Value
+boolFieldFalse = object [ "person" .= False ]
+
 customFields :: [Field s]
 customFields = [N "featured_image"
                  [N "attachment_meta"
@@ -186,6 +192,10 @@ fauxRequester _ "/dev/null" [] =
   return $ Right $ enc [object ["this_is_null" .= Null]]
 fauxRequester _ "/dev/rendered_text" [] =
   return $ Right $ enc [object ["rendered_text" .= ("<i>Jezza</i>" :: Text)]]
+fauxRequester _ "/false" [] =
+  return $ Right $ enc [boolFieldFalse]
+fauxRequester _ "/true" [] =
+  return $ Right $ enc [boolFieldTrue]
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])

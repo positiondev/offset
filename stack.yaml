@@ -3,8 +3,9 @@ packages:
 - '.'
 - location:
     git: https://github.com/positiondev/larceny
-    commit: 8837d1bd092271046b4e7234b53f32dbcd04f900
+    commit: 45ef07e65ae5868ee58a9f0af01699d62b2e8d9a
   extra-dep: true
 extra-deps: 
  - html-entities-1.1.4
+ - logging-3.0.4
 resolver: lts-8.15
