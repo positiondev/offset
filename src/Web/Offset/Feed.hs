@@ -146,15 +146,15 @@ getAuthorsInline v =
 
 getAuthorViaReq :: Wordpress b -> Object -> IO [WPPerson]
 getAuthorViaReq wp v =
-  do let mAuthorId = parseMaybe (\obj -> obj .: "author") v
+  do let mAuthorId = parseMaybe (\obj -> obj .: "author") v :: Maybe Int
      case mAuthorId of
        Nothing -> return []
        Just authorId ->
-         do eRespError <- cachingGetRetry wp (EndpointKey $ "/wp/v2/author/" <> authorId)
+         do eRespError <- cachingGetRetry wp (EndpointKey $ "wp/v2/users/" <> tshow authorId)
             case eRespError of
               Left _ -> return []
               Right resp ->
-                let mAuthorName = decodeJson resp >>= parseMaybe (\obj -> obj .: "name") in
+                let mAuthorName = decodeJson resp in
                   case mAuthorName of
                     Nothing -> return []
                     Just authorName ->return (maybeToList authorName)
