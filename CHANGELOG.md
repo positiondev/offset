@@ -1,5 +1,8 @@
 # Changelog
 
+## August 22 2017
+ * Feeds need to specify if they're using the default author field (an id) or inline guest authors fields.
+
 ## July 20 2017
  * Changed Splice creation so that "false" fields don't render (this is because WP uses "text or false" as a sort of Maybe type, as far as I can tell -- if the field is entered, it's text, if not, it's "false".)
 
