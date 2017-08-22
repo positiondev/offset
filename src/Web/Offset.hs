@@ -30,15 +30,16 @@ module Web.Offset (
  , feedSubs
  , toXMLFeed
  , WPFeed(..)
+ , WPAuthorStyle(..)
  , Link(..)
  , buildPermalink
  ) where
 
 import           Web.Offset.Cache.Types
+import           Web.Offset.Feed
 import           Web.Offset.Field
 import           Web.Offset.HTTP
 import           Web.Offset.Init
-import           Web.Offset.Splices
-import           Web.Offset.Feed
 import           Web.Offset.Link
+import           Web.Offset.Splices
 import           Web.Offset.Types
