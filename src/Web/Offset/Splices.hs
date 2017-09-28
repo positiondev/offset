@@ -232,8 +232,9 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
                             (map (buildSplice (traverseObject path o)) fs))
         buildSplice o (M n fs) =
           (transformName n,
-            mapSubs (\oinner -> subs $ map (buildSplice oinner) fs)
-                    (unArray . M.lookup n $ o))
+            mapSubs (\(i, oinner) -> subs $ map (buildSplice oinner) fs
+                                         <> [(transformName n <> "Index", textFill (tshow i))])
+                    (zip [1..] (unArray . M.lookup n $ o)))
 
         unObj (Just (Object o)) = o
         unObj _ = M.empty

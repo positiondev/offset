@@ -104,7 +104,8 @@ customFields = [N "featured_image"
                                           ,F "height"
                                           ,F "url"]]]]
                ,PM "departments" departmentFill
-               ,Q "department" (UseId "/wp/v2/department/") ]
+               ,Q "department" (UseId "/wp/v2/department/")
+               ,M "authors" [F "name"]]
 
 departmentFill :: [Object] -> Fill s
 departmentFill objs =
