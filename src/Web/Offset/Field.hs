@@ -21,7 +21,7 @@ data Field s = F Text -- A single flat field
              | PM Text ([Object] -> Fill s) -- A customly parsed list field
              | N Text [Field s] -- A nested object field
              | C Text [Text] -- A nested text field that is found by following the specified path
-             | CN Text [Text] [Field s] -- A nested set of fields that is found by follwing the specified path
+             | CN Text [Text] [Field s] -- A nested set of fields that is found by following the specified path
              | M Text [Field s] -- A list field, where each element is an object
 
 data ToEndpoint = UseId Text | UseIncludes Text | UseSlug Text deriving (Eq, Show)

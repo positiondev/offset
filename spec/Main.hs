@@ -84,6 +84,9 @@ larcenyFillTests = do
       "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
     it "should have no effect if it's at the end of the template" $
       "<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
+    it "should render list items with an index" $ do
+      "<wpPosts><wpAuthors><wpAuthorsIndex />. <wpName /></wpAuthors></wpPosts>"
+        `shouldRender` "1. Emma Goldman"
 
   describe "<wpPostByPermalink>" $ do
     it "should query at a certain url" $ do
