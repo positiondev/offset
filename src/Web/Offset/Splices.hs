@@ -214,6 +214,8 @@ postSubs :: Wordpress b -> [Field s] -> Object -> Substitutions s
 postSubs wp extra object = subs (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
           (transformName n, rawTextFill $ getText n o)
+        buildSplice o (B n) =
+          (transformName n, textFill $ getBool n o)
         buildSplice o (Q n endpoint) =
           (transformName n, customFill wp (toEndpoint endpoint $ getText n o))
         buildSplice o (P n fill') =
@@ -245,6 +247,9 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
                         Just (String t) -> t
                         Just (Number i) -> either (tshow :: Double -> Text)
                                                   (tshow :: Integer -> Text) (floatingOrInteger i)
+                        _ -> ""
+        getBool n o = case M.lookup n o of
+                        Just (Bool b) -> tshow b
                         _ -> ""
 
 -- * -- Internal -- * --

@@ -63,7 +63,8 @@ article1 = object [ "id" .= (1 :: Int)
                   , "excerpt" .= object ["rendered" .= ("summary" :: T.Text)]
                   , "departments" .= [ object [ "name" .= ("some department" :: T.Text)]]
                   , "department" .= ("15" :: T.Text)
-                  , "authors" .= [ object ["name" .= ("Emma Goldman" :: T.Text)] ] ]
+                  , "authors" .= [ object ["name" .= ("Emma Goldman" :: T.Text)] ]
+                  , "boolean" .= True ]
 
 article2 :: Value
 article2 = object [ "id" .= (2 :: Int)
@@ -105,7 +106,8 @@ customFields = [N "featured_image"
                                           ,F "url"]]]]
                ,PM "departments" departmentFill
                ,Q "department" (UseId "/wp/v2/department/")
-               ,M "authors" [F "name"]]
+               ,M "authors" [F "name"]
+               ,B "boolean" ]
 
 departmentFill :: [Object] -> Fill s
 departmentFill objs =

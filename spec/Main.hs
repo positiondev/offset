@@ -73,6 +73,9 @@ larcenyFillTests = do
     it "should render customly parsed fields" $
       "<wpPosts><wpDepartments><name /></wpDepartments></wpPosts>"
       `shouldRender` "some department"
+    it "should show boolean values Haskell-style" $ do
+      "<wpPosts><wpBoolean /></wpPosts>" `shouldRender` "True"
+
   describe "<wpPage>" $
     it "should show the content" $
       "<wpPage name=a-first-page />" `shouldRender` "<b>rendered</b> page content"
