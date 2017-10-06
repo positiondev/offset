@@ -22,6 +22,7 @@ data Field s = F Text -- A single flat text or number field
              | PM Text ([Object] -> Fill s) -- A customly parsed list field
              | N Text [Field s] -- A nested object field
              | C Text [Text] -- A nested text field that is found by following the specified path
+             | CB Text [Text]  -- A nested bool field that is found by following the specified path
              | CN Text [Text] [Field s] -- A nested set of fields that is found by following the specified path
              | M Text [Field s] -- A list field, where each element is an object
 
@@ -66,6 +67,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
         getName (PM t _) = t
         getName (N t _) = t
         getName (C t _) = t
+        getName (CB t _) = t
         getName (CN t _ _) = t
         getName (M t _) = t
         mergeField (N _ left) (N nm right) = N nm (mergeFields left right)
@@ -83,6 +85,7 @@ instance Show (Field s) where
   show (PM t _) = "PM(" <> T.unpack t <> ",{code})"
   show (N t n) = "N(" <> T.unpack t <> "," <> show n <> ")"
   show (C t p) = "C(" <> T.unpack t <> ":" <> T.unpack (T.intercalate "/" p) <> ")"
+  show (CB t p) = "C(" <> T.unpack t <> ":" <> T.unpack (T.intercalate "/" p) <> ")"
   show (CN t p fs) = "C(" <> T.unpack t <> "," <> T.unpack (T.intercalate "/" p) <> ","<> show fs <> ")"
   show (M t m) = "M(" <> T.unpack t <> "," <> show m <> ")"
 

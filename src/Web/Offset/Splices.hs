@@ -229,6 +229,8 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
                             (map (buildSplice (unObj . M.lookup n $ o)) fs))
         buildSplice o (C n path) =
           (transformName n, rawTextFill (getText (last path) . traverseObject (init path) $ o))
+        buildSplice o (CB n path) =
+          (transformName n, rawTextFill (getBool (last path) . traverseObject (init path) $ o))
         buildSplice o (CN n path fs) =
           (transformName n, fillChildrenWith $ subs
                             (map (buildSplice (traverseObject path o)) fs))
