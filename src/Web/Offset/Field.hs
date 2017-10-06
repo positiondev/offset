@@ -12,9 +12,10 @@ import           Data.Time.Clock  (UTCTime)
 import           Data.Time.Format (defaultTimeLocale, formatTime, parseTimeM)
 import           Web.Larceny
 
-import Web.Offset.Date
+import           Web.Offset.Date
 
-data Field s = F Text -- A single flat field
+data Field s = F Text -- A single flat text or number field
+             | B Text -- A single flat boolean field
              | Q Text ToEndpoint -- A field that will make another request
              | P Text (Text -> Fill s) -- A customly parsed flat field
              | PN Text (Object -> Fill s) -- A customly parsed nested field
@@ -37,6 +38,7 @@ toEndpoint (UseSlug endpoint) slug = endpoint <> "?slug=" <> slug
 -- want this to be orphaned!). This eq instance is only for testing!!
 instance Eq (Field s) where
   F t1 == F t2 = t1 == t2
+  B t1 == B t2 = t1 == t2
   Q t1 tE1 == Q t2 tE2 = t1 == t2 && tE1 == tE2
   P t1 _ == P t2 _ = t1 == t2
   PN t1 _ == PN t2 _ = t1 == t2
@@ -57,6 +59,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
                                      else m : overrideInList v fl ms
         matchesName c d = getName c == getName d
         getName (F t) = t
+        getName (B t) = t
         getName (Q t _) = t
         getName (P t _) = t
         getName (PN t _) = t
@@ -73,6 +76,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
 
 instance Show (Field s) where
   show (F t) = "F(" <> T.unpack t <> ")"
+  show (B t) = "B(" <> T.unpack t <> ")"
   show (Q t e) = "Q("<> T.unpack t <> ":" <> show e <>")"
   show (P t _) = "P(" <> T.unpack t <> ",{code})"
   show (PN t _) = "PN(" <> T.unpack t <> ",{code})"
