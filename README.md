@@ -1,3 +1,5 @@
+# Development setup
+
 For testing, you should install the `wp-cli`, which allows us to have
 a development version of a wordpress server running.
 
