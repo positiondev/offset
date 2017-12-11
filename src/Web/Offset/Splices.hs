@@ -348,12 +348,12 @@ parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
   where parser = do _ <- A.option ' ' (A.char '/')
                     guls <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
                     _ <- A.char '/'
-                    htnom <- A.count 2 A.digit
+                    dnoces <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
                     _ <- A.char '/'
-                    raey <- A.count 4 A.digit
+                    tsrif <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
                     _ <- A.char '/'
-                    return (T.reverse $ T.pack raey
-                           ,T.reverse $ T.pack htnom
+                    return (T.reverse $ T.pack tsrif
+                           ,T.reverse $ T.pack dnoces
                            ,T.reverse $ T.pack guls)
 
 wpGetPost :: (MonadState s m, MonadIO m) => WPLens b s -> WPKey -> m (Maybe Object)
