@@ -10,7 +10,7 @@ Offset provides "substitutions" you can use in your Larceny templates.
    * [Displaying a single post](#wppostbypermalink)
  * [Pages](#pages)
  * [Dates](#dates)
- * [Arbitrary custom data](#arbitrarycustomdata)
+ * [Arbitrary custom data](#arbitrary-custom-data)
 
 
 ## Posts
@@ -318,9 +318,9 @@ or `wpDate` tags.
 October 11, 2016
 ```
 
-### Arbitrary Custom Data
+## Arbitrary Custom Data
 
-#### `<wpCustom>`
+### `<wpCustom>`
 
 Use this substitution to pull custom data from the Wordpress JSON API into your Wayland
 templates.
@@ -333,7 +333,7 @@ Once you know what JSON data you'd like to use from Wordpress, you can use
 returned and the endpoint to query. Here are some examples of JSON and the
 corresponding `wpCustom` email.
 
-##### Example 1
+#### Example 1
 
 * JSON
   * **GET** `http://www.your-wordpress-url.com/wp-json/wp/v2/posts`
@@ -391,7 +391,7 @@ corresponding `wpCustom` email.
   
   ```
 
-##### Example 2
+#### Example 2
 
 * JSON
   * **GET** `http://www.your-wordpress-url.com/wp-json/jacobin/featured-content/editors-picks`
