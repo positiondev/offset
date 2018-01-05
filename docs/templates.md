@@ -5,6 +5,14 @@ templates from the Larceny [documentation](https://github.com/positiondev/larcen
 
 Offset provides "substitutions" you can use in your Larceny templates.
 
+ * [Posts](#posts)
+   * [Listing posts](#wpposts)
+   * [Displaying a single post](#wppostbypermalink)
+ * [Pages](#pages)
+ * [Dates](#dates)
+ * [Arbitrary custom data](#arbitrarycustomdata)
+
+
 ## Posts
 
 ### `<wpPosts>`
@@ -89,44 +97,6 @@ skipped using the "offset".
 This will skip 20 posts (to get to the third page), then skip five more posts
 for the offset, then display the next 10 posts.
 
-### `<wpPostByPermalink>`
-
-This tag will retrieve the post that corresponds to the current request URL. 
-
-#### Example
-
-Say this post exists in WordPress:
-
-```
-Title: A great post
-Slug: a-great-post
-
-Body: Wow, this is an excellent post.
-
-```
-
-A visitor goes to the URL: `https://myblog.com/2016/10/great-post`. The template the server uses is `post.tpl` and it looks like this:
-
-```
-<wpPostByPermalink>
-  <h3><wpTitle /><h3>
-  
-  <main>
-    <wpContent />
-  </main>
-</wpPostByPermalink>
-```
-
-That will result in this rendered HTML:
-
-```
-<h3>A great post</h3>
-
-<main>
-  Wow, this is an excellent post.
-</main>
-```
-
 ### `<wp>`
 
 Wrap your templates in the `wp` tag so that multiple post lookups can happen at
@@ -192,7 +162,7 @@ featured post, then rendering this template will result in:
 </div>  
 ```
 
-Post 1 appears twice! If you add `<wpNoPostDuplicates />`:
+Post 1 appears twice! But, if you add `<wpNoPostDuplicates />`:
 
 ```
 <wp>
@@ -218,6 +188,44 @@ This results in:
   Post 2
   Post 3
 </div>  
+```
+
+### `<wpPostByPermalink>`
+
+This tag will retrieve the post that corresponds to the current request URL. 
+
+#### Example
+
+Say this post exists in WordPress:
+
+```
+Title: A great post
+Slug: a-great-post
+
+Body: Wow, this is an excellent post.
+
+```
+
+A visitor goes to the URL: `https://myblog.com/2016/10/great-post`. The template the server uses is `post.tpl` and it looks like this:
+
+```
+<wpPostByPermalink>
+  <h3><wpTitle /><h3>
+  
+  <main>
+    <wpContent />
+  </main>
+</wpPostByPermalink>
+```
+
+That will result in this rendered HTML:
+
+```
+<h3>A great post</h3>
+
+<main>
+  Wow, this is an excellent post.
+</main>
 ```
 
 ## Pages
