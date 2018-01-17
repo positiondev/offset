@@ -7,6 +7,8 @@ module Web.Offset.Feed where
 
 import           Control.Monad.State
 import           Data.Aeson          hiding (decode, encode, json, object)
+import           Data.Aeson.Types    (parseMaybe)
+import           Data.Maybe          (maybeToList)
 import           Data.Monoid
 import qualified Data.Text           as T
 import           Data.Time.Clock
@@ -27,13 +29,16 @@ data WPFeed =
          , wpFeedLogo    :: Maybe T.Text
          , wpBaseURI     :: T.Text
          , wpBuildLinks  :: Object -> [Link]
+         , wpGetAuthors  :: WPAuthorStyle
          , wpRenderEntry :: Object -> IO (Maybe T.Text) }
 
+data WPAuthorStyle = GuestAuthors | DefaultAuthor
+
 toXMLFeed :: Wordpress b -> WPFeed -> IO T.Text
-toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _) = do
+toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _ _) = do
   wpEntries <- getWPEntries wp
   let mostRecentUpdate = maximum (map wpEntryUpdated wpEntries)
-  entries <- mapM (toEntry wpFeed) wpEntries
+  entries <- mapM (toEntry wp wpFeed) wpEntries
   let feed = (makeFeed (unsafeURI $ T.unpack uri) (TextPlain title) mostRecentUpdate)
              { feedIcon = unsafeURI <$> T.unpack <$> icon
              , feedLogo = unsafeURI <$> T.unpack <$> logo
@@ -79,17 +84,21 @@ wpEntryContent :: (Object -> IO (Maybe T.Text))
 wpEntryContent renderer wpentry =
   (fmap . fmap) InlineHTMLContent (renderer $ wpEntryJSON wpentry)
 
-toEntry :: WPFeed
+toEntry :: Wordpress b
+        -> WPFeed
         -> WPEntry
         -> IO (Entry e)
-toEntry wpFeed entry@WPEntry{..} = do
+toEntry wp wpFeed entry@WPEntry{..} = do
   content <- wpEntryContent (wpRenderEntry wpFeed) entry
   let guid = entryGuid (wpBaseURI wpFeed) wpEntryId wpEntryJSON
   let baseEntry = makeEntry guid (TextHTML wpEntryTitle) wpEntryUpdated
+  authors <- case wpGetAuthors wpFeed of
+               GuestAuthors -> getAuthorsInline wpEntryJSON
+               DefaultAuthor -> getAuthorViaReq wp wpEntryJSON
   return $ baseEntry { entryPublished = Just wpEntryPublished
                      , entrySummary = Just (TextHTML wpEntrySummary)
                      , entryContent = content
-                     , entryAuthors = map unWP wpEntryAuthors
+                     , entryAuthors = map unWP authors
                      , entryLinks = map toAtomLink (wpBuildLinks wpFeed wpEntryJSON)}
 
 toAtomLink :: Link -> A.Link
@@ -107,7 +116,6 @@ data WPEntry =
           , wpEntryUpdated   :: UTCTime
           , wpEntryPublished :: UTCTime
           , wpEntrySummary   :: T.Text
-          , wpEntryAuthors   :: [WPPerson]
           , wpEntryJSON      :: Object } deriving (Eq, Show)
 
 instance FromJSON WPEntry where
@@ -119,7 +127,6 @@ instance FromJSON WPEntry where
                 (jsonParseDate <$> (v .: "date")) <*>
                 (do e <- v .: "excerpt"
                     e .: "rendered") <*>
-                v .: "authors" <*>
                 return v
   parseJSON _ = error "bad post"
 
@@ -129,6 +136,28 @@ instance FromJSON WPPerson where
   parseJSON (Object v) =
     WPPerson <$> (Person <$> v .: "name" <*> return Nothing <*> return Nothing)
   parseJSON _ = error "bad author"
+
+getAuthorsInline :: Object -> IO [WPPerson]
+getAuthorsInline v =
+  do let authors = parseMaybe (\obj -> obj .: "authors") v
+     case authors of
+       Just list -> return list
+       Nothing   -> return []
+
+getAuthorViaReq :: Wordpress b -> Object -> IO [WPPerson]
+getAuthorViaReq wp v =
+  do let mAuthorId = parseMaybe (\obj -> obj .: "author") v :: Maybe Int
+     case mAuthorId of
+       Nothing -> return []
+       Just authorId ->
+         do eRespError <- cachingGetRetry wp (EndpointKey $ "wp/v2/users/" <> tshow authorId)
+            case eRespError of
+              Left _ -> return []
+              Right resp ->
+                let mAuthorName = decodeJson resp in
+                  case mAuthorName of
+                    Nothing -> return []
+                    Just authorName ->return (maybeToList authorName)
 
 entryGuid :: T.Text -> Int -> Object -> URI
 entryGuid baseURI wpId wpJSON =

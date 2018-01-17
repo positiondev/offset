@@ -41,7 +41,7 @@ main = runTests
 
 feedTests :: Spec
 feedTests =
-  describe "rss feed" $
+  describe "rss feed" $ do
     it "should make a feed" $ do
       ctxt <- initFauxRequestNoCache
       let wpfeed = WPFeed
@@ -51,6 +51,7 @@ feedTests =
                      Nothing
                      "https://myurl.com"
                      buildEntryLinks
+                     GuestAuthors
                      (renderFeedContent ctxt)
       ft <- toXMLFeed (_wordpress ctxt) wpfeed
       ft `shouldBe` "<?xml version='1.0' ?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://myurl.com/feed</id>\n  <title type=\"text\">My Blog</title>\n  <updated>2014-10-20T07:00:00Z</updated>\n  <entry>\n    <id>https://myurl.com/2014/10/foo-bar/</id>\n    <title type=\"html\">&lt;i&gt;Foo&lt;/i&gt; bar</title>\n    <updated>2014-10-20T07:00:00Z</updated>\n    <published>2014-10-20T07:00:00Z</published>\n    <summary type=\"html\">summary</summary>\n    <content type=\"html\">This is the title: &lt;i&gt;Foo&lt;/i&gt; bar</content>\n    <author>\n      <name>Emma Goldman</name>\n    </author>\n    <link href=\"https://myurl.com/2014/10/foo-bar/\" title=\"&lt;i&gt;Foo&lt;/i&gt; bar\" />\n  </entry>\n</feed>\n"
@@ -72,6 +73,9 @@ larcenyFillTests = do
     it "should render customly parsed fields" $
       "<wpPosts><wpDepartments><name /></wpDepartments></wpPosts>"
       `shouldRender` "some department"
+    it "should show boolean values Haskell-style" $ do
+      "<wpPosts><wpBoolean /></wpPosts>" `shouldRender` "True"
+
   describe "<wpPage>" $
     it "should show the content" $
       "<wpPage name=a-first-page />" `shouldRender` "<b>rendered</b> page content"
@@ -83,6 +87,9 @@ larcenyFillTests = do
       "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
     it "should have no effect if it's at the end of the template" $
       "<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
+    it "should render list items with an index" $ do
+      "<wpPosts><wpAuthors><wpAuthorsIndex />. <wpName /></wpAuthors></wpPosts>"
+        `shouldRender` "1. Emma Goldman"
 
   describe "<wpPostByPermalink>" $ do
     it "should query at a certain url" $ do
@@ -120,9 +127,32 @@ larcenyFillTests = do
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Sports"
 
+
   describe "<wpCustom>" $ do
     it "should render an HTML comment if JSON field is null" $
       "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
+
+    it "should display fields normally if not false" $
+      "<wpCustom endpoint =\"true\"><wpPerson><wpName /></wpPerson></wpCustom>"
+        `shouldRender` "Ada Lovelace"
+
+    it "should not attempt to display fields if false" $
+      "<wpCustom endpoint =\"false\"><wpPerson><wpName /></wpPerson></wpCustom>"
+        `shouldRender` "<!-- JSON field found, but value is false. -->"
+
+    it "shouldn't throw errors on missing fields inside object" $
+      "<wpCustom endpoint=\"true\"><wpPerson><wpName /><wpNotThere /></wpPerson></wpCustom>"
+        `shouldRender` "Ada Lovelace"
+
+    it "shouldn't throw errors on missing fields at top level" $
+      "<wpCustom endpoint=\"true\"><wpNotThere /><wpPerson><wpName /></wpPerson></wpCustom>"
+        `shouldRender` "Ada Lovelace"
+
+    it "shouldn't throw errors on missing fields with actual fields inside" $
+      "<wpCustom endpoint=\"true\"><wpNotThere><wpPerson><wpName /></wpPerson></wpNotThere></wpCustom>"
+        `shouldRender` ""
+
+
   describe "<wpCustomDate>" $ do
     it "should parse a date field with the format string it's given" $
       "<wpCustomDate date=\"2013-04-26 10:11:52\" wp_format=\"%Y-%m-%d %H:%M:%S\"> \
@@ -140,6 +170,7 @@ larcenyFillTests = do
       "<wpCustomDate date=\"2013-04-26 10:11:52\"> \
       \    <wpFullDate /> \
       \ </wpCustomDate>" `shouldRender` "04/26/13"
+
   describe "<stripHtml>" $ do
     it "should strip html from content inside" $
       "<stripHtml><b>Bold?</b> or not</stripHtml>" `shouldRender` "Bold? or not"

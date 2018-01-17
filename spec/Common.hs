@@ -63,7 +63,8 @@ article1 = object [ "id" .= (1 :: Int)
                   , "excerpt" .= object ["rendered" .= ("summary" :: T.Text)]
                   , "departments" .= [ object [ "name" .= ("some department" :: T.Text)]]
                   , "department" .= ("15" :: T.Text)
-                  , "authors" .= [ object ["name" .= ("Emma Goldman" :: T.Text)] ] ]
+                  , "authors" .= [ object ["name" .= ("Emma Goldman" :: T.Text)] ]
+                  , "boolean" .= True ]
 
 article2 :: Value
 article2 = object [ "id" .= (2 :: Int)
@@ -86,6 +87,12 @@ department = object [ "id" .= (2 :: Int)
                     , "name" .= ("Sports" :: Text)
                     ]
 
+boolFieldTrue :: Value
+boolFieldTrue = object [ "person" .= object [ "name" .= ("Ada Lovelace" :: Text )]]
+
+boolFieldFalse :: Value
+boolFieldFalse = object [ "person" .= False ]
+
 customFields :: [Field s]
 customFields = [N "featured_image"
                  [N "attachment_meta"
@@ -98,7 +105,9 @@ customFields = [N "featured_image"
                                           ,F "height"
                                           ,F "url"]]]]
                ,PM "departments" departmentFill
-               ,Q "department" (UseId "/wp/v2/department/") ]
+               ,Q "department" (UseId "/wp/v2/department/")
+               ,M "authors" [F "name"]
+               ,B "boolean" ]
 
 departmentFill :: [Object] -> Fill s
 departmentFill objs =
@@ -186,6 +195,10 @@ fauxRequester _ "/dev/null" [] =
   return $ Right $ enc [object ["this_is_null" .= Null]]
 fauxRequester _ "/dev/rendered_text" [] =
   return $ Right $ enc [object ["rendered_text" .= ("<i>Jezza</i>" :: Text)]]
+fauxRequester _ "/false" [] =
+  return $ Right $ enc [boolFieldFalse]
+fauxRequester _ "/true" [] =
+  return $ Right $ enc [boolFieldTrue]
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])

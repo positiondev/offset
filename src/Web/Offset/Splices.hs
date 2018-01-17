@@ -104,7 +104,8 @@ jsonToFill (String s) = rawTextFill s
 jsonToFill (Number n) = case floatingOrInteger n of
                           Left r -> rawTextFill $ tshow (r :: Double)
                           Right i -> rawTextFill $ tshow (i :: Integer)
-jsonToFill (Bool b) = rawTextFill $ tshow b
+jsonToFill (Bool True) = rawTextFill $ tshow True
+jsonToFill (Bool False) = rawTextFill "<!-- JSON field found, but value is false. -->"
 jsonToFill (Null) = rawTextFill "<!-- JSON field found, but value is null. -->"
 
 
@@ -213,6 +214,8 @@ postSubs :: Wordpress b -> [Field s] -> Object -> Substitutions s
 postSubs wp extra object = subs (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
           (transformName n, rawTextFill $ getText n o)
+        buildSplice o (B n) =
+          (transformName n, textFill $ getBool n o)
         buildSplice o (Q n endpoint) =
           (transformName n, customFill wp (toEndpoint endpoint $ getText n o))
         buildSplice o (P n fill') =
@@ -226,13 +229,16 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
                             (map (buildSplice (unObj . M.lookup n $ o)) fs))
         buildSplice o (C n path) =
           (transformName n, rawTextFill (getText (last path) . traverseObject (init path) $ o))
+        buildSplice o (CB n path) =
+          (transformName n, rawTextFill (getBool (last path) . traverseObject (init path) $ o))
         buildSplice o (CN n path fs) =
           (transformName n, fillChildrenWith $ subs
                             (map (buildSplice (traverseObject path o)) fs))
         buildSplice o (M n fs) =
           (transformName n,
-            mapSubs (\oinner -> subs $ map (buildSplice oinner) fs)
-                    (unArray . M.lookup n $ o))
+            mapSubs (\(i, oinner) -> subs $ map (buildSplice oinner) fs
+                                         <> [(transformName n <> "Index", textFill (tshow i))])
+                    (zip [1..] (unArray . M.lookup n $ o)))
 
         unObj (Just (Object o)) = o
         unObj _ = M.empty
@@ -243,6 +249,9 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
                         Just (String t) -> t
                         Just (Number i) -> either (tshow :: Double -> Text)
                                                   (tshow :: Integer -> Text) (floatingOrInteger i)
+                        _ -> ""
+        getBool n o = case M.lookup n o of
+                        Just (Bool b) -> tshow b
                         _ -> ""
 
 -- * -- Internal -- * --
@@ -339,12 +348,12 @@ parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
   where parser = do _ <- A.option ' ' (A.char '/')
                     guls <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
                     _ <- A.char '/'
-                    htnom <- A.count 2 A.digit
+                    segment2 <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
                     _ <- A.char '/'
-                    raey <- A.count 4 A.digit
+                    segment1 <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
                     _ <- A.char '/'
-                    return (T.reverse $ T.pack raey
-                           ,T.reverse $ T.pack htnom
+                    return (T.reverse $ T.pack segment1
+                           ,T.reverse $ T.pack segment2
                            ,T.reverse $ T.pack guls)
 
 wpGetPost :: (MonadState s m, MonadIO m) => WPLens b s -> WPKey -> m (Maybe Object)
