@@ -123,7 +123,7 @@ expire key = rdel [formatKey key] >> expireAggregates
 
 formatKey :: WPKey -> Text
 formatKey = format
-  where format (PostByPermalinkKey y m s) = ns "post_perma:" <> y <> "_" <> m <> "_" <> s
+  where format (PostByPermalinkKey y m s) = ns "post_perma:" <> s
         format (PostsKey filters) =
           ns "posts:" <> T.intercalate "_" (map tshow $ Set.toAscList filters)
         format (PostKey n) = ns "post:" <> tshow n
