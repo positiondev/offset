@@ -1,12 +1,12 @@
 name:                offset
-version:             0.1.2
+version:             0.1.3
 synopsis:            A library that communicates with wordpress over its api.
 -- description:
-homepage:            https://github.com/dbp/offset
+homepage:            https://github.com/positiondev/offset
 license:             BSD3
 license-file:        LICENSE
 author:              Daniel Patterson <dbp@positiondev.com>, Matt Raibert <mattraibert@positiondev.com>, Libby Horacek <libby@positiondev.com>
-maintainer:          dbp@positiondev.com
+maintainer:          workers@positiondev.com
 -- copyright:
 category:            Web
 build-type:          Simple
