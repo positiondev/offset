@@ -114,28 +114,44 @@ wpPostsFill :: Wordpress b
             -> WPLens b s
             -> Fill s
 wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
-  do let postsQuery = parseQueryNode (Map.toList attrs)
-     filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
-     let wpKey = mkWPKey filters postsQuery
+  do (postsQuery, wpKey) <- mkPostsQueryAndKey wp attrs
      res <- liftIO $ cachingGetRetry wp wpKey
      case fmap decode res of
        Right (Just posts) -> do
-         let postsW = extractPostIds posts
-         wp' <- use wpLens
-         let postsND = take (qlimit postsQuery)
-                       . noDuplicates (requestPostSet wp') $ postsW
+         postsND <- postsWithoutDuplicates wpLens postsQuery posts
          addPostIds wpLens (map fst postsND)
          unFill (wpPostsHelper wp extraFields (map snd postsND)) mempty tpl lib
        Right Nothing -> return ""
-       Left code -> do
-         let notification = "Encountered status code " <> tshow code
-                            <> " when querying wpPosts."
-         liftIO $ wpLogger wp notification
-         return $ "<!-- " <> notification <> " -->"
-  where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
-        noDuplicates Nothing = id
-        noDuplicates (Just wpPostIdSet) = filter (\(wpId,_) -> IntSet.notMember wpId wpPostIdSet)
+       Left code     -> liftIO $ logStatusCode wp code
 
+postsWithoutDuplicates :: WPLens b s
+                       -> WPQuery
+                       -> [Object]
+                       -> StateT s IO [(Int, Object)]
+postsWithoutDuplicates wpLens postsQuery posts = do
+  wp <- use wpLens
+  let postsW = extractPostIds posts
+  return $ take (qlimit postsQuery) . removeDupes (requestPostSet wp) $ postsW
+  where removeDupes :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
+        removeDupes Nothing = id
+        removeDupes (Just wpPostIdSet) =
+          filter (\(wpId,_) -> IntSet.notMember wpId wpPostIdSet)
+
+mkPostsQueryAndKey :: Wordpress b
+                   -> Attributes
+                   -> StateT s IO (WPQuery, WPKey)
+mkPostsQueryAndKey wp attrs = do
+  let postsQuery = parseQueryNode (Map.toList attrs)
+  filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
+  let wpKey = mkWPKey filters postsQuery
+  return (postsQuery, wpKey)
+
+logStatusCode :: Wordpress b -> Int -> IO Text
+logStatusCode wp code = do
+  let notification = "Encountered status code " <> tshow code
+                     <> " when querying wpPosts."
+  wpLogger wp notification
+  return $ "<!-- " <> notification <> " -->"
 mkFilters :: Wordpress b -> [TaxSpecList] -> IO [Filter]
 mkFilters wp specLists =
   concat <$> mapM (\(TaxSpecList tName list) -> catMaybes <$> mapM (toFilter tName) list) specLists
