@@ -17,7 +17,7 @@ import           Web.Offset.HTTP
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
-wpRequestInt :: Requester -> Text -> WPKey -> IO (Either StatusCode Text)
+wpRequestInt :: Requester -> Text -> WPKey -> IO (Either StatusCode WPResponse)
 wpRequestInt runHTTP endpt key =
   case key of
    TaxDictKey resName ->          req (defaultEndpoint <> "/" <> resName) []

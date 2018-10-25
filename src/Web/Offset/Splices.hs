@@ -77,15 +77,15 @@ wpCustomFill wp =
 customFill :: Wordpress b -> Text -> Fill s
 customFill Wordpress{..} endpoint = Fill $ \attrs (path, tpl) lib ->
   do let key = EndpointKey endpoint
-     res <- liftIO $ cachingGetRetry key
-     case fmap decode res of
+     res <- liftIO $ (cachingGetRetry key :: IO (Either StatusCode WPResponse))
+     case (fmap decodeWPResponseBody res :: Either StatusCode (Maybe Value)) of
        Left code -> do
          let notification = "Encountered status code " <> tshow code
                          <> " when querying \"" <> endpoint <> "\"."
          liftIO $ wpLogger notification
          return $ "<!-- " <> notification <> " -->"
-       Right (Just (json :: Value)) ->
-         unFill (jsonToFill json) attrs (path, tpl) lib
+       Right (Just json) ->
+        unFill (jsonToFill json) attrs (path, tpl) lib
        Right Nothing -> do
          let notification = "Unable to decode JSON for endpoint \"" <> endpoint
          liftIO $ wpLogger $ notification <> ": " <> tshow res
@@ -117,7 +117,7 @@ wpPostsFill :: Wordpress b
 wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
   do (postsQuery, wpKey) <- mkPostsQueryAndKey wp attrs
      res <- liftIO $ cachingGetRetry wp wpKey
-     case fmap decode res of
+     case fmap decodeWPResponseBody res of
        Right (Just posts) -> do
          postsND <- postsWithoutDuplicates wpLens postsQuery posts
          addPostIds wpLens (map fst postsND)
@@ -161,7 +161,7 @@ wpPostsAggregateFill :: Wordpress b
 wpPostsAggregateFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
   do (postsQuery, wpKey) <- mkPostsQueryAndKey wp attrs
      res <- liftIO $ cachingGetRetry wp wpKey
-     case fmap decode rs of
+     case fmap decodeWPResponseBody res of
        Right (Just posts) -> do
           postsND' <- postsWithoutDuplicates wpLens postsQuery posts
           addPostIds wpLens (map fst postsND')
@@ -399,9 +399,9 @@ wpGetPost wpLens wpKey =
 
 getPost :: Wordpress b -> WPKey -> IO (Maybe Object)
 getPost Wordpress{..} wpKey = decodePost <$> cachingGetRetry wpKey
-  where decodePost :: Either StatusCode Text -> Maybe Object
+  where decodePost :: Either StatusCode WPResponse -> Maybe Object
         decodePost (Right t) =
-          do post' <- decodeJson t
+          do post' <- decodeWPResponseBody t
              case post' of
               Just (post:_) -> Just post
               _ -> Nothing

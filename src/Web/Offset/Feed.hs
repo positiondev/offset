@@ -65,9 +65,9 @@ getWPEntries wp = do
   case res of
     Left statusCode -> error $ "Status code error: " ++ show statusCode
     Right resp ->
-      case decode resp of
+      case decodeWPResponseBody resp of
         Just posts -> return posts
-        Nothing -> error $ "Couldn't decode: " <> T.unpack resp
+        Nothing -> error $ "Couldn't decode: " <> show resp
 
 allPostsQuery :: WPQuery
 allPostsQuery =
@@ -154,7 +154,7 @@ getAuthorViaReq wp v =
             case eRespError of
               Left _ -> return []
               Right resp ->
-                let mAuthorName = decodeJson resp in
+                let mAuthorName = decodeWPResponseBody resp in
                   case mAuthorName of
                     Nothing -> return []
                     Just authorName ->return (maybeToList authorName)

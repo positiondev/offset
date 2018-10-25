@@ -24,20 +24,25 @@ import           Web.Fn
 import           Web.Larceny
 
 import           Web.Offset
+import           Web.Offset.Types
 
 import           Common
 
 runTests :: IO ()
 runTests = hspec $ do
+  deadTests
+  liveTests
+
+main :: IO ()
+main = runTests
+
+deadTests :: Spec
+deadTests = do
   Misc.tests
   larcenyFillTests
   cacheTests
   queryTests
   feedTests
-  liveTests
-
-main :: IO ()
-main = runTests
 
 feedTests :: Spec
 feedTests =
@@ -110,6 +115,7 @@ larcenyFillTests = do
                         ""
       let ctxt' = setRequest ctxt
             $ (\(_,y) -> (requestWithUrl, y)) defaultFnRequest
+      void $ liftIO $ clearRedisCache ctxt
       let s = _wpsubs ctxt'
       let tpl = toTpl "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp"
       void $ evalStateT (runTemplate tpl [] s mempty) ctxt'
@@ -193,7 +199,7 @@ cacheTests = do
         let (Object a2) = article2
         ctxt <- liftIO initNoRequestWithCache
         wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2001" "10" "the-post")
-                                          (enc [a2])
+                                          (enc (WPResponse mempty (enc [a2])))
         ("single", ctxt) `shouldRenderAtUrlContaining` ("/2001/10/the-post/", "The post")
 
   describe "caching" $ do

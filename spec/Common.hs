@@ -25,6 +25,7 @@ import qualified Data.Text.Encoding      as T
 import qualified Data.Text.Lazy          as TL
 import qualified Data.Text.Lazy.Encoding as TL
 import qualified Database.Redis          as R
+import qualified Network.HTTP.Types.Header as H
 import           Network.Wai             (defaultRequest, rawPathInfo)
 import           Prelude                 hiding ((++))
 import           Test.Hspec
@@ -168,42 +169,45 @@ buildEntryLinks :: Object -> [Link]
 buildEntryLinks o =
   maybeToList $ buildPermalink "https://myurl.com" o
 
-fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO (Either StatusCode Text)
+toWPResp :: (Text, H.ResponseHeaders) -> IO (Either StatusCode WPResponse)
+toWPResp (body, headers) = return $ Right $ WPResponse headers body
+
+fauxRequester :: Maybe (MVar [Text]) -> Text -> [(Text, Text)] -> IO (Either StatusCode WPResponse)
 fauxRequester _ "/wp/v2/tags" [("slug", "home-featured")] =
-  return $ Right $ enc [object [ "id" .= (177 :: Int)
+  toWPResp (enc [object [ "id" .= (177 :: Int)
                        , "slug" .= ("home-featured" :: Text)
-                       ]]
+                       ]], mempty)
 fauxRequester _ "/wp/v2/tags" [("slug", "featured-global")] =
-  return $ Right $ enc [object [ "id" .= (160 :: Int)
+  toWPResp (enc [object [ "id" .= (160 :: Int)
                        , "slug" .= ("featured-global" :: Text)
-                       ]]
+                       ]], mempty)
 fauxRequester _ "/wp/v2/categories" [("slug", "bookmarx")] =
-  return $ Right $ enc [object [ "id" .= (159 :: Int)
+  toWPResp (enc [object [ "id" .= (159 :: Int)
                        , "slug" .= ("bookmarx" :: Text)
                        , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
-                       ] ]
+                       ] ], mempty)
 fauxRequester _ "//wp/v2/department/15" [] =
-  return $ Right $ enc department
+  toWPResp (enc department, mempty)
 fauxRequester _ "/jacobin/featured-content/editors-picks" [] =
-  return $ Right $ enc [object [ "post_date" .= ("2013-04-26 10:11:52" :: Text)
+  toWPResp (enc [object [ "post_date" .= ("2013-04-26 10:11:52" :: Text)
                        , "date" .= ("2014-04-26 10:11:52" :: Text)
                        , "post_date_gmt" .= ("2015-04-26 15:11:52" :: Text)
-                       ]]
+                       ]], mempty)
 fauxRequester _ "/wp/v2/pages" [("slug", "a-first-page")] =
-  return $ Right $ enc [page1]
+  toWPResp (enc [page1], mempty)
 fauxRequester _ "/dev/null" [] =
-  return $ Right $ enc [object ["this_is_null" .= Null]]
+  toWPResp (enc [object ["this_is_null" .= Null]], mempty)
 fauxRequester _ "/dev/rendered_text" [] =
-  return $ Right $ enc [object ["rendered_text" .= ("<i>Jezza</i>" :: Text)]]
+  toWPResp (enc [object ["rendered_text" .= ("<i>Jezza</i>" :: Text)]], mempty)
 fauxRequester _ "/false" [] =
-  return $ Right $ enc [boolFieldFalse]
+  toWPResp (enc [boolFieldFalse], mempty)
 fauxRequester _ "/true" [] =
-  return $ Right $ enc [boolFieldTrue]
+  toWPResp (enc [boolFieldTrue], mempty)
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
     Nothing -> return ()
-  return $ Right $ enc [article1]
+  toWPResp (enc [article1], mempty)
   where mkUrlUnescape url params =
              url <> "?"
           <> T.intercalate "&" (map (\(k, v) -> k <> "=" <> v) params)
@@ -229,7 +233,7 @@ initFauxRequestNoCache =
 
 initNoRequestWithCache :: IO Ctxt
 initNoRequestWithCache =
-  initializer (Right $ Requester (\_ _ -> return (Right "") )) (CacheSeconds 600) ""
+  initializer (Right $ Requester (\_ _ -> return (Right (WPResponse mempty "")) )) (CacheSeconds 600) ""
 
 ----------------------------------------------------------
 -- Section 2: Test suite against application.           --
