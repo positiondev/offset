@@ -41,6 +41,7 @@ wordpressSubs ::   Wordpress b
               -> Substitutions s
 wordpressSubs wp extraFields getURI wpLens =
   subs [ ("wpPosts", wpPostsFill wp extraFields wpLens)
+       , ("wpPostsAggregate", wpPostsAggregateFill wp extraFields wpLens)
        , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
        , ("wpPage", wpPageFill wpLens)
        , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
@@ -152,6 +153,25 @@ logStatusCode wp code = do
                      <> " when querying wpPosts."
   wpLogger wp notification
   return $ "<!-- " <> notification <> " -->"
+
+wpPostsAggregateFill :: Wordpress b
+            -> [Field s]
+            -> WPLens b s
+            -> Fill s
+wpPostsAggregateFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
+  do (postsQuery, wpKey) <- mkPostsQueryAndKey wp attrs
+     res <- liftIO $ cachingGetRetry wp wpKey
+     case fmap decode rs of
+       Right (Just posts) -> do
+          postsND' <- postsWithoutDuplicates wpLens postsQuery posts
+          addPostIds wpLens (map fst postsND')
+          unFill (fillChildrenWith $
+                    subs [ ("wpPostsItem", wpPostsHelper wp extraFields (map snd postsND'))
+                         , ("wpPostsMeta", fillChildren) ])
+                 mempty tpl lib
+       Right Nothing -> return ""
+       Left code -> liftIO $ logStatusCode wp code
+
 mkFilters :: Wordpress b -> [TaxSpecList] -> IO [Filter]
 mkFilters wp specLists =
   concat <$> mapM (\(TaxSpecList tName list) -> catMaybes <$> mapM (toFilter tName) list) specLists

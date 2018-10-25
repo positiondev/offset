@@ -76,6 +76,15 @@ larcenyFillTests = do
     it "should show boolean values Haskell-style" $ do
       "<wpPosts><wpBoolean /></wpPosts>" `shouldRender` "True"
 
+  describe "<wpPostsAggregate>" $
+    it "should be able to display meta information about aggregate" $ do
+      "<wpPostsAggregate page=\"1\">\
+      \  <wpPostsItem><wpTitle /></wpPostsItem>\
+      \  <wpPostsMeta>\
+        \  and some meta\
+      \  </wpPostsMeta>\
+      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar and some meta"
+
   describe "<wpPage>" $
     it "should show the content" $
       "<wpPage name=a-first-page />" `shouldRender` "<b>rendered</b> page content"
