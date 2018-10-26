@@ -40,6 +40,7 @@ deadTests :: Spec
 deadTests = do
   Misc.tests
   larcenyFillTests
+  wpPostsAggregateTests
   cacheTests
   queryTests
   feedTests
@@ -61,7 +62,6 @@ feedTests =
       ft <- toXMLFeed (_wordpress ctxt) wpfeed
       ft `shouldBe` "<?xml version='1.0' ?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://myurl.com/feed</id>\n  <title type=\"text\">My Blog</title>\n  <updated>2014-10-20T07:00:00Z</updated>\n  <entry>\n    <id>https://myurl.com/2014/10/foo-bar/</id>\n    <title type=\"html\">&lt;i&gt;Foo&lt;/i&gt; bar</title>\n    <updated>2014-10-20T07:00:00Z</updated>\n    <published>2014-10-20T07:00:00Z</published>\n    <summary type=\"html\">summary</summary>\n    <content type=\"html\">This is the title: &lt;i&gt;Foo&lt;/i&gt; bar</content>\n    <author>\n      <name>Emma Goldman</name>\n    </author>\n    <link href=\"https://myurl.com/2014/10/foo-bar/\" title=\"&lt;i&gt;Foo&lt;/i&gt; bar\" />\n  </entry>\n</feed>\n"
 
---larcenyFillTests :: SpecM () ()
 larcenyFillTests :: Spec
 larcenyFillTests = do
   describe "<wpPosts>" $ do
@@ -80,15 +80,6 @@ larcenyFillTests = do
       `shouldRender` "some department"
     it "should show boolean values Haskell-style" $ do
       "<wpPosts><wpBoolean /></wpPosts>" `shouldRender` "True"
-
-  describe "<wpPostsAggregate>" $
-    it "should be able to display meta information about aggregate" $ do
-      "<wpPostsAggregate page=\"1\">\
-      \  <wpPostsItem><wpTitle /></wpPostsItem>\
-      \  <wpPostsMeta>\
-        \  and some meta\
-      \  </wpPostsMeta>\
-      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar and some meta"
 
   describe "<wpPage>" $
     it "should show the content" $
@@ -142,7 +133,6 @@ larcenyFillTests = do
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Sports"
 
-
   describe "<wpCustom>" $ do
     it "should render an HTML comment if JSON field is null" $
       "<wpCustom endpoint=\"dev/null\"><wpThisIsNull /></wpCustom>" `shouldRender` "<!-- JSON field found, but value is null. -->"
@@ -189,6 +179,23 @@ larcenyFillTests = do
   describe "<stripHtml>" $ do
     it "should strip html from content inside" $
       "<stripHtml><b>Bold?</b> or not</stripHtml>" `shouldRender` "Bold? or not"
+
+wpPostsAggregateTests = do
+  describe "<wpPostsAggregate>" $ do
+    it "should be able to display a 'meta' section for whole aggregate" $ do
+      "<wpPostsAggregate page=\"1\">\
+      \  <wpPostsItem><wpTitle /></wpPostsItem>\
+      \  <wpPostsMeta>\
+        \  and some meta\
+      \  </wpPostsMeta>\
+      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar and some meta"
+    it "should be able to display paging information" $ do
+      "<wpPostsAggregate page=\"1\">\
+      \  <wpPostsItem><wpTitle /></wpPostsItem>\
+      \  <wpPostsMeta>\
+        \  <wpTotalPages />\
+      \  </wpPostsMeta>\
+      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar 478"
 
 -- Caching tests
 

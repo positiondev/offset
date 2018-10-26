@@ -14,6 +14,7 @@ import qualified Control.Monad.State     as S
 import           Control.Monad.Trans     (liftIO)
 import           Data.Aeson              hiding (Success)
 import           Data.Aeson.Types        (parseMaybe)
+import qualified Data.CaseInsensitive    as CI
 import           Data.Default
 import qualified Data.HashMap.Strict     as HM
 import qualified Data.Map                as M
@@ -207,7 +208,7 @@ fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
     Nothing -> return ()
-  toWPResp (enc [article1], mempty)
+  toWPResp (enc [article1], [(CI.mk "X-WP-TotalPages", "478")])
   where mkUrlUnescape url params =
              url <> "?"
           <> T.intercalate "&" (map (\(k, v) -> k <> "=" <> v) params)

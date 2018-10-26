@@ -24,6 +24,7 @@ import           Data.Scientific         (floatingOrInteger)
 import qualified Data.Set                as Set
 import           Data.Text               (Text)
 import qualified Data.Text               as T
+import qualified Data.Text.Encoding      as T
 import qualified Data.Vector             as V
 import           Web.Larceny
 
@@ -167,10 +168,17 @@ wpPostsAggregateFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
           addPostIds wpLens (map fst postsND')
           unFill (fillChildrenWith $
                     subs [ ("wpPostsItem", wpPostsHelper wp extraFields (map snd postsND'))
-                         , ("wpPostsMeta", fillChildren) ])
+                         , ("wpPostsMeta", wpPostsMetaFill res) ])
                  mempty tpl lib
        Right Nothing -> return ""
        Left code -> liftIO $ logStatusCode wp code
+
+wpPostsMetaFill :: Either StatusCode WPResponse -> Fill s
+wpPostsMetaFill (Right (WPResponse headers _)) = do
+  let totalPages = maybe "" T.decodeUtf8 (M.lookup "x-wp-totalpages" (M.fromList headers))
+  fillChildrenWith $
+    subs [ ("wpTotalPages", textFill totalPages )]
+wpPostsMetaFill _ = textFill ""
 
 mkFilters :: Wordpress b -> [TaxSpecList] -> IO [Filter]
 mkFilters wp specLists =
