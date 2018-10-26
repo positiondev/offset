@@ -10,7 +10,31 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
-module Web.Offset.Types where
+module Web.Offset.Types (
+  attrToTaxSpecList
+, CacheResult(..)
+, CatType(..)
+, decodeWPResponseBody
+, Filter(..)
+, Requester(..)
+, H.ResponseHeaders
+, StatusCode
+, TagType(..)
+, TaxDict(..)
+, TaxonomyName(..)
+, TaxRes(..)
+, TaxSpec(..)
+, TaxSpecId(..)
+, TaxSpecList(..)
+, UserPassword
+, Wordpress(..)
+, WordpressConfig(..)
+, WordpressInt(..)
+, WPKey(..)
+, WPLens
+, WPQuery(..)
+, WPResponse(..)
+) where
 
 import           Control.Lens             hiding (children)
 import           Control.Monad.State
