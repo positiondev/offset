@@ -196,6 +196,15 @@ wpPostsAggregateTests = do
         \  <wpTotalPages />\
       \  </wpPostsMeta>\
       \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar 478"
+    it "should be able to conditionally display if there are more pages" $ do
+      "<wpPostsAggregate page=\"1\">\
+      \  <wpPostsItem><wpTitle /></wpPostsItem>\
+      \  <wpPostsMeta>\
+          \<wpHasMorePages currentPage=\"1\">\
+            \There are more pages!\
+          \</wpHasMorePages>\
+      \  </wpPostsMeta>\
+      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar There are more pages!"
 
 cacheTests :: Spec
 cacheTests = do

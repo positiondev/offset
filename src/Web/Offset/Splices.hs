@@ -15,6 +15,7 @@ import           Data.Aeson              hiding (decode, encode, json, object)
 import qualified Data.Attoparsec.Text    as A
 import           Data.Char               (toUpper)
 import qualified Data.HashMap.Strict     as M
+import           Data.List               (lookup)
 import qualified Data.Map as Map
 import           Data.IntSet             (IntSet)
 import qualified Data.IntSet             as IntSet
@@ -175,9 +176,16 @@ wpPostsAggregateFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
 
 wpPostsMetaFill :: Either StatusCode WPResponse -> Fill s
 wpPostsMetaFill (Right (WPResponse headers _)) = do
-  let totalPages = maybe "" T.decodeUtf8 (M.lookup "x-wp-totalpages" (M.fromList headers))
+  let totalPagesText = maybe "" T.decodeUtf8 
+                          (lookup "x-wp-totalpages" headers)
   fillChildrenWith $
-    subs [ ("wpTotalPages", textFill totalPages )]
+    subs [ ("wpTotalPages", textFill totalPagesText )
+         , ("wpHasMorePages", useAttrs (a "current-page") (\mPage ->
+               let currentPage = fromMaybe 1 mPage :: Int
+                   totalPages = fromMaybe 1 (readSafe totalPagesText) :: Int in
+               if currentPage < totalPages
+                then fillChildren
+                else textFill ""))]
 wpPostsMetaFill _ = textFill ""
 
 mkFilters :: Wordpress b -> [TaxSpecList] -> IO [Filter]
