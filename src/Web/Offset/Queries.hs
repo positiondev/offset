@@ -3,6 +3,7 @@
 
 module Web.Offset.Queries where
 
+import           Data.Aeson             (FromJSON(..))
 import           Data.Monoid
 import           Data.Text              (Text)
 
@@ -35,7 +36,7 @@ lookupSpecId Wordpress{..} taxName spec =
       let cacheSettings = cacheInternals { wpCacheSet = wpCacheSetInt (runRedis cacheInternals)
                                                                       (CacheSeconds (12 * 60 * 60)) }
       resp <- cachingGetErrorInt cacheSettings key
-      case fmap decodeJson resp of
+      case fmap decodeWPResponseBody resp of
         Left errCode -> do
           wpLogger $ "Cache lookup returned HTTP error code " <> tshow errCode
           return Nothing

@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE EmptyDataDecls        #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -9,32 +10,62 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
-module Web.Offset.Types where
+module Web.Offset.Types (
+  attrToTaxSpecList
+, CacheResult(..)
+, CatType(..)
+, decodeWPResponseBody
+, Filter(..)
+, Requester(..)
+, H.ResponseHeaders
+, StatusCode
+, TagType(..)
+, TaxDict(..)
+, TaxonomyName(..)
+, TaxRes(..)
+, TaxSpec(..)
+, TaxSpecId(..)
+, TaxSpecList(..)
+, UserPassword
+, Wordpress(..)
+, WordpressConfig(..)
+, WordpressInt(..)
+, WPKey(..)
+, WPLens
+, WPQuery(..)
+, WPResponse(..)
+) where
 
-import           Control.Lens           hiding (children)
+import           Control.Lens             hiding (children)
 import           Control.Monad.State
-import           Data.Aeson             (FromJSON, Value (..), parseJSON, (.:))
+import           Data.Aeson               (FromJSON, Value (..), parseJSON, (.:), (.:?), (.!=), ToJSON(..))
 import           Data.Default
-import           Data.IntSet            (IntSet)
-import           Data.List              (intercalate)
-import           Data.Maybe             (catMaybes, isJust)
-import           Data.Monoid            ((<>))
-import           Data.Set               (Set)
-import           Data.Text              (Text)
-import qualified Data.Text              as T
+import qualified Data.ByteString          as BS
+import           GHC.Generics
+import qualified Data.CaseInsensitive      as CI
+import           Data.IntSet              (IntSet)
+import           Data.List                (intercalate)
+import qualified Data.Map                 as M
+import           Data.Maybe               (catMaybes, isJust)
+import           Data.Monoid              ((<>))
+import qualified Data.Semigroup           as SG
+import           Data.Set                 (Set)
+import           Data.Text                (Text)
+import qualified Data.Text                 as T
+import qualified Data.Text.Encoding        as T
+import qualified Network.HTTP.Types.Header as H
 
 import           Web.Offset.Cache.Types
 import           Web.Offset.Field
-import           Web.Offset.HTTP
 import           Web.Offset.Utils
 
 data Wordpress b =
      Wordpress { requestPostSet     :: Maybe IntSet
                , wpExpireAggregates :: IO Bool
                , wpExpirePost       :: WPKey -> IO Bool
-               , cachingGet         :: WPKey -> IO (CacheResult Text)
-               , cachingGetRetry    :: WPKey -> IO (Either StatusCode Text)
-               , cachingGetError    :: WPKey -> IO (Either StatusCode Text)
+               , cachingGet         :: WPKey -> IO (CacheResult WPResponse)
+               , cachingGetRetry    :: WPKey -> IO (Either StatusCode WPResponse)
+               , cachingGetError    :: WPKey -> IO (Either StatusCode WPResponse)
                , wpLogger           :: Text -> IO ()
                , cacheInternals     :: WordpressInt (StateT b IO Text)
                }
@@ -42,6 +73,48 @@ data Wordpress b =
 type WPLens b s = Lens' s (Wordpress b)
 
 type UserPassword = (Text, Text)
+
+data WPResponse = WPResponse { wpHeaders :: H.ResponseHeaders
+                             , wpBody :: Text } deriving (Eq, Show, Generic)
+
+decodeWPResponseBody :: FromJSON a => WPResponse -> Maybe a
+decodeWPResponseBody (WPResponse _ body) = decodeJson body
+
+instance ToJSON WPResponse
+instance FromJSON WPResponse where
+  parseJSON (Object v) = do
+    headers <- v .:? "wpHeaders" .!= mempty
+    body <- v .:? "wpBody" .!= encode v
+    return $ WPResponse headers body
+  parseJSON v          = WPResponse
+                          <$> (return mempty)
+                          <*> return (encode v)
+
+instance ToJSON (CI.CI BS.ByteString) where
+  toJSON str = toJSON $ T.toLower $ T.decodeUtf8 $ CI.original str
+instance FromJSON (CI.CI BS.ByteString) where
+  parseJSON (String str) = return $ CI.mk $ T.encodeUtf8 str
+  parseJSON _ = mzero
+
+instance ToJSON BS.ByteString where
+  toJSON str = toJSON $ T.decodeUtf8 str
+instance FromJSON BS.ByteString where
+  parseJSON (String str) = return $ T.encodeUtf8 str
+
+newtype Headers = Headers { headers :: M.Map Text Text} deriving (Show, Eq, Generic)
+
+instance SG.Semigroup Headers where
+  (Headers h1) <> (Headers h2) = Headers (h1 SG.<> h2)
+
+instance Monoid Headers where
+  mempty = Headers mempty
+  mappend h1 h2 = h1 SG.<> h2
+
+instance ToJSON Headers
+
+newtype Requester = Requester { unRequester :: Text
+                                            -> [(Text, Text)]
+                                            -> IO (Either Int WPResponse) }
 
 data WordpressConfig m =
      WordpressConfig { wpConfEndpoint      :: Text
@@ -62,7 +135,7 @@ data WordpressInt b =
      WordpressInt { wpCacheGet    :: WPKey -> IO (Maybe Text)
                   , wpCacheSet    :: WPKey -> Text -> IO ()
                   , startReqMutex :: WPKey -> IO Bool
-                  , wpRequest     :: WPKey -> IO (Either StatusCode Text)
+                  , wpRequest     :: WPKey -> IO (Either StatusCode WPResponse)
                   , stopReqMutex  :: WPKey -> IO ()
                   , runRedis      :: RunRedis
                   }

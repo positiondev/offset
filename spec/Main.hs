@@ -24,20 +24,26 @@ import           Web.Fn
 import           Web.Larceny
 
 import           Web.Offset
+import           Web.Offset.Types
 
 import           Common
 
 runTests :: IO ()
 runTests = hspec $ do
-  Misc.tests
-  larcenyFillTests
-  cacheTests
-  queryTests
-  feedTests
+  mockedTests
   liveTests
 
 main :: IO ()
 main = runTests
+
+mockedTests :: Spec
+mockedTests = do
+  Misc.tests
+  larcenyFillTests
+  wpPostsAggregateTests
+  cacheTests
+  queryTests
+  feedTests
 
 feedTests :: Spec
 feedTests =
@@ -56,7 +62,6 @@ feedTests =
       ft <- toXMLFeed (_wordpress ctxt) wpfeed
       ft `shouldBe` "<?xml version='1.0' ?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://myurl.com/feed</id>\n  <title type=\"text\">My Blog</title>\n  <updated>2014-10-20T07:00:00Z</updated>\n  <entry>\n    <id>https://myurl.com/2014/10/foo-bar/</id>\n    <title type=\"html\">&lt;i&gt;Foo&lt;/i&gt; bar</title>\n    <updated>2014-10-20T07:00:00Z</updated>\n    <published>2014-10-20T07:00:00Z</published>\n    <summary type=\"html\">summary</summary>\n    <content type=\"html\">This is the title: &lt;i&gt;Foo&lt;/i&gt; bar</content>\n    <author>\n      <name>Emma Goldman</name>\n    </author>\n    <link href=\"https://myurl.com/2014/10/foo-bar/\" title=\"&lt;i&gt;Foo&lt;/i&gt; bar\" />\n  </entry>\n</feed>\n"
 
---larcenyFillTests :: SpecM () ()
 larcenyFillTests :: Spec
 larcenyFillTests = do
   describe "<wpPosts>" $ do
@@ -101,6 +106,7 @@ larcenyFillTests = do
                         ""
       let ctxt' = setRequest ctxt
             $ (\(_,y) -> (requestWithUrl, y)) defaultFnRequest
+      void $ liftIO $ clearRedisCache ctxt
       let s = _wpsubs ctxt'
       let tpl = toTpl "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp"
       void $ evalStateT (runTemplate tpl [] s mempty) ctxt'
@@ -126,7 +132,6 @@ larcenyFillTests = do
       let tpl = toTpl "<wp><wpPostByPermalink><wpDepartment><wpName /></wpDepartment></wp>"
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Sports"
-
 
   describe "<wpCustom>" $ do
     it "should render an HTML comment if JSON field is null" $
@@ -175,12 +180,52 @@ larcenyFillTests = do
     it "should strip html from content inside" $
       "<stripHtml><b>Bold?</b> or not</stripHtml>" `shouldRender` "Bold? or not"
 
--- Caching tests
+wpPostsAggregateTests = do
+  describe "<wpPostsAggregate>" $ do
+    it "should be able to display a 'meta' section for whole aggregate" $ do
+      "<wpPostsAggregate page=\"1\">\
+      \  <wpPostsItem><wpTitle /></wpPostsItem>\
+      \  <wpPostsMeta>\
+        \  and some meta\
+      \  </wpPostsMeta>\
+      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar and some meta"
+    it "should be able to display paging information" $ do
+      "<wpPostsAggregate page=\"1\">\
+      \  <wpPostsItem><wpTitle /></wpPostsItem>\
+      \  <wpPostsMeta>\
+        \  <wpTotalPages />\
+      \  </wpPostsMeta>\
+      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar 478"
+    it "should be able to conditionally display if there are more pages" $ do
+      "<wpPostsAggregate page=\"1\">\
+      \  <wpPostsItem><wpTitle /></wpPostsItem>\
+      \  <wpPostsMeta>\
+          \<wpHasMorePages>\
+            \There are more pages\
+          \</wpHasMorePages>\
+      \  </wpPostsMeta>\
+      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar There are more pages"
+    it "should be able to conditionally display if no more pages" $ do
+      "<wpPostsAggregate page=\"478\">\
+      \  <wpPostsItem><wpTitle /></wpPostsItem>\
+      \  <wpPostsMeta>\
+          \<wpNoMorePages>\
+            \No more pages\
+          \</wpNoMorePages>\
+      \  </wpPostsMeta>\
+      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar No more pages"
 
 cacheTests :: Spec
 cacheTests = do
-  describe "should grab post from cache if it's there" $
+  describe "should grab post from cache if it's there" $ do
       it "should render the post even w/o json source" $ do
+        let (Object a2) = article2
+        ctxt <- liftIO initNoRequestWithCache
+        wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2001" "10" "the-post")
+                                          (enc (WPResponse mempty (enc [a2])))
+        ("single", ctxt) `shouldRenderAtUrlContaining` ("/2001/10/the-post/", "The post")
+
+      it "should allow the legacy format (without headers)" $ do
         let (Object a2) = article2
         ctxt <- liftIO initNoRequestWithCache
         wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2001" "10" "the-post")

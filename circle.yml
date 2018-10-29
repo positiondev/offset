@@ -13,7 +13,7 @@ dependencies:
     - tar xvzf /tmp/stack.tar.gz -C /tmp
     - sudo mv /tmp/stack-1.4.0-linux-x86_64-static/stack /usr/bin/stack
     - mkdir ~/.local/bin
-    - curl -o ~/.local/bin/wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+    - cp ~/offset/wp/wp-cli-1.5.1.phar ~/.local/bin/wp
     - chmod +x ~/.local/bin/wp
   override:
     - stack setup

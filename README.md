@@ -51,21 +51,10 @@ curl http://localhost:5555/wp-json/ | jq
 Which should print out a bunch of json.
 
 
-Now clear the default and insert the needed test posts:
+Now clear the default and insert the needed test posts, as well as adding tags:
 
 ```
-wp post delete 1
-wp post create --post_title='A first post' --post_status=publish --post_date='2014-10-01 07:00:00' --post_content="This is the content" --post_author=1
-wp post create --post_title='A second post' --post_status=publish --post_date='2014-10-02 07:00:00' --post_content="This is the second post content" --post_author=1
-wp post create --post_title='A third post' --post_status=publish --post_date='2014-10-10 07:00:00' --post_content="This is the third post content" --post_author=1
-wp post create --post_title='A fourth post' --post_status=publish --post_date='2014-10-15 07:00:00' --post_content="This is the fourth post content" --post_author=1
-wp post create --post_type=page --post_title='A first page' --post_status=publish --post_date='2014-10-15 07:00:00' --post_content="This is the first page content" --post_author=1
-```
-
-Now set the tags and categories:
-
-```
-python add_tags.py
+python setup_posts.py
 ```
 
 ## Requirements

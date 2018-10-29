@@ -15,6 +15,7 @@ import           Data.Aeson              hiding (decode, encode, json, object)
 import qualified Data.Attoparsec.Text    as A
 import           Data.Char               (toUpper)
 import qualified Data.HashMap.Strict     as M
+import           Data.List               (lookup)
 import qualified Data.Map as Map
 import           Data.IntSet             (IntSet)
 import qualified Data.IntSet             as IntSet
@@ -24,6 +25,7 @@ import           Data.Scientific         (floatingOrInteger)
 import qualified Data.Set                as Set
 import           Data.Text               (Text)
 import qualified Data.Text               as T
+import qualified Data.Text.Encoding      as T
 import qualified Data.Vector             as V
 import           Web.Larceny
 
@@ -41,6 +43,7 @@ wordpressSubs ::   Wordpress b
               -> Substitutions s
 wordpressSubs wp extraFields getURI wpLens =
   subs [ ("wpPosts", wpPostsFill wp extraFields wpLens)
+       , ("wpPostsAggregate", wpPostsAggregateFill wp extraFields wpLens)
        , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
        , ("wpPage", wpPageFill wpLens)
        , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
@@ -76,15 +79,15 @@ wpCustomFill wp =
 customFill :: Wordpress b -> Text -> Fill s
 customFill Wordpress{..} endpoint = Fill $ \attrs (path, tpl) lib ->
   do let key = EndpointKey endpoint
-     res <- liftIO $ cachingGetRetry key
-     case fmap decode res of
+     res <- liftIO $ (cachingGetRetry key :: IO (Either StatusCode WPResponse))
+     case (fmap decodeWPResponseBody res :: Either StatusCode (Maybe Value)) of
        Left code -> do
          let notification = "Encountered status code " <> tshow code
                          <> " when querying \"" <> endpoint <> "\"."
          liftIO $ wpLogger notification
          return $ "<!-- " <> notification <> " -->"
-       Right (Just (json :: Value)) ->
-         unFill (jsonToFill json) attrs (path, tpl) lib
+       Right (Just json) ->
+        unFill (jsonToFill json) attrs (path, tpl) lib
        Right Nothing -> do
          let notification = "Unable to decode JSON for endpoint \"" <> endpoint
          liftIO $ wpLogger $ notification <> ": " <> tshow res
@@ -114,27 +117,79 @@ wpPostsFill :: Wordpress b
             -> WPLens b s
             -> Fill s
 wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
-  do let postsQuery = parseQueryNode (Map.toList attrs)
-     filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
-     let wpKey = mkWPKey filters postsQuery
+  do (postsQuery, wpKey) <- mkPostsQueryAndKey wp attrs
      res <- liftIO $ cachingGetRetry wp wpKey
-     case fmap decode res of
+     case fmap decodeWPResponseBody res of
        Right (Just posts) -> do
-         let postsW = extractPostIds posts
-         wp' <- use wpLens
-         let postsND = take (qlimit postsQuery)
-                       . noDuplicates (requestPostSet wp') $ postsW
+         postsND <- postsWithoutDuplicates wpLens postsQuery posts
          addPostIds wpLens (map fst postsND)
          unFill (wpPostsHelper wp extraFields (map snd postsND)) mempty tpl lib
        Right Nothing -> return ""
-       Left code -> do
-         let notification = "Encountered status code " <> tshow code
-                            <> " when querying wpPosts."
-         liftIO $ wpLogger wp notification
-         return $ "<!-- " <> notification <> " -->"
-  where noDuplicates :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
-        noDuplicates Nothing = id
-        noDuplicates (Just wpPostIdSet) = filter (\(wpId,_) -> IntSet.notMember wpId wpPostIdSet)
+       Left code     -> liftIO $ logStatusCode wp code
+
+postsWithoutDuplicates :: WPLens b s
+                       -> WPQuery
+                       -> [Object]
+                       -> StateT s IO [(Int, Object)]
+postsWithoutDuplicates wpLens postsQuery posts = do
+  wp <- use wpLens
+  let postsW = extractPostIds posts
+  return $ take (qlimit postsQuery) . removeDupes (requestPostSet wp) $ postsW
+  where removeDupes :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
+        removeDupes Nothing = id
+        removeDupes (Just wpPostIdSet) =
+          filter (\(wpId,_) -> IntSet.notMember wpId wpPostIdSet)
+
+mkPostsQueryAndKey :: Wordpress b
+                   -> Attributes
+                   -> StateT s IO (WPQuery, WPKey)
+mkPostsQueryAndKey wp attrs = do
+  let postsQuery = parseQueryNode (Map.toList attrs)
+  filters <- liftIO $ mkFilters wp (qtaxes postsQuery)
+  let wpKey = mkWPKey filters postsQuery
+  return (postsQuery, wpKey)
+
+logStatusCode :: Wordpress b -> Int -> IO Text
+logStatusCode wp code = do
+  let notification = "Encountered status code " <> tshow code
+                     <> " when querying wpPosts."
+  wpLogger wp notification
+  return $ "<!-- " <> notification <> " -->"
+
+wpPostsAggregateFill :: Wordpress b
+            -> [Field s]
+            -> WPLens b s
+            -> Fill s
+wpPostsAggregateFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
+  do (postsQuery, wpKey) <- mkPostsQueryAndKey wp attrs
+     res <- liftIO $ cachingGetRetry wp wpKey
+     case fmap decodeWPResponseBody res of
+       Right (Just posts) -> do
+          postsND' <- postsWithoutDuplicates wpLens postsQuery posts
+          addPostIds wpLens (map fst postsND')
+          unFill (fillChildrenWith $
+                    subs [ ("wpPostsItem", wpPostsHelper wp extraFields (map snd postsND'))
+                         , ("wpPostsMeta", wpPostsMetaFill postsQuery res) ])
+                 mempty tpl lib
+       Right Nothing -> return ""
+       Left code -> liftIO $ logStatusCode wp code
+
+wpPostsMetaFill :: WPQuery -> Either StatusCode WPResponse -> Fill s
+wpPostsMetaFill query (Right (WPResponse headers _)) = do
+  let totalPagesText = maybe "" T.decodeUtf8 
+                          (lookup "x-wp-totalpages" headers)
+      totalPages = fromMaybe 1 (readSafe totalPagesText) :: Int
+  fillChildrenWith $
+    subs [ ("wpTotalPages", textFill totalPagesText )
+         , ("wpHasMorePages", 
+               if qpage query < totalPages
+                then fillChildren
+                else textFill "")
+         , ("wpNoMorePages",
+               if qpage query < totalPages
+                then textFill ""
+                else fillChildren)]
+wpPostsMetaFill _ _ = textFill ""
 
 mkFilters :: Wordpress b -> [TaxSpecList] -> IO [Filter]
 mkFilters wp specLists =
@@ -363,9 +418,9 @@ wpGetPost wpLens wpKey =
 
 getPost :: Wordpress b -> WPKey -> IO (Maybe Object)
 getPost Wordpress{..} wpKey = decodePost <$> cachingGetRetry wpKey
-  where decodePost :: Either StatusCode Text -> Maybe Object
+  where decodePost :: Either StatusCode WPResponse -> Maybe Object
         decodePost (Right t) =
-          do post' <- decodeJson t
+          do post' <- decodeWPResponseBody t
              case post' of
               Just (post:_) -> Just post
               _ -> Nothing
