@@ -201,7 +201,7 @@ wpPostsAggregateTests = do
       \  <wpPostsItem><wpTitle /></wpPostsItem>\
       \  <wpPostsMeta>\
           \<wpHasMorePages>\
-            \There are more pages!\
+            \There are more pages\
           \</wpHasMorePages>\
       \  </wpPostsMeta>\
       \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar There are more pages"
