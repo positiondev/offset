@@ -219,12 +219,31 @@ wpPostsAggregateTests = do
 wpCustomAggregateTests = do
   describe "<wpCustomAggregate>" $ do
     it "should be able to display a 'meta' section for whole aggregate" $ do
-      "<wpCustomAggregate endpoint=\"true\">\
-      \  <wpCustomItem><wpPerson><wpName /></wpPerson></wpCustomItem>\
+      "<wpCustomAggregate endpoint=\"many-pages\">\
+      \  <wpCustomItem><wpTitle><wpRendered /></wpTitle></wpCustomItem>\
       \  <wpCustomMeta>\
         \  and some meta\
       \  </wpCustomMeta>\
-      \</wpCustomAggregate>" `shouldRender` "Ada Lovelace and some meta"
+      \</wpCustomAggregate>" `shouldRender` "<i>Foo</i> bar and some meta"
+    it "should be able to conditionally display if there are more pages" $ do
+      "<wpCustomAggregate endpoint=\"many-pages\">\
+      \  <wpCustomItem><wpTitle><wpRendered /></wpTitle></wpCustomItem>\
+      \  <wpCustomMeta page=\"1\">\
+          \<wpHasMorePages>\
+            \There are more pages\
+          \</wpHasMorePages>\
+      \  </wpCustomMeta>\
+      \</wpCustomAggregate>" `shouldRender` "<i>Foo</i> bar There are more pages"
+    it "should be able to conditionally display if no more pages" $ do
+      "<wpCustomAggregate endpoint=\"many-pages\">\
+      \  <wpCustomItem><wpTitle><wpRendered /></wpTitle></wpCustomItem>\
+      \  <wpCustomMeta page=\"478\">\
+          \<wpNoMorePages>\
+            \No more pages\
+          \</wpNoMorePages>\
+      \  <wpCustomMeta >\
+      \</wpCustomAggregate>" `shouldRender` "<i>Foo</i> bar No more pages"
+
 
 cacheTests :: Spec
 cacheTests = do

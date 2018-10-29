@@ -204,6 +204,8 @@ fauxRequester _ "/false" [] =
   toWPResp $ enc [boolFieldFalse]
 fauxRequester _ "/true" [] =
   toWPResp $ enc [boolFieldTrue]
+fauxRequester _ "/many-pages" [] =
+  return $ Right $ WPResponse [(CI.mk "X-WP-TotalPages", "478")] (enc [article1])
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])
