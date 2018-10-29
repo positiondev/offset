@@ -30,14 +30,14 @@ import           Common
 
 runTests :: IO ()
 runTests = hspec $ do
-  deadTests
+  mockedTests
   liveTests
 
 main :: IO ()
 main = runTests
 
-deadTests :: Spec
-deadTests = do
+mockedTests :: Spec
+mockedTests = do
   Misc.tests
   larcenyFillTests
   wpPostsAggregateTests
