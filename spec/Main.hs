@@ -41,6 +41,7 @@ mockedTests = do
   Misc.tests
   larcenyFillTests
   wpPostsAggregateTests
+  wpCustomAggregateTests
   cacheTests
   queryTests
   feedTests
@@ -214,6 +215,16 @@ wpPostsAggregateTests = do
           \</wpNoMorePages>\
       \  </wpPostsMeta>\
       \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar No more pages"
+
+wpCustomAggregateTests = do
+  describe "<wpCustomAggregate>" $ do
+    it "should be able to display a 'meta' section for whole aggregate" $ do
+      "<wpCustomAggregate endpoint=\"true\">\
+      \  <wpCustomItem><wpPerson><wpName /></wpPerson></wpCustomItem>\
+      \  <wpCustomMeta>\
+        \  and some meta\
+      \  </wpCustomMeta>\
+      \</wpCustomAggregate>" `shouldRender` "Ada Lovelace and some meta"
 
 cacheTests :: Spec
 cacheTests = do
