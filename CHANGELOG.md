@@ -1,5 +1,17 @@
 # Changelog
 
+## October 29 2018
+ * Add Splice for a version of `wpPosts` called `wpPostsAggregate`
+ * `wpPostsAggregate` will allow access to some information from the headers, like how many posts and pages of posts there are.
+ * Unlike `wpPosts`, the posts are wrapped in `wpPostsItem`. 
+ * There's also a separate `wpPostsMeta` that currently has the following splices:
+    * `wpTotalPages` - displays how many pages of results are there from this query
+    * `wpHasMorePages` - shows child markup if there are more pages (uses the post query from `wpPostsAggregate`'s attributes)
+    * `wpNoMorePages` - shows child markup if there are no more pages
+ * Eventually `wpPostsMeta` may give access to all the headers, but I have implemented that.
+
+## Changelog bankruptcy
+
 ## August 22 2017
  * Feeds need to specify if they're using the default author field (an id) or inline guest authors fields.
 
