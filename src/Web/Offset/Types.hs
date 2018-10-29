@@ -38,7 +38,7 @@ module Web.Offset.Types (
 
 import           Control.Lens             hiding (children)
 import           Control.Monad.State
-import           Data.Aeson               (FromJSON, Value (..), parseJSON, (.:), ToJSON(..))
+import           Data.Aeson               (FromJSON, Value (..), parseJSON, (.:), (.:?), (.!=), ToJSON(..))
 import           Data.Default
 import qualified Data.ByteString          as BS
 import           GHC.Generics
@@ -81,7 +81,14 @@ decodeWPResponseBody :: FromJSON a => WPResponse -> Maybe a
 decodeWPResponseBody (WPResponse _ body) = decodeJson body
 
 instance ToJSON WPResponse
-instance FromJSON WPResponse
+instance FromJSON WPResponse where
+  parseJSON (Object v) = do
+    headers <- v .:? "wpHeaders" .!= mempty
+    body <- v .:? "wpBody" .!= encode v
+    return $ WPResponse headers body
+  parseJSON v          = WPResponse
+                          <$> (return mempty)
+                          <*> return (encode v)
 
 instance ToJSON (CI.CI BS.ByteString) where
   toJSON str = toJSON $ T.toLower $ T.decodeUtf8 $ CI.original str

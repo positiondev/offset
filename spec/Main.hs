@@ -197,16 +197,21 @@ wpPostsAggregateTests = do
       \  </wpPostsMeta>\
       \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar 478"
 
--- Caching tests
-
 cacheTests :: Spec
 cacheTests = do
-  describe "should grab post from cache if it's there" $
+  describe "should grab post from cache if it's there" $ do
       it "should render the post even w/o json source" $ do
         let (Object a2) = article2
         ctxt <- liftIO initNoRequestWithCache
         wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2001" "10" "the-post")
                                           (enc (WPResponse mempty (enc [a2])))
+        ("single", ctxt) `shouldRenderAtUrlContaining` ("/2001/10/the-post/", "The post")
+
+      it "should allow the legacy format (without headers)" $ do
+        let (Object a2) = article2
+        ctxt <- liftIO initNoRequestWithCache
+        wpCacheSet' (view wordpress ctxt) (PostByPermalinkKey "2001" "10" "the-post")
+                                          (enc [a2])
         ("single", ctxt) `shouldRenderAtUrlContaining` ("/2001/10/the-post/", "The post")
 
   describe "caching" $ do
