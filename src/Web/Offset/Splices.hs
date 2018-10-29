@@ -169,24 +169,27 @@ wpPostsAggregateFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
           addPostIds wpLens (map fst postsND')
           unFill (fillChildrenWith $
                     subs [ ("wpPostsItem", wpPostsHelper wp extraFields (map snd postsND'))
-                         , ("wpPostsMeta", wpPostsMetaFill res) ])
+                         , ("wpPostsMeta", wpPostsMetaFill postsQuery res) ])
                  mempty tpl lib
        Right Nothing -> return ""
        Left code -> liftIO $ logStatusCode wp code
 
-wpPostsMetaFill :: Either StatusCode WPResponse -> Fill s
-wpPostsMetaFill (Right (WPResponse headers _)) = do
+wpPostsMetaFill :: WPQuery -> Either StatusCode WPResponse -> Fill s
+wpPostsMetaFill query (Right (WPResponse headers _)) = do
   let totalPagesText = maybe "" T.decodeUtf8 
                           (lookup "x-wp-totalpages" headers)
+      totalPages = fromMaybe 1 (readSafe totalPagesText) :: Int
   fillChildrenWith $
     subs [ ("wpTotalPages", textFill totalPagesText )
-         , ("wpHasMorePages", useAttrs (a "current-page") (\mPage ->
-               let currentPage = fromMaybe 1 mPage :: Int
-                   totalPages = fromMaybe 1 (readSafe totalPagesText) :: Int in
-               if currentPage < totalPages
+         , ("wpHasMorePages", 
+               if qpage query < totalPages
                 then fillChildren
-                else textFill ""))]
-wpPostsMetaFill _ = textFill ""
+                else textFill "")
+         , ("wpNoMorePages",
+               if qpage query < totalPages
+                then textFill ""
+                else fillChildren)]
+wpPostsMetaFill _ _ = textFill ""
 
 mkFilters :: Wordpress b -> [TaxSpecList] -> IO [Filter]
 mkFilters wp specLists =

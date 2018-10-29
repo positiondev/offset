@@ -200,11 +200,20 @@ wpPostsAggregateTests = do
       "<wpPostsAggregate page=\"1\">\
       \  <wpPostsItem><wpTitle /></wpPostsItem>\
       \  <wpPostsMeta>\
-          \<wpHasMorePages currentPage=\"1\">\
+          \<wpHasMorePages>\
             \There are more pages!\
           \</wpHasMorePages>\
       \  </wpPostsMeta>\
-      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar There are more pages!"
+      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar There are more pages"
+    it "should be able to conditionally display if no more pages" $ do
+      "<wpPostsAggregate page=\"478\">\
+      \  <wpPostsItem><wpTitle /></wpPostsItem>\
+      \  <wpPostsMeta>\
+          \<wpNoMorePages>\
+            \No more pages\
+          \</wpNoMorePages>\
+      \  </wpPostsMeta>\
+      \</wpPostsAggregate>" `shouldRender` "<i>Foo</i> bar No more pages"
 
 cacheTests :: Spec
 cacheTests = do
