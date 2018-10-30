@@ -9,6 +9,7 @@
     * `wpHasMorePages` - shows child markup if there are more pages (uses the post query from `wpPostsAggregate`'s attributes)
     * `wpNoMorePages` - shows child markup if there are no more pages
  * Eventually `wpPostsMeta` may give access to all the headers, but I have implemented that.
+ * Add `wpCustomAggregrate` which works just same as `wpPostsAggregate`.
 
 ## Changelog bankruptcy
 

@@ -49,6 +49,7 @@ wordpressSubs wp extraFields getURI wpLens =
        , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
        , ("wp", wpPrefetch wp extraFields getURI wpLens)
        , ("wpCustom", wpCustomFill wp)
+       , ("wpCustomAggregate", wpCustomAggregateFill wp)
        , ("wpCustomDate", wpCustomDateFill)
        , ("stripHtml", stripHtmlFill)]
 
@@ -111,6 +112,29 @@ jsonToFill (Bool True) = rawTextFill $ tshow True
 jsonToFill (Bool False) = rawTextFill "<!-- JSON field found, but value is false. -->"
 jsonToFill (Null) = rawTextFill "<!-- JSON field found, but value is null. -->"
 
+wpCustomAggregateFill :: Wordpress b -> Fill s
+wpCustomAggregateFill wp =
+  useAttrs (a "endpoint") (customAggregateFill wp)
+
+customAggregateFill :: Wordpress b -> Text -> Fill s
+customAggregateFill Wordpress{..} endpoint = Fill $ \attrs (path, tpl) lib ->
+  do let key = EndpointKey endpoint
+     res <- liftIO $ (cachingGetRetry key :: IO (Either StatusCode WPResponse))
+     case (fmap decodeWPResponseBody res :: Either StatusCode (Maybe Value)) of
+       Left code -> do
+         let notification = "Encountered status code " <> tshow code
+                         <> " when querying \"" <> endpoint <> "\"."
+         liftIO $ wpLogger notification
+         return $ "<!-- " <> notification <> " -->"
+       Right (Just json) ->
+        unFill (fillChildrenWith $
+                    subs [ ("wpCustomItem", jsonToFill json)
+                         , ("wpCustomMeta", useAttrs (a "page") (wpAggregateMetaFill res)) ])
+               attrs (path, tpl) lib
+       Right Nothing -> do
+         let notification = "Unable to decode JSON for endpoint \"" <> endpoint
+         liftIO $ wpLogger $ notification <> ": " <> tshow res
+         return $ "<!-- " <> notification <> "-->"
 
 wpPostsFill :: Wordpress b
             -> [Field s]
@@ -169,24 +193,25 @@ wpPostsAggregateFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
           addPostIds wpLens (map fst postsND')
           unFill (fillChildrenWith $
                     subs [ ("wpPostsItem", wpPostsHelper wp extraFields (map snd postsND'))
-                         , ("wpPostsMeta", wpPostsMetaFill postsQuery res) ])
+                         , ("wpPostsMeta", wpAggregateMetaFill res (Just $ qpage postsQuery)) ])
                  mempty tpl lib
        Right Nothing -> return ""
        Left code -> liftIO $ logStatusCode wp code
 
-wpPostsMetaFill :: WPQuery -> Either StatusCode WPResponse -> Fill s
-wpPostsMetaFill query (Right (WPResponse headers _)) = do
-  let totalPagesText = maybe "" T.decodeUtf8 
+wpAggregateMetaFill :: Either StatusCode WPResponse -> Maybe Int -> Fill s
+wpAggregateMetaFill (Right (WPResponse headers _)) mCurrentPage = do
+  let totalPagesText = maybe "" T.decodeUtf8
                           (lookup "x-wp-totalpages" headers)
       totalPages = fromMaybe 1 (readSafe totalPagesText) :: Int
+      currentPage = fromMaybe 1 mCurrentPage
   fillChildrenWith $
     subs [ ("wpTotalPages", textFill totalPagesText )
-         , ("wpHasMorePages", 
-               if qpage query < totalPages
+         , ("wpHasMorePages",
+               if currentPage < totalPages
                 then fillChildren
                 else textFill "")
          , ("wpNoMorePages",
-               if qpage query < totalPages
+               if currentPage < totalPages
                 then textFill ""
                 else fillChildren)]
 wpPostsMetaFill _ _ = textFill ""
