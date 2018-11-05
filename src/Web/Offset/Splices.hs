@@ -28,6 +28,7 @@ import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
 import qualified Data.Vector             as V
 import           Web.Larceny
+import Debug.Trace
 
 import           Web.Offset.Field
 import           Web.Offset.Posts
@@ -245,14 +246,22 @@ wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
          w@Wordpress{..} <- use wpLens
          liftIO $ wpLogger $ "unable to parse URI: " <> uri
          return Nothing
-       Just (year, month, slug) ->
+       Just (PostPermalink year month slug) ->
          do res <- wpGetPost wpLens (PostByPermalinkKey year month slug)
             case res of
               Just post -> do addPostIds wpLens [fst (extractPostId post)]
                               wp <- use wpLens
                               return $ Just (postSubs wp extraFields post)
               _ -> return Nothing
-
+       Just (RevisionPostId postId) ->
+         do res <- fromMaybe (return Nothing) $
+                             (wpGetPost wpLens) <$>
+                             (PostRevisionKey <$> readSafe postId)
+            case res of
+              Just post -> do addPostIds wpLens [fst (extractPostId post)]
+                              wp <- use wpLens
+                              return $ Just (postSubs wp extraFields post)
+              _ -> return Nothing
 
 feedSubs :: [Field s] -> WPLens b s -> Object -> Substitutions s
 feedSubs fields lens obj=
@@ -423,18 +432,35 @@ findDict dicts (TaxSpecList tName tList) =
     Just dict -> map (TaxFilter tName . dict) tList
     Nothing -> []
 
-parsePermalink :: Text -> Maybe (Text, Text, Text)
-parsePermalink = either (const Nothing) Just . A.parseOnly parser . T.reverse
-  where parser = do _ <- A.option ' ' (A.char '/')
-                    guls <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
-                    _ <- A.char '/'
-                    segment2 <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
-                    _ <- A.char '/'
-                    segment1 <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
-                    _ <- A.char '/'
-                    return (T.reverse $ T.pack segment1
-                           ,T.reverse $ T.pack segment2
-                           ,T.reverse $ T.pack guls)
+data PostOrRevision =
+    PostPermalink Text Text Text
+  | RevisionPostId Text deriving (Eq, Show)
+
+parsePermalink :: Text -> Maybe PostOrRevision
+parsePermalink = do
+  -- reverse, then parse reversed text, then reverse again
+  -- this is not great, could use refactoring
+  either (const Nothing) Just . A.parseOnly parser . T.reverse
+  where
+    parser = postPermaParser <|> postIdParser
+    postIdParser = do
+      -- /revisions/234 -> 432/snoisiver/
+      _ <- A.option ' ' (A.char '/')
+      postId <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
+      _ <- A.string "/snoisiver/" -- augh
+      return (RevisionPostId (T.reverse $ T.pack postId))
+    postPermaParser = do
+      -- /2019/10/some-slug -> guls-emos/01/9102/
+      _ <- A.option ' ' (A.char '/')
+      guls <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
+      _ <- A.char '/'
+      segment2 <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
+      _ <- A.char '/'
+      segment1 <- A.many1 (A.letter <|> A.char '-' <|> A.digit)
+      _ <- A.char '/'
+      return $ PostPermalink (T.reverse $ T.pack segment1)
+                             (T.reverse $ T.pack segment2)
+                             (T.reverse $ T.pack guls)
 
 wpGetPost :: (MonadState s m, MonadIO m) => WPLens b s -> WPKey -> m (Maybe Object)
 wpGetPost wpLens wpKey =
@@ -450,7 +476,6 @@ getPost Wordpress{..} wpKey = decodePost <$> cachingGetRetry wpKey
               Just (post:_) -> Just post
               _ -> Nothing
         decodePost (Left _) = Nothing
-
 
 transformName :: Text -> Text
 transformName = T.append "wp" . snd . T.foldl f (True, "")

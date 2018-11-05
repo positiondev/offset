@@ -75,6 +75,13 @@ article2 = object [ "id" .= (2 :: Int)
                   , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
                   ]
 
+article2Revision :: Value
+article2Revision = object [ "id" .= (2 :: Int)
+                  , "date" .= ("2014-10-20T07:00:00" :: Text)
+                  , "title" .= object ["rendered" .= ("A draft" :: Text)]
+                  , "excerpt" .= object ["rendered" .= ("summary" :: Text)]
+                  ]
+
 page1 :: Value
 page1 = object [ "id" .= (3 :: Int)
                , "date" .= ("2014-10-20T07:00:00" :: Text)
@@ -196,6 +203,8 @@ fauxRequester _ "/jacobin/featured-content/editors-picks" [] =
                        ]]
 fauxRequester _ "/wp/v2/pages" [("slug", "a-first-page")] =
   toWPResp $ enc [page1]
+fauxRequester _ "/wp/v2/posts/2/revisions" [] =
+  toWPResp $ enc [article2Revision]
 fauxRequester _ "/dev/null" [] =
   toWPResp $ enc [object ["this_is_null" .= Null]]
 fauxRequester _ "/dev/rendered_text" [] =

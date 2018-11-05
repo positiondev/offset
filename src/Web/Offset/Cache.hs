@@ -132,4 +132,5 @@ formatKey = format
         format (TaxDictKey t) = ns "tax_dict:" <> t
         format (TaxSlugKey tn ts) = ns "tax_slug:" <> tn <> ":" <> ts
         format (EndpointKey e) = ns "endpoint:" <> e
+        format (PostRevisionKey i) = ns "revision:" <> tshow i
         ns k = "wordpress:" <> k

@@ -1,5 +1,14 @@
 # Changelog
 
+## November 5 2018
+ * Add ability for `wpPostByPermalink` to query revisions, depending on the URL of the request.
+    * this way the revision can be previewed using the same template 
+      as the published post
+    * The URI path at which the template is accessed needs to be `/revisions/<post_id>`.
+    * Note that any special authorization or authentication for viewing revisions needs to happen in the    application -- e.g., when you set up the routes to render the templates. Offset doesn't 
+      do any revision-specific authorization, so if you treat it just like your public 
+      `wpPostByPermalink` handling, then the revisions will essentially be public. 
+
 ## October 29 2018
  * Add Splice for a version of `wpPosts` called `wpPostsAggregate`
  * `wpPostsAggregate` will allow access to some information from the headers, like how many posts and pages of posts there are.
@@ -17,6 +26,7 @@
  * Feeds need to specify if they're using the default author field (an id) or inline guest authors fields.
 
 ## July 20 2017
+
  * Changed Splice creation so that "false" fields don't render (this is because WP uses "text or false" as a sort of Maybe type, as far as I can tell -- if the field is entered, it's text, if not, it's "false".)
 
 ## Changelog bankruptcy

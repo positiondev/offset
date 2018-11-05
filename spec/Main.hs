@@ -42,6 +42,7 @@ mockedTests = do
   larcenyFillTests
   wpPostsAggregateTests
   wpCustomAggregateTests
+  revisionTests
   cacheTests
   queryTests
   feedTests
@@ -243,6 +244,13 @@ wpCustomAggregateTests = do
           \</wpNoMorePages>\
       \  <wpCustomMeta >\
       \</wpCustomAggregate>" `shouldRender` "<i>Foo</i> bar No more pages"
+
+revisionTests :: Spec
+revisionTests = do
+  describe "revisions" $ do
+    it "should render the revision" $ do
+      ctxt <- liftIO initFauxRequestNoCache
+      ("single", ctxt) `shouldRenderAtUrlContaining` ("/revisions/2", "A draft")
 
 
 cacheTests :: Spec
