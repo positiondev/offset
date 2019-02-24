@@ -253,7 +253,6 @@ wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
                               return $ Just (postSubs wp extraFields post)
               _ -> return Nothing
 
-
 feedSubs :: [Field s] -> WPLens b s -> Object -> Substitutions s
 feedSubs fields lens obj=
   subs $ [("wpPost", wpPostFromObjectFill fields lens obj)]
@@ -387,6 +386,39 @@ prefetchSubs :: Wordpress b -> MVar [WPKey] -> Substitutions s
 prefetchSubs wp mkeys =
   subs [ ("wpPosts", wpPostsPrefetch wp mkeys)
        , ("wpPage", useAttrs (a"name") $ wpPagePrefetch mkeys) ]
+
+postPrefetchSubs :: Wordpress b
+                -> MVar [WPKey]
+                -> [Field s]
+                -> Object
+                -> Substitutions s
+postPrefetchSubs wp mkeys extraFields object =
+  subs (map (buildSplice object) (mergeFields postFields extraFields))
+  where -- run queries for Q fields
+        buildSplice o (Q n endpoint) =
+          (transformName n, customPrefetchFill wp mkeys (toEndpoint endpoint $ getText n o))
+        -- do nothing for other fields
+        buildSplice o (F n) = (transformName n, textFill "")
+        buildSplice o (P n _) = (transformName n, textFill "")
+        buildSplice o (PN n _) = (transformName n, textFill "")
+        buildSplice o (PM n _) = (transformName n, textFill "")
+        buildSplice o (N n _) = (transformName n, textFill "")
+        buildSplice o (C n _) = (transformName n, textFill "")
+        buildSplice o (CN n _ _) = (transformName n, textFill "")
+        buildSplice o (M n fs) = (transformName n, textFill "")
+
+        getText n o = case M.lookup n o of
+                        Just (String t) -> t
+                        Just (Number i) -> either (tshow :: Double -> Text)
+                                                  (tshow :: Integer -> Text) (floatingOrInteger i)
+                        _ -> ""
+
+customPrefetchFill :: Wordpress b -> MVar [WPKey] -> Text -> Fill s
+customPrefetchFill Wordpress{..} mKeys endpoint =
+  Fill $ \attrs (path, tpl) lib ->
+           do let key = EndpointKey endpoint
+              liftIO $ modifyMVar_ mKeys (\keys -> return $ key : keys)
+              return ""
 
 wpPostsPrefetch :: Wordpress b
                 -> MVar [WPKey]
