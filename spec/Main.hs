@@ -130,9 +130,20 @@ larcenyFillTests = do
       let ctxt' = setRequest ctxt
                  $ (\(_,y) -> (requestWithUrl, y)) defaultFnRequest
       let s = view wpsubs ctxt'
-      let tpl = toTpl "<wp><wpPostByPermalink><wpDepartment><wpName /></wpDepartment></wp>"
+      let tpl = toTpl "<wp><wpPostByPermalink><wpDepartment><wpName /></wpDepartment></wpPostByPermalink></wp>"
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Sports"
+    it "should render stuff 2" $ do
+      ctxt <- initFauxRequestNoCache
+      let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 "/2009/10/the-post/"}
+      let ctxt' = setRequest ctxt
+                 $ (\(_,y) -> (requestWithUrl, y)) defaultFnRequest
+      let s = view wpsubs ctxt'
+      let tpl = toTpl "<wp><wpPostByPermalink><wpGuestAuthors><wpName /></wpGuestAuthors></wpPostByPermalink></wp>"
+      rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
+      rendered `shouldBe` "Lucy ParsonsEmma Goldman"
+
+
 
   describe "<wpCustom>" $ do
     it "should render an HTML comment if JSON field is null" $

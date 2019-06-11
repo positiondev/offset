@@ -16,7 +16,8 @@ import           Web.Offset.Date
 
 data Field s = F Text -- A single flat text or number field
              | B Text -- A single flat boolean field
-             | Q Text ToEndpoint -- A field that will make another request
+             | Q Text IdToEndpoint -- A field that will make another request
+             | QM Text IdsToEndpoint -- A list of fields that will make another request
              | P Text (Text -> Fill s) -- A customly parsed flat field
              | PN Text (Object -> Fill s) -- A customly parsed nested field
              | PM Text ([Object] -> Fill s) -- A customly parsed list field
@@ -26,7 +27,8 @@ data Field s = F Text -- A single flat text or number field
              | CN Text [Text] [Field s] -- A nested set of fields that is found by following the specified path
              | M Text [Field s] -- A list field, where each element is an object
 
-data ToEndpoint = UseId Text | UseIncludes Text | UseSlug Text deriving (Eq, Show)
+data IdToEndpoint = UseId Text | UseSlug Text deriving (Eq, Show)
+data IdsToEndpoint =  UseInclude Text deriving (Eq, Show)
 
 -- NOTE(dbp 2014-11-07): We define equality that is 'good enough' for testing.
 -- In truth, our definition is wrong because of the functions inside of 'P' variants.
@@ -36,6 +38,7 @@ instance Eq (Field s) where
   F t1 == F t2 = t1 == t2
   B t1 == B t2 = t1 == t2
   Q t1 tE1 == Q t2 tE2 = t1 == t2 && tE1 == tE2
+  QM t1 tE1 == QM t2 tE2 = t1 == t2 && tE1 == tE2
   P t1 _ == P t2 _ = t1 == t2
   PN t1 _ == PN t2 _ = t1 == t2
   PM t1 _ == PM t2 _ = t1 == t2
@@ -57,6 +60,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
         getName (F t) = t
         getName (B t) = t
         getName (Q t _) = t
+        getName (QM t _) = t
         getName (P t _) = t
         getName (PN t _) = t
         getName (PM t _) = t
@@ -75,6 +79,7 @@ instance Show (Field s) where
   show (F t) = "F(" <> T.unpack t <> ")"
   show (B t) = "B(" <> T.unpack t <> ")"
   show (Q t e) = "Q("<> T.unpack t <> ":" <> show e <>")"
+  show (QM t e) = "Q("<> T.unpack t <> ":" <> show e <>")"
   show (P t _) = "P(" <> T.unpack t <> ",{code})"
   show (PN t _) = "PN(" <> T.unpack t <> ",{code})"
   show (PM t _) = "PM(" <> T.unpack t <> ",{code})"
