@@ -9,7 +9,7 @@ import           Data.Monoid      ((<>))
 import           Data.Text        (Text)
 import qualified Data.Text        as T
 import           Data.Time.Clock  (UTCTime)
-import           Data.Time.Format (defaultTimeLocale, formatTime, parseTimeM)
+import           Data.Time.Format (defaultTimeLocale, formatTime)
 import           Web.Larceny
 
 import           Web.Offset.Date
@@ -27,11 +27,6 @@ data Field s = F Text -- A single flat text or number field
              | M Text [Field s] -- A list field, where each element is an object
 
 data ToEndpoint = UseId Text | UseIncludes Text | UseSlug Text deriving (Eq, Show)
-
-toEndpoint :: ToEndpoint -> Text -> Text
-toEndpoint (UseId endpoint) id = endpoint <> id
-toEndpoint (UseIncludes endpoint) ids = endpoint <> "?includes=" <> ids
-toEndpoint (UseSlug endpoint) slug = endpoint <> "?slug=" <> slug
 
 -- NOTE(dbp 2014-11-07): We define equality that is 'good enough' for testing.
 -- In truth, our definition is wrong because of the functions inside of 'P' variants.

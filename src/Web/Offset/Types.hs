@@ -13,15 +13,15 @@
 module Web.Offset.Types (
   attrToTaxSpecList
 , CacheResult(..)
-, CatType(..)
+, CatType
 , decodeWPResponseBody
 , Filter(..)
 , Requester(..)
 , H.ResponseHeaders
 , StatusCode
-, TagType(..)
+, TagType
 , TaxDict(..)
-, TaxonomyName(..)
+, TaxonomyName
 , TaxRes(..)
 , TaxSpec(..)
 , TaxSpecId(..)
@@ -101,7 +101,7 @@ instance ToJSON BS.ByteString where
 instance FromJSON BS.ByteString where
   parseJSON (String str) = return $ T.encodeUtf8 str
 
-newtype Headers = Headers { headers :: M.Map Text Text} deriving (Show, Eq, Generic)
+newtype Headers = Headers { unHeaders :: M.Map Text Text} deriving (Show, Eq, Generic)
 
 instance SG.Semigroup Headers where
   (Headers h1) <> (Headers h2) = Headers (h1 SG.<> h2)
@@ -185,7 +185,8 @@ data WPKey = PostKey Int
            | AuthorKey Int
            | TaxDictKey Text
            | TaxSlugKey TaxonomyName Slug
-           | EndpointKey Text
+           | EndpointKey Text [(Text, Text)]
+           | IncludeKey Text [Text]
            deriving (Eq, Show, Ord)
 
 tagChars :: String

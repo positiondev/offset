@@ -75,22 +75,21 @@ wpCustomDateFill =
 
 wpCustomFill :: Wordpress b -> Fill s
 wpCustomFill wp =
-  useAttrs (a "endpoint") (customFill wp)
+  useAttrs (a "endpoint") (\e -> customFill wp (EndpointKey e []))
 
-customFill :: Wordpress b -> Text -> Fill s
-customFill Wordpress{..} endpoint = Fill $ \attrs (path, tpl) lib ->
-  do let key = EndpointKey endpoint
-     res <- liftIO $ (cachingGetRetry key :: IO (Either StatusCode WPResponse))
+customFill :: Wordpress b -> WPKey -> Fill s
+customFill Wordpress{..} key = Fill $ \attrs (path, tpl) lib ->
+  do res <- liftIO $ (cachingGetRetry key :: IO (Either StatusCode WPResponse))
      case (fmap decodeWPResponseBody res :: Either StatusCode (Maybe Value)) of
        Left code -> do
          let notification = "Encountered status code " <> tshow code
-                         <> " when querying \"" <> endpoint <> "\"."
+                         <> " when querying \"" <> tshow key <> "\"."
          liftIO $ wpLogger notification
          return $ "<!-- " <> notification <> " -->"
        Right (Just json) ->
         unFill (jsonToFill json) attrs (path, tpl) lib
        Right Nothing -> do
-         let notification = "Unable to decode JSON for endpoint \"" <> endpoint
+         let notification = "Unable to decode JSON for endpoint \"" <> tshow key
          liftIO $ wpLogger $ notification <> ": " <> tshow res
          return $ "<!-- " <> notification <> "-->"
 
@@ -118,7 +117,7 @@ wpCustomAggregateFill wp =
 
 customAggregateFill :: Wordpress b -> Text -> Fill s
 customAggregateFill Wordpress{..} endpoint = Fill $ \attrs (path, tpl) lib ->
-  do let key = EndpointKey endpoint
+  do let key = EndpointKey endpoint []
      res <- liftIO $ (cachingGetRetry key :: IO (Either StatusCode WPResponse))
      case (fmap decodeWPResponseBody res :: Either StatusCode (Maybe Value)) of
        Left code -> do
@@ -465,5 +464,10 @@ addPostIds wpLens ids =
   do w@Wordpress{..} <- use wpLens
      assign wpLens
             w{requestPostSet = (`IntSet.union` IntSet.fromList ids) <$> requestPostSet }
+
+toEndpoint :: ToEndpoint -> Text -> WPKey
+toEndpoint (UseId endpoint) id = EndpointKey (endpoint <> id) []
+toEndpoint (UseIncludes endpoint) ids = EndpointKey (endpoint <> "?includes=" <> ids) []
+toEndpoint (UseSlug endpoint) slug = EndpointKey (endpoint <> "?slug=" <> slug) []
 
 {-# ANN module ("HLint: ignore Eta reduce" :: String) #-}
