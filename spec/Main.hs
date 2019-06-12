@@ -112,7 +112,7 @@ larcenyFillTests = do
       let tpl = toTpl "<wp><wpPostByPermalink><wpTitle/></wpPostByPermalink></wp"
       void $ evalStateT (runTemplate tpl [] s mempty) ctxt'
       liftIO (tryTakeMVar record) `shouldReturn` Just ["/wp/v2/posts?slug=the-post"]
-    it "should render stuff" $ do
+    it "should render content from the endpoint" $ do
       ctxt <- initFauxRequestNoCache
       let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 "/2009/10/the-post/"}
       let ctxt' = setRequest ctxt
@@ -123,8 +123,7 @@ larcenyFillTests = do
       rendered `shouldBe` "<i>Foo</i> bar"
 
   describe "extra request fields" $ do
-
-    it "should render stuff" $ do
+    it "should render content accessed via an additional request using an ID in the JSON" $ do
       ctxt <- initFauxRequestNoCache
       let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 "/2009/10/the-post/"}
       let ctxt' = setRequest ctxt
@@ -133,7 +132,7 @@ larcenyFillTests = do
       let tpl = toTpl "<wp><wpPostByPermalink><wpDepartment><wpName /></wpDepartment></wpPostByPermalink></wp>"
       rendered <- evalStateT (runTemplate tpl [] s mempty) ctxt'
       rendered `shouldBe` "Sports"
-    it "should render stuff 2" $ do
+    it "should render content accessed via an additional request using multiple IDs in the JSON" $ do
       ctxt <- initFauxRequestNoCache
       let requestWithUrl = defaultRequest {rawPathInfo = T.encodeUtf8 "/2009/10/the-post/"}
       let ctxt' = setRequest ctxt
