@@ -2,6 +2,7 @@
 
 ## June 12 2019 
  * Add `Q` and `QM` `Field`s for fields accessed via an additional request using an ID or slug in the original request.
+ * Add `PV` `Field` for custom-parsed field without requiring a specific JSON type.
 
 ## October 29 2018
  * Add Splice for a version of `wpPosts` called `wpPostsAggregate`

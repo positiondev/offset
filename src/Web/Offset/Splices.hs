@@ -301,6 +301,8 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
           (transformName n, customFill wp (idsToEndpoint endpoint (unArray' . M.lookup n $ o)))
         buildSplice o (P n fill') =
           (transformName n, fill' $ getText n o)
+        buildSplice o (PV n fill') =
+          (transformName n, fill' (M.lookup n $ o))
         buildSplice o (PN n fill') =
           (transformName n, fill' (unObj . M.lookup n $ o))
         buildSplice o (PM n fill') =
