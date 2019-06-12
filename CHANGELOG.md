@@ -1,5 +1,8 @@
 # Changelog
 
+## June 12 2019 
+ * Add `Q` and `QM` `Field`s for fields accessed via an additional request using an ID or slug in the original request.
+
 ## October 29 2018
  * Add Splice for a version of `wpPosts` called `wpPostsAggregate`
  * `wpPostsAggregate` will allow access to some information from the headers, like how many posts and pages of posts there are.
@@ -8,7 +11,7 @@
     * `wpTotalPages` - displays how many pages of results are there from this query
     * `wpHasMorePages` - shows child markup if there are more pages (uses the post query from `wpPostsAggregate`'s attributes)
     * `wpNoMorePages` - shows child markup if there are no more pages
- * Eventually `wpPostsMeta` may give access to all the headers, but I have implemented that.
+ * Eventually `wpPostsMeta` may give access to all the headers, but I haven't implemented that.
  * Add `wpCustomAggregrate` which works just same as `wpPostsAggregate`.
 
 ## Changelog bankruptcy
