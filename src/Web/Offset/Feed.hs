@@ -150,7 +150,7 @@ getAuthorViaReq wp v =
      case mAuthorId of
        Nothing -> return []
        Just authorId ->
-         do eRespError <- cachingGetRetry wp (EndpointKey $ "wp/v2/users/" <> tshow authorId)
+         do eRespError <- cachingGetRetry wp (EndpointKey ("wp/v2/users/" <> tshow authorId) [])
             case eRespError of
               Left _ -> return []
               Right resp ->

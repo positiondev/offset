@@ -27,7 +27,7 @@ wpRequestInt runHTTP endpt key =
    PageKey s ->                   req (defaultEndpoint <> "/pages") [("slug", s)]
    AuthorKey i ->                 req (defaultEndpoint <> "/users/" <> tshow i) []
    TaxSlugKey tName tSlug ->      req (defaultEndpoint <> "/" <> tName) [("slug", tSlug)]
-   EndpointKey endpoint ->        req ("/" <> endpoint) []
+   EndpointKey endpoint params -> req ("/" <> endpoint) params
   where req path = unRequester runHTTP (endpt <> path)
         defaultEndpoint = "/wp/v2"
 

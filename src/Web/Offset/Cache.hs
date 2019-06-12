@@ -90,7 +90,7 @@ wpCacheSetInt :: RunRedis -> CacheBehavior -> WPKey -> Text -> IO ()
 wpCacheSetInt runRedis b key = void . runRedis . cacheSwitch b key
 
 cacheSwitch :: CacheBehavior -> WPKey -> Text -> Redis Bool
-cacheSwitch b k@(EndpointKey t) = cacheSetAlwaysExpire b (formatKey k)
+cacheSwitch b k@(EndpointKey t p) = cacheSetAlwaysExpire b (formatKey k)
 cacheSwitch b k = cacheSet b (formatKey k)
 
 cacheSet :: CacheBehavior -> Text -> Text -> Redis Bool
@@ -131,5 +131,5 @@ formatKey = format
         format (AuthorKey n) = ns "author:" <> tshow n
         format (TaxDictKey t) = ns "tax_dict:" <> t
         format (TaxSlugKey tn ts) = ns "tax_slug:" <> tn <> ":" <> ts
-        format (EndpointKey e) = ns "endpoint:" <> e
+        format (EndpointKey e ps) = ns "endpoint:" <> e <> "?" <> T.intercalate "&" (map (\(a,b) -> a <> "=" <> b) ps)
         ns k = "wordpress:" <> k
