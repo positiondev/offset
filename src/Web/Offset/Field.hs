@@ -3,7 +3,7 @@
 
 module Web.Offset.Field where
 
-import           Data.Aeson       (Object)
+import           Data.Aeson       (Object, Value)
 import           Data.Maybe       (fromMaybe)
 import           Data.Monoid      ((<>))
 import           Data.Text        (Text)
@@ -19,6 +19,7 @@ data Field s = F Text -- A single flat text or number field
              | Q Text IdToEndpoint -- A field that will make another request
              | QM Text IdsToEndpoint -- A list of fields that will make another request
              | P Text (Text -> Fill s) -- A customly parsed flat field
+             | PV Text (Maybe Value -> Fill s) -- A customly parsed value field
              | PN Text (Object -> Fill s) -- A customly parsed nested field
              | PM Text ([Object] -> Fill s) -- A customly parsed list field
              | N Text [Field s] -- A nested object field
@@ -40,6 +41,7 @@ instance Eq (Field s) where
   Q t1 tE1 == Q t2 tE2 = t1 == t2 && tE1 == tE2
   QM t1 tE1 == QM t2 tE2 = t1 == t2 && tE1 == tE2
   P t1 _ == P t2 _ = t1 == t2
+  PV t1 _ == PV t2 _ = t1 == t2
   PN t1 _ == PN t2 _ = t1 == t2
   PM t1 _ == PM t2 _ = t1 == t2
   N t1 n1 == N t2 n2 = t1 == t2 && n1 == n2
@@ -62,6 +64,7 @@ mergeFields fo (f:fs) = mergeFields (overrideInList False f fo) fs
         getName (Q t _) = t
         getName (QM t _) = t
         getName (P t _) = t
+        getName (PV t _) = t
         getName (PN t _) = t
         getName (PM t _) = t
         getName (N t _) = t
@@ -81,6 +84,7 @@ instance Show (Field s) where
   show (Q t e) = "Q("<> T.unpack t <> ":" <> show e <>")"
   show (QM t e) = "Q("<> T.unpack t <> ":" <> show e <>")"
   show (P t _) = "P(" <> T.unpack t <> ",{code})"
+  show (PV t _) = "PV(" <> T.unpack t <> ",{code})"
   show (PN t _) = "PN(" <> T.unpack t <> ",{code})"
   show (PM t _) = "PM(" <> T.unpack t <> ",{code})"
   show (N t n) = "N(" <> T.unpack t <> "," <> show n <> ")"
