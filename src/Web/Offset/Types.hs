@@ -186,7 +186,6 @@ data WPKey = PostKey Int
            | TaxDictKey Text
            | TaxSlugKey TaxonomyName Slug
            | EndpointKey Text [(Text, Text)]
-           | IncludeKey Text [Text]
            deriving (Eq, Show, Ord)
 
 tagChars :: String

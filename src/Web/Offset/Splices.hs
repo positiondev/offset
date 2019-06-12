@@ -296,7 +296,9 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
         buildSplice o (B n) =
           (transformName n, textFill $ getBool n o)
         buildSplice o (Q n endpoint) =
-          (transformName n, customFill wp (toEndpoint endpoint $ getText n o))
+          (transformName n, customFill wp (idToEndpoint endpoint $ getText n o))
+        buildSplice o (QM n endpoint) =
+          (transformName n, customFill wp (idsToEndpoint endpoint (unArray' . M.lookup n $ o)))
         buildSplice o (P n fill') =
           (transformName n, fill' $ getText n o)
         buildSplice o (PN n fill') =
@@ -318,17 +320,18 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
             mapSubs (\(i, oinner) -> subs $ map (buildSplice oinner) fs
                                          <> [(transformName n <> "Index", textFill (tshow i))])
                     (zip [1..] (unArray . M.lookup n $ o)))
-
+        unValue (String t) = t
+        unValue (Number i) = either (tshow :: Double -> Text)
+                                    (tshow :: Integer -> Text) (floatingOrInteger i)
+        unValue v = ""
         unObj (Just (Object o)) = o
         unObj _ = M.empty
         unArray (Just (Array v)) = map (unObj . Just) $ V.toList v
         unArray _ = []
+        unArray' (Just (Array v)) = map unValue $ V.toList v
+        unArray' _ = []
         traverseObject pth o = foldl (\o' x -> unObj . M.lookup x $ o') o pth
-        getText n o = case M.lookup n o of
-                        Just (String t) -> t
-                        Just (Number i) -> either (tshow :: Double -> Text)
-                                                  (tshow :: Integer -> Text) (floatingOrInteger i)
-                        _ -> ""
+        getText n o = maybe "" unValue (M.lookup n o)
         getBool n o = case M.lookup n o of
                         Just (Bool b) -> tshow b
                         _ -> ""
@@ -465,9 +468,11 @@ addPostIds wpLens ids =
      assign wpLens
             w{requestPostSet = (`IntSet.union` IntSet.fromList ids) <$> requestPostSet }
 
-toEndpoint :: ToEndpoint -> Text -> WPKey
-toEndpoint (UseId endpoint) id = EndpointKey (endpoint <> id) []
-toEndpoint (UseIncludes endpoint) ids = EndpointKey (endpoint <> "?includes=" <> ids) []
-toEndpoint (UseSlug endpoint) slug = EndpointKey (endpoint <> "?slug=" <> slug) []
+idToEndpoint :: IdToEndpoint -> Text -> WPKey
+idToEndpoint (UseId endpoint) id = EndpointKey (endpoint <> id) []
+idToEndpoint (UseSlug endpoint) slug = EndpointKey (endpoint) [("slug", slug)]
+
+idsToEndpoint :: IdsToEndpoint -> [Text] -> WPKey
+idsToEndpoint (UseInclude endpoint) ids = EndpointKey endpoint (map (\id -> ("include[]", id)) ids)
 
 {-# ANN module ("HLint: ignore Eta reduce" :: String) #-}

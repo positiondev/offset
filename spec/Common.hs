@@ -66,6 +66,7 @@ article1 = object [ "id" .= (1 :: Int)
                   , "departments" .= [ object [ "name" .= ("some department" :: T.Text)]]
                   , "department" .= ("15" :: T.Text)
                   , "authors" .= [ object ["name" .= ("Emma Goldman" :: T.Text)] ]
+                  , "guest_authors" .= [ "2" :: Text, "4" :: Text ]
                   , "boolean" .= True ]
 
 article2 :: Value
@@ -89,6 +90,16 @@ department = object [ "id" .= (2 :: Int)
                     , "name" .= ("Sports" :: Text)
                     ]
 
+authors :: [Value]
+authors = [ object [ "id" .= (2 :: Int)
+                   , "slug" .= ("lucy-parsons" :: Text)
+                   , "name" .= ("Lucy Parsons" :: Text)
+                   ],
+            object [ "id" .= (4 :: Int)
+                   , "slug" .= ("emma-goldman" :: Text)
+                   , "name" .= ("Emma Goldman" :: Text) ]
+          ]
+
 boolFieldTrue :: Value
 boolFieldTrue = object [ "person" .= object [ "name" .= ("Ada Lovelace" :: Text )]]
 
@@ -107,7 +118,8 @@ customFields = [N "featured_image"
                                           ,F "height"
                                           ,F "url"]]]]
                ,PM "departments" departmentFill
-               ,Q "department" (UseId "/wp/v2/department/")
+               ,Q "department" (UseId "wp/v2/department/")
+               ,QM "guest_authors" (UseInclude "wp/v2/authors")
                ,M "authors" [F "name"]
                ,B "boolean" ]
 
@@ -187,8 +199,10 @@ fauxRequester _ "/wp/v2/categories" [("slug", "bookmarx")] =
                          , "slug" .= ("bookmarx" :: Text)
                          , "meta" .= object ["links" .= object ["self" .= ("/159" :: Text)]]
                          ] ]
-fauxRequester _ "//wp/v2/department/15" [] =
+fauxRequester _ "/wp/v2/department/15" [] =
   toWPResp $ enc department
+fauxRequester _ "/wp/v2/authors" [("include[]","2"), ("include[]","4")] =
+  toWPResp $ enc authors
 fauxRequester _ "/jacobin/featured-content/editors-picks" [] =
   toWPResp $ enc [object [ "post_date" .= ("2013-04-26 10:11:52" :: Text)
                        , "date" .= ("2014-04-26 10:11:52" :: Text)

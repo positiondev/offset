@@ -24,7 +24,8 @@ module Web.Offset (
  , CatType
  , TaxSpecList(..)
  , Field(..)
- , ToEndpoint(..)
+ , IdToEndpoint(..)
+ , IdsToEndpoint(..)
  , mergeFields
  , attrToTaxSpecList
  , feedSubs
