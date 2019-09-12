@@ -427,13 +427,26 @@ wpPagePrefetch mKeys name = rawTextFill' $
 mkWPKey :: [Filter]
     -> WPQuery
     -> WPKey
-mkWPKey taxFilters WPPostsQuery{..} =
+mkWPKey taxFilters wppq@WPPostsQuery{..} =
   let page = if qpage < 1 then 1 else qpage
-      offset = qnum * (page - 1) + qoffset
-  in PostsKey (Set.fromList $ [ NumFilter qnum , OffsetFilter offset]
+  in PostsKey (Set.fromList $
+               [ PageFilter page
+               , OffsetFilter qoffset
+               , NumFilter qnum ]
+               ++ toFilters wppq
                ++ taxFilters ++ userFilter quser)
   where userFilter Nothing = []
         userFilter (Just u) = [UserFilter u]
+
+
+toFilters WPPostsQuery{..} =
+  catMaybes [ OrderFilter <$> qorder
+            , OrderByFilter <$> qorderby
+            , SearchFilter <$> qsearch
+            , BeforeFilter <$> qbefore
+            , AfterFilter <$> qafter
+            , StatusFilter <$> qstatus
+            , StickyFilter <$> qsticky]
 
 findDict :: [(TaxonomyName, TaxSpec -> TaxSpecId)] -> TaxSpecList -> [Filter]
 findDict dicts (TaxSpecList tName tList) =
