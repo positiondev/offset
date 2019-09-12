@@ -343,7 +343,7 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
 parseQueryNode :: [(Text, Text)] -> WPQuery
 parseQueryNode attrs =
   WPPostsQuery  { qlimit   = fromMaybe 20 $ readLookup "limit" attrs
-                , qnum     = fromMaybe 20 $ readLookup "num" attrs
+                , qnum     = fromMaybe 20 perpage
                 , qoffset  = fromMaybe 0  $ readLookup "offset" attrs
                 , qpage    = fromMaybe 1  $ readLookup "page" attrs
                 , qorder   = toWPOrdering $ readLookup "order" attrs
@@ -356,6 +356,10 @@ parseQueryNode attrs =
                 , quser    = lookup "user" attrs
                 , qtaxes   = filterTaxonomies attrs }
   where readLookup n attrs = readSafe =<< lookup n attrs
+        perpage =
+          case readLookup "per-page" attrs of
+            Just n -> Just n
+            Nothing -> readLookup "num" attrs
 
 toWPOrdering :: Maybe Text -> Maybe WPOrdering
 toWPOrdering (Just "asc") = Just Asc
@@ -370,7 +374,9 @@ listOfFilters = ["limit"
                 , "num"
                 , "offset"
                 , "page"
+                , "per-page"
                 , "user"
+                , "order"
                 , "orderby"
                 , "context"
                 , "search"
