@@ -342,37 +342,53 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
 
 parseQueryNode :: [(Text, Text)] -> WPQuery
 parseQueryNode attrs =
-  mkPostsQuery (readSafe =<< lookup "limit" attrs)
-               (readSafe =<< lookup "num" attrs)
-               (readSafe =<< lookup "offset" attrs)
-               (readSafe =<< lookup "page" attrs)
-               (filterTaxonomies attrs)
-               (lookup "user" attrs)
+  WPPostsQuery  { qlimit   = fromMaybe 20 $ readLookup "limit" attrs
+                , qnum     = fromMaybe 20 $ readLookup "num" attrs
+                , qoffset  = fromMaybe 0  $ readLookup "offset" attrs
+                , qpage    = fromMaybe 1  $ readLookup "page" attrs
+                , qperpage = fromMaybe 20 $ readLookup "perpage" attrs
+                , qorder   = toWPOrdering $ readLookup "order" attrs
+                , qorderby = lookup "order_by" attrs
+                , qsearch  = lookup "search" attrs
+                , qbefore  = readLookup "before" attrs
+                , qafter   = readLookup "after" attrs
+                , qstatus  = toWPStatus $ lookup "status" attrs
+                , qsticky  = readLookup "sticky" attrs
+                , quser    = lookup "user" attrs
+                , qtaxes   = filterTaxonomies attrs }
+  where readLookup n attrs = readSafe =<< lookup n attrs
+
+toWPOrdering :: Maybe Text -> Maybe WPOrdering
+toWPOrdering (Just "asc") = Just Asc
+toWPOrdering (Just "desc") = Just Desc
+toWPOrdering _ = Nothing
+
+toWPStatus :: Maybe Text -> Maybe WPPostStatus
+toWPStatus (Just status) = readSafe (T.toTitle status)
+toWPStatus _ = Nothing
+
+listOfFilters = ["limit"
+                , "num"
+                , "offset"
+                , "page"
+                , "per_page"
+                , "user"
+                , "orderby"
+                , "context"
+                , "search"
+                , "after"
+                , "before"
+                , "slug"
+                , "status"
+                , "sticky"]
 
 filterTaxonomies :: [(Text, Text)] -> [TaxSpecList]
 filterTaxonomies attrs =
-  let reservedTerms = ["limit", "num", "offset", "page", "user"]
-      taxAttrs = filter (\(k, _) -> (k `notElem` reservedTerms)) attrs in
+  let taxAttrs = filter (\(k, _) -> (k `notElem` listOfFilters)) attrs in
   map attrToTaxSpecList taxAttrs
 
 taxDictKeys :: [TaxSpecList] -> [WPKey]
 taxDictKeys = map (\(TaxSpecList tName _) -> TaxDictKey tName)
-
-mkPostsQuery :: Maybe Int
-             -> Maybe Int
-             -> Maybe Int
-             -> Maybe Int
-             -> [TaxSpecList]
-             -> Maybe Text
-             -> WPQuery
-mkPostsQuery l n o p ts us =
-  WPPostsQuery{ qlimit = fromMaybe 20 l
-              , qnum = fromMaybe 20 n
-              , qoffset = fromMaybe 0 o
-              , qpage = fromMaybe 1 p
-              , qtaxes = ts
-              , quser = us
-              }
 
 wpPrefetch :: Wordpress b
            -> [Field s]

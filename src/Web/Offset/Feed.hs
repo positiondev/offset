@@ -71,12 +71,20 @@ getWPEntries wp = do
 
 allPostsQuery :: WPQuery
 allPostsQuery =
-  WPPostsQuery{ qlimit = 20
-              , qnum = 20
-              , qoffset = 0
-              , qpage = 1
-              , qtaxes = []
-              , quser = Nothing }
+  WPPostsQuery  { qlimit   = 20
+                , qnum     = 20
+                , qoffset  = 0
+                , qpage    = 1
+                , qperpage = 20
+                , qorder   = Nothing
+                , qorderby = Nothing
+                , qsearch  = Nothing
+                , qbefore  = Nothing
+                , qafter   = Nothing
+                , qstatus  = Nothing
+                , qsticky  = Nothing
+                , quser    = Nothing
+                , qtaxes   = [] }
 
 wpEntryContent :: (Object -> IO (Maybe T.Text))
                -> WPEntry

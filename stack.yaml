@@ -1,18 +1,14 @@
 flags: {}
 packages:
 - '.'
-- location:
-    git: https://github.com/positiondev/fn
-    commit: 99bbb9f084461fbd0cc0451f97b913ad227bf7dd
-  subdirs:
-    - fn
-    - fn-extra
-  extra-dep: true
-- location:
-    git: https://github.com/positiondev/larceny
-    commit: 05286ad4a66b61a363af32b1455145eb4160046c
-  extra-dep: true
 extra-deps:
  - html-entities-1.1.4
  - logging-3.0.4
+ - git: https://github.com/positiondev/fn
+   commit: a57e55c177e135db8097517fc81081274ad2d5c0
+   subdirs:
+    - fn
+    - fn-extra
+ - git: https://github.com/positiondev/larceny
+   commit: 05286ad4a66b61a363af32b1455145eb4160046c
 resolver: lts-8.15

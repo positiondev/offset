@@ -296,6 +296,12 @@ cacheTests = do
          void $ wpCacheSet' (view wordpress ctxt) key ("[" <> enc article1 <> "]")
          void $ wpCacheGet' (view wordpress ctxt) key
            >>= shouldBe (Just $ "[" <> enc article1 <> "]")
+    it "should find post aggregates (using search and order by) in cache" $
+      do  ctxt <- initNoRequestWithCache
+          let key = PostsKey (Set.fromList [SearchFilter "some search terms", OrderByFilter "author"])
+          void $ wpCacheSet' (view wordpress ctxt) key ("[" <> enc article1 <> "]")
+          void $ wpCacheGet' (view wordpress ctxt) key
+            >>= shouldBe (Just $ "[" <> enc article1 <> "]")
     it "should not find post aggregates after expire handler is called" $
       do ctxt <- initNoRequestWithCache
          let key = PostsKey (Set.fromList [NumFilter 20, OffsetFilter 0])
