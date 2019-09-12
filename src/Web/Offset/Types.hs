@@ -241,7 +241,7 @@ attrToTaxSpecList (k, ts) =
 
 data WPQuery = WPPostsQuery{ qlimit   :: Int
                            , qnum     :: Int
-                           , qoffset  :: Int
+                           , qoffset  :: Maybe Int
                            , qpage    :: Int
                            , qorder   :: Maybe WPOrdering
                            , qorderby :: Maybe Text

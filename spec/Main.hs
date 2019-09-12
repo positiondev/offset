@@ -334,39 +334,39 @@ queryTests :: Spec
 queryTests =
   describe "generate queries from <wpPosts>" $ do
       "<wpPosts></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=1&per_page=20"]
+        ["/wp/v2/posts?page=1&per_page=20"]
       "<wpPosts orderby=\"title\" order=\"desc\"></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&order=desc&orderby=title&page=1&per_page=20"]
+        ["/wp/v2/posts?order=desc&orderby=title&page=1&per_page=20"]
       "<wpPosts limit=2></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=1&per_page=20"]
+        ["/wp/v2/posts?page=1&per_page=20"]
       "<wpPosts offset=1 limit=1></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?offset=1&page=1&per_page=20"]
       "<wpPosts offset=0&page=1 limit=1></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?offset=0&page=1&per_page=20"]
       "<wpPosts limit=10 page=1></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=1&per_page=20"]
+        ["/wp/v2/posts?page=1&per_page=20"]
       "<wpPosts limit=10 page=2></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=2&per_page=20"]
+        ["/wp/v2/posts?page=2&per_page=20"]
       "<wpPosts num=2></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=1&per_page=2"]
+        ["/wp/v2/posts?page=1&per_page=2"]
       "<wpPosts num=2 page=2></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=2&per_page=2"]
+        ["/wp/v2/posts?page=2&per_page=2"]
       "<wpPosts num=1 page=3></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=3&per_page=1"]
+        ["/wp/v2/posts?page=3&per_page=1"]
       "<wpPosts tags=\"+home-featured\" limit=10></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=1&per_page=20&tags[]=177"]
+        ["/wp/v2/posts?page=1&per_page=20&tags[]=177"]
       "<wpPosts tags=\"-home-featured\" limit=1></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=1&per_page=20&tags_exclude[]=177"]
+        ["/wp/v2/posts?page=1&per_page=20&tags_exclude[]=177"]
       "<wpPosts tags=\"+home-featured,-featured-global\" limit=1><wpTitle/></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=1&per_page=20&tags[]=177&tags_exclude[]=160"]
+        ["/wp/v2/posts?page=1&per_page=20&tags[]=177&tags_exclude[]=160"]
       "<wpPosts tags=\"+home-featured,+featured-global\" limit=1><wpTitle/></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?offset=0&page=1&per_page=20&tags[]=160&tags[]=177"]
+        ["/wp/v2/posts?page=1&per_page=20&tags[]=160&tags[]=177"]
       "<wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?categories[]=159&offset=0&page=1&per_page=20"]
+        ["/wp/v2/posts?categories[]=159&page=1&per_page=20"]
       "<wpPosts categories=\"-bookmarx\" limit=10><wpTitle/></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?categories_exclude[]=159&offset=0&page=1&per_page=20"]
+        ["/wp/v2/posts?categories_exclude[]=159&page=1&per_page=20"]
       "<wp><div><wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts></div></wp>" `shouldQueryTo`
-        replicate 2 "/wp/v2/posts?categories[]=159&offset=0&page=1&per_page=20"
+        replicate 2 "/wp/v2/posts?categories[]=159&page=1&per_page=20"
       "<wpPage name=blah />" `shouldQueryTo`
         ["/wp/v2/pages?slug=blah"]
 

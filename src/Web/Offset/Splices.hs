@@ -344,7 +344,7 @@ parseQueryNode :: [(Text, Text)] -> WPQuery
 parseQueryNode attrs =
   WPPostsQuery  { qlimit   = fromMaybe 20 $ readLookup "limit" attrs
                 , qnum     = fromMaybe 20 perpage
-                , qoffset  = fromMaybe 0  $ readLookup "offset" attrs
+                , qoffset  = readLookup "offset" attrs
                 , qpage    = fromMaybe 1  $ readLookup "page" attrs
                 , qorder   = toWPOrdering $ lookup "order" attrs
                 , qorderby = lookup "orderby" attrs
@@ -437,7 +437,6 @@ mkWPKey taxFilters wppq@WPPostsQuery{..} =
   let page = if qpage < 1 then 1 else qpage
   in PostsKey (Set.fromList $
                [ PageFilter page
-               , OffsetFilter qoffset
                , NumFilter qnum ]
                ++ toFilters wppq
                ++ taxFilters ++ userFilter quser)
@@ -446,7 +445,8 @@ mkWPKey taxFilters wppq@WPPostsQuery{..} =
 
 
 toFilters WPPostsQuery{..} =
-  catMaybes [ OrderFilter <$> qorder
+  catMaybes [ OffsetFilter <$> qoffset
+            , OrderFilter <$> qorder
             , OrderByFilter <$> qorderby
             , SearchFilter <$> qsearch
             , BeforeFilter <$> qbefore

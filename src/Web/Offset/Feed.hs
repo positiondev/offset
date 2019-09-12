@@ -73,7 +73,7 @@ allPostsQuery :: WPQuery
 allPostsQuery =
   WPPostsQuery  { qlimit   = 20
                 , qnum     = 20
-                , qoffset  = 0
+                , qoffset  = Nothing
                 , qpage    = 1
                 , qorder   = Nothing
                 , qorderby = Nothing
