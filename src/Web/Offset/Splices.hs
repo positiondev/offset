@@ -346,9 +346,8 @@ parseQueryNode attrs =
                 , qnum     = fromMaybe 20 $ readLookup "num" attrs
                 , qoffset  = fromMaybe 0  $ readLookup "offset" attrs
                 , qpage    = fromMaybe 1  $ readLookup "page" attrs
-                , qperpage = fromMaybe 20 $ readLookup "perpage" attrs
                 , qorder   = toWPOrdering $ readLookup "order" attrs
-                , qorderby = lookup "order_by" attrs
+                , qorderby = lookup "orderby" attrs
                 , qsearch  = lookup "search" attrs
                 , qbefore  = readLookup "before" attrs
                 , qafter   = readLookup "after" attrs
@@ -371,7 +370,6 @@ listOfFilters = ["limit"
                 , "num"
                 , "offset"
                 , "page"
-                , "per_page"
                 , "user"
                 , "orderby"
                 , "context"

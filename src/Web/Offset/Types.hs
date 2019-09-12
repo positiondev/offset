@@ -175,6 +175,7 @@ data Filter = TaxFilter TaxonomyName TaxSpecId
             | OffsetFilter Int
             | OrderFilter WPOrdering
             | OrderByFilter Text
+            | PageFilter Int
             | SearchFilter Text
             | BeforeFilter UTCTime
             | AfterFilter UTCTime
@@ -189,6 +190,7 @@ instance Show Filter where
   show (OffsetFilter n) = "offset_" ++ show n
   show (OrderFilter ordering) = "order_" ++ show ordering
   show (OrderByFilter orderby) = "order_" ++ T.unpack orderby
+  show (PageFilter n) = "page_" ++ show n
   show (SearchFilter search) = "search_" ++ T.unpack search
   show (BeforeFilter before) = "before_" ++ show before
   show (AfterFilter after) = "after_" ++ show after
@@ -241,7 +243,6 @@ data WPQuery = WPPostsQuery{ qlimit   :: Int
                            , qnum     :: Int
                            , qoffset  :: Int
                            , qpage    :: Int
-                           , qperpage :: Int
                            , qorder   :: Maybe WPOrdering
                            , qorderby :: Maybe Text
                            , qsearch  :: Maybe Text

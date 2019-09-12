@@ -75,7 +75,6 @@ allPostsQuery =
                 , qnum     = 20
                 , qoffset  = 0
                 , qpage    = 1
-                , qperpage = 20
                 , qorder   = Nothing
                 , qorderby = Nothing
                 , qsearch  = Nothing
