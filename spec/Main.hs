@@ -335,6 +335,8 @@ queryTests =
   describe "generate queries from <wpPosts>" $ do
       "<wpPosts></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?offset=0&page=1&per_page=20"]
+      "<wpPosts orderby=\"title\" order=\"desc\"></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?offset=0&order=desc&orderby=title&page=1&per_page=20"]
       "<wpPosts limit=2></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?offset=0&page=1&per_page=20"]
       "<wpPosts offset=1 limit=1></wpPosts>" `shouldQueryTo`
