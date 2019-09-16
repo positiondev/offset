@@ -331,12 +331,11 @@ cacheTests = do
          wpCacheGet' (view wordpress ctxt) key >>= shouldBe (Just (enc article1))
 
 queryTests :: Spec
-queryTests =
+queryTests = do
   describe "generate queries from <wpPosts>" $ do
       "<wpPosts></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts"]
-      "<wpPosts orderby=\"title\" order=\"desc\"></wpPosts>" `shouldQueryTo`
-        ["/wp/v2/posts?order=desc&orderby=title"]
+  describe "limit" $ do
       "<wpPosts limit=2></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts"]
       "<wpPosts offset=1 limit=1></wpPosts>" `shouldQueryTo`
@@ -347,12 +346,14 @@ queryTests =
         ["/wp/v2/posts?page=1"]
       "<wpPosts limit=10 page=2></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?page=2"]
+  describe "num" $ do
       "<wpPosts num=2></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?per_page=2"]
       "<wpPosts num=2 page=2></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?page=2&per_page=2"]
       "<wpPosts num=1 page=3></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?page=3&per_page=1"]
+  describe "taxonomies" $ do
       "<wpPosts tags=\"+home-featured\" limit=10></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?tags[]=177"]
       "<wpPosts tags=\"-home-featured\" limit=1></wpPosts>" `shouldQueryTo`
@@ -367,8 +368,32 @@ queryTests =
         ["/wp/v2/posts?categories_exclude[]=159"]
       "<wp><div><wpPosts categories=\"bookmarx\" limit=10><wpTitle/></wpPosts></div></wp>" `shouldQueryTo`
         replicate 2 "/wp/v2/posts?categories[]=159"
+  describe "pages" $ do
       "<wpPage name=blah />" `shouldQueryTo`
         ["/wp/v2/pages?slug=blah"]
+  describe "post filters" $ do
+      "<wpPosts offset=10></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?offset=10"]
+      "<wpPosts per-page=20></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?per_page=20"]
+      "<wpPosts per-page=20 num=10></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?per_page=20"]
+      "<wpPosts per-page=20 page=10></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?page=10&per_page=20"]
+      "<wpPosts offset=10 num=5 page=5></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?offset=10&page=5&per_page=5"]
+      "<wpPosts orderby=\"title\" order=\"desc\"></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?order=desc&orderby=title"]
+      "<wpPosts before=\"2019-09-16 16:28:44.329789 UTC\"></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?before=2019-09-16T16:28:44Z"]
+      "<wpPosts after=\"2019-09-16 16:28:44.329789 UTC\"></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?after=2019-09-16T16:28:44Z"]
+      "<wpPosts search=\"gritty%20is%20a%20worker\"></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?search=gritty%20is%20a%20worker"]
+      "<wpPosts status=draft></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?status=draft"]
+      "<wpPosts sticky=true></wpPosts>" `shouldQueryTo`
+        ["/wp/v2/posts?sticky=true"]
 
 liveTests :: Spec
 liveTests =
