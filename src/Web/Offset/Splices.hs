@@ -157,7 +157,7 @@ postsWithoutDuplicates :: WPLens b s
 postsWithoutDuplicates wpLens postsQuery posts = do
   wp <- use wpLens
   let postsW = extractPostIds posts
-  return $ take (qlimit postsQuery) . removeDupes (requestPostSet wp) $ postsW
+  return $ take (fromMaybe 20 $ qlimit postsQuery) . removeDupes (requestPostSet wp) $ postsW
   where removeDupes :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         removeDupes Nothing = id
         removeDupes (Just wpPostIdSet) =
@@ -192,7 +192,7 @@ wpPostsAggregateFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
           addPostIds wpLens (map fst postsND')
           unFill (fillChildrenWith $
                     subs [ ("wpPostsItem", wpPostsHelper wp extraFields (map snd postsND'))
-                         , ("wpPostsMeta", wpAggregateMetaFill res (Just $ qpage postsQuery)) ])
+                         , ("wpPostsMeta", wpAggregateMetaFill res (qpage postsQuery)) ])
                  mempty tpl lib
        Right Nothing -> return ""
        Left code -> liftIO $ logStatusCode wp code
@@ -342,10 +342,10 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
 
 parseQueryNode :: [(Text, Text)] -> WPQuery
 parseQueryNode attrs =
-  WPPostsQuery  { qlimit   = fromMaybe 20 $ readLookup "limit" attrs
-                , qnum     = fromMaybe 20 perpage
+  WPPostsQuery  { qlimit   = readLookup "limit" attrs
+                , qnum     = perpage
                 , qoffset  = readLookup "offset" attrs
-                , qpage    = fromMaybe 1  $ readLookup "page" attrs
+                , qpage    = readLookup "page" attrs
                 , qorder   = toWPOrdering $ lookup "order" attrs
                 , qorderby = lookup "orderby" attrs
                 , qsearch  = lookup "search" attrs
@@ -434,18 +434,15 @@ mkWPKey :: [Filter]
     -> WPQuery
     -> WPKey
 mkWPKey taxFilters wppq@WPPostsQuery{..} =
-  let page = if qpage < 1 then 1 else qpage
-  in PostsKey (Set.fromList $
-               [ PageFilter page
-               , NumFilter qnum ]
-               ++ toFilters wppq
-               ++ taxFilters ++ userFilter quser)
+  PostsKey (Set.fromList $ toFilters wppq ++ taxFilters ++ userFilter quser)
   where userFilter Nothing = []
         userFilter (Just u) = [UserFilter u]
 
-
+toFilters :: WPQuery -> [Filter]
 toFilters WPPostsQuery{..} =
-  catMaybes [ OffsetFilter <$> qoffset
+  catMaybes [ NumFilter <$> qnum
+            , PageFilter <$> qpage
+            , OffsetFilter <$> qoffset
             , OrderFilter <$> qorder
             , OrderByFilter <$> qorderby
             , SearchFilter <$> qsearch

@@ -239,10 +239,10 @@ attrToTaxSpecList (k, ts) =
   then TaxSpecList k (catMaybes vs)
   else TaxSpecList k []
 
-data WPQuery = WPPostsQuery{ qlimit   :: Int
-                           , qnum     :: Int
+data WPQuery = WPPostsQuery{ qlimit   :: Maybe Int
+                           , qnum     :: Maybe Int
                            , qoffset  :: Maybe Int
-                           , qpage    :: Int
+                           , qpage    :: Maybe Int
                            , qorder   :: Maybe WPOrdering
                            , qorderby :: Maybe Text
                            , qsearch  :: Maybe Text

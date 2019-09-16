@@ -226,8 +226,10 @@ fauxRequester mRecord rqPath rqParams = do
     Nothing -> return ()
   return $ Right $ WPResponse [(CI.mk "X-WP-TotalPages", "478")] (enc [article1])
   where mkUrlUnescape url params =
-             url <> "?"
-          <> T.intercalate "&" (map (\(k, v) -> k <> "=" <> v) params)
+             url <>
+              if null params
+              then ""
+              else "?" <> T.intercalate "&" (map (\(k, v) -> k <> "=" <> v) params)
 
 initializer :: Either UserPassword Requester -> CacheBehavior -> Text -> IO Ctxt
 initializer requester cache endpoint =

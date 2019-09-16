@@ -71,10 +71,10 @@ getWPEntries wp = do
 
 allPostsQuery :: WPQuery
 allPostsQuery =
-  WPPostsQuery  { qlimit   = 20
-                , qnum     = 20
+  WPPostsQuery  { qlimit   = Just 20
+                , qnum     = Just 20
                 , qoffset  = Nothing
-                , qpage    = 1
+                , qpage    = Nothing
                 , qorder   = Nothing
                 , qorderby = Nothing
                 , qsearch  = Nothing
