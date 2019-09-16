@@ -157,7 +157,7 @@ postsWithoutDuplicates :: WPLens b s
 postsWithoutDuplicates wpLens postsQuery posts = do
   wp <- use wpLens
   let postsW = extractPostIds posts
-  return $ take (qlimit postsQuery) . removeDupes (requestPostSet wp) $ postsW
+  return $ take (fromMaybe 20 $ qlimit postsQuery) . removeDupes (requestPostSet wp) $ postsW
   where removeDupes :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         removeDupes Nothing = id
         removeDupes (Just wpPostIdSet) =
@@ -192,7 +192,7 @@ wpPostsAggregateFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
           addPostIds wpLens (map fst postsND')
           unFill (fillChildrenWith $
                     subs [ ("wpPostsItem", wpPostsHelper wp extraFields (map snd postsND'))
-                         , ("wpPostsMeta", wpAggregateMetaFill res (Just $ qpage postsQuery)) ])
+                         , ("wpPostsMeta", wpAggregateMetaFill res (qpage postsQuery)) ])
                  mempty tpl lib
        Right Nothing -> return ""
        Left code -> liftIO $ logStatusCode wp code
@@ -342,37 +342,50 @@ postSubs wp extra object = subs (map (buildSplice object) (mergeFields postField
 
 parseQueryNode :: [(Text, Text)] -> WPQuery
 parseQueryNode attrs =
-  mkPostsQuery (readSafe =<< lookup "limit" attrs)
-               (readSafe =<< lookup "num" attrs)
-               (readSafe =<< lookup "offset" attrs)
-               (readSafe =<< lookup "page" attrs)
-               (filterTaxonomies attrs)
-               (lookup "user" attrs)
+  WPPostsQuery  { qlimit   = readLookup "limit" attrs
+                , qnum     = perpage
+                , qoffset  = readLookup "offset" attrs
+                , qpage    = readLookup "page" attrs
+                , qorder   = readLookup "order" attrs
+                , qorderby = lookup "orderby" attrs
+                , qsearch  = lookup "search" attrs
+                , qbefore  = readLookup "before" attrs
+                , qafter   = readLookup "after" attrs
+                , qstatus  = readLookup "status" attrs
+                , qsticky  = readLookup "sticky" attrs
+                , quser    = lookup "user" attrs
+                , qtaxes   = filterTaxonomies attrs }
+  where -- `toTitle` allows us to use the standard Read instance to, e.g.,
+        -- translate the text "asc" to the type constructor `Asc`
+        readLookup n attrs = (readSafe . T.toTitle) =<< lookup n attrs
+        perpage =
+          case readLookup "per-page" attrs of
+            Just n -> Just n
+            Nothing -> readLookup "num" attrs
+
+listOfFilters = ["limit"
+                , "num"
+                , "offset"
+                , "page"
+                , "per-page"
+                , "user"
+                , "order"
+                , "orderby"
+                , "context"
+                , "search"
+                , "after"
+                , "before"
+                , "slug"
+                , "status"
+                , "sticky"]
 
 filterTaxonomies :: [(Text, Text)] -> [TaxSpecList]
 filterTaxonomies attrs =
-  let reservedTerms = ["limit", "num", "offset", "page", "user"]
-      taxAttrs = filter (\(k, _) -> (k `notElem` reservedTerms)) attrs in
+  let taxAttrs = filter (\(k, _) -> (k `notElem` listOfFilters)) attrs in
   map attrToTaxSpecList taxAttrs
 
 taxDictKeys :: [TaxSpecList] -> [WPKey]
 taxDictKeys = map (\(TaxSpecList tName _) -> TaxDictKey tName)
-
-mkPostsQuery :: Maybe Int
-             -> Maybe Int
-             -> Maybe Int
-             -> Maybe Int
-             -> [TaxSpecList]
-             -> Maybe Text
-             -> WPQuery
-mkPostsQuery l n o p ts us =
-  WPPostsQuery{ qlimit = fromMaybe 20 l
-              , qnum = fromMaybe 20 n
-              , qoffset = fromMaybe 0 o
-              , qpage = fromMaybe 1 p
-              , qtaxes = ts
-              , quser = us
-              }
 
 wpPrefetch :: Wordpress b
            -> [Field s]
@@ -413,13 +426,23 @@ wpPagePrefetch mKeys name = rawTextFill' $
 mkWPKey :: [Filter]
     -> WPQuery
     -> WPKey
-mkWPKey taxFilters WPPostsQuery{..} =
-  let page = if qpage < 1 then 1 else qpage
-      offset = qnum * (page - 1) + qoffset
-  in PostsKey (Set.fromList $ [ NumFilter qnum , OffsetFilter offset]
-               ++ taxFilters ++ userFilter quser)
+mkWPKey taxFilters wppq@WPPostsQuery{..} =
+  PostsKey (Set.fromList $ toFilters wppq ++ taxFilters ++ userFilter quser)
   where userFilter Nothing = []
         userFilter (Just u) = [UserFilter u]
+
+toFilters :: WPQuery -> [Filter]
+toFilters WPPostsQuery{..} =
+  catMaybes [ NumFilter <$> qnum
+            , PageFilter <$> qpage
+            , OffsetFilter <$> qoffset
+            , OrderFilter <$> qorder
+            , OrderByFilter <$> qorderby
+            , SearchFilter <$> qsearch
+            , BeforeFilter <$> qbefore
+            , AfterFilter <$> qafter
+            , StatusFilter <$> qstatus
+            , StickyFilter <$> qsticky]
 
 findDict :: [(TaxonomyName, TaxSpec -> TaxSpecId)] -> TaxSpecList -> [Filter]
 findDict dicts (TaxSpecList tName tList) =

@@ -32,6 +32,8 @@ module Web.Offset.Types (
 , WordpressInt(..)
 , WPKey(..)
 , WPLens
+, WPOrdering(..)
+, WPPostStatus(..)
 , WPQuery(..)
 , WPResponse(..)
 ) where
@@ -43,6 +45,7 @@ import           Data.Default
 import qualified Data.ByteString          as BS
 import           GHC.Generics
 import qualified Data.CaseInsensitive      as CI
+import           Data.Char                (toUpper)
 import           Data.IntSet              (IntSet)
 import           Data.List                (intercalate)
 import qualified Data.Map                 as M
@@ -53,6 +56,7 @@ import           Data.Set                 (Set)
 import           Data.Text                (Text)
 import qualified Data.Text                 as T
 import qualified Data.Text.Encoding        as T
+import           Data.Time.Clock            (UTCTime)
 import qualified Network.HTTP.Types.Header as H
 
 import           Web.Offset.Cache.Types
@@ -169,6 +173,14 @@ type TaxonomyName = Text
 data Filter = TaxFilter TaxonomyName TaxSpecId
             | NumFilter Int
             | OffsetFilter Int
+            | OrderFilter WPOrdering
+            | OrderByFilter Text
+            | PageFilter Int
+            | SearchFilter Text
+            | BeforeFilter UTCTime
+            | AfterFilter UTCTime
+            | StatusFilter WPPostStatus
+            | StickyFilter Bool
             | UserFilter Text
             deriving (Eq, Ord)
 
@@ -176,6 +188,14 @@ instance Show Filter where
   show (TaxFilter n t) = show n ++ "_" ++ show t
   show (NumFilter n) = "num_" ++ show n
   show (OffsetFilter n) = "offset_" ++ show n
+  show (OrderFilter ordering) = "order_" ++ show ordering
+  show (OrderByFilter orderby) = "orderby_" ++ T.unpack orderby
+  show (PageFilter n) = "page_" ++ show n
+  show (SearchFilter search) = "search_" ++ T.unpack search
+  show (BeforeFilter before) = "before_" ++ show before
+  show (AfterFilter after) = "after_" ++ show after
+  show (StatusFilter status) = "status_" ++ show status
+  show (StickyFilter sticky) = "sticky_" ++ show sticky
   show (UserFilter u) = T.unpack $ "user_" <> u
 
 data WPKey = PostKey Int
@@ -219,13 +239,24 @@ attrToTaxSpecList (k, ts) =
   then TaxSpecList k (catMaybes vs)
   else TaxSpecList k []
 
-data WPQuery = WPPostsQuery{ qlimit  :: Int
-                           , qnum    :: Int
-                           , qoffset :: Int
-                           , qpage   :: Int
-                           , qtaxes  :: [TaxSpecList]
-                           , quser   :: Maybe Text
+data WPQuery = WPPostsQuery{ qlimit   :: Maybe Int
+                           , qnum     :: Maybe Int
+                           , qoffset  :: Maybe Int
+                           , qpage    :: Maybe Int
+                           , qorder   :: Maybe WPOrdering
+                           , qorderby :: Maybe Text
+                           , qsearch  :: Maybe Text
+                           , qbefore  :: Maybe UTCTime
+                           , qafter   :: Maybe UTCTime
+                           , qstatus  :: Maybe WPPostStatus
+                           , qsticky  :: Maybe Bool
+                           , quser    :: Maybe Text
+                           , qtaxes   :: [TaxSpecList]
                            } deriving (Show)
+
+data WPOrdering = Asc | Desc deriving (Eq, Show, Read, Ord)
+
+data WPPostStatus = Publish | Future | Draft | Pending | Private deriving (Eq, Show, Read, Ord)
 
 type StatusCode = Int
 
