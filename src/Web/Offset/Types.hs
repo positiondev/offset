@@ -254,7 +254,7 @@ data WPQuery = WPPostsQuery{ qlimit   :: Maybe Int
                            , qtaxes   :: [TaxSpecList]
                            } deriving (Show)
 
-data WPOrdering = Asc | Desc deriving (Eq, Show, Ord)
+data WPOrdering = Asc | Desc deriving (Eq, Show, Read, Ord)
 
 data WPPostStatus = Publish | Future | Draft | Pending | Private deriving (Eq, Show, Read, Ord)
 

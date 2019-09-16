@@ -341,7 +341,7 @@ queryTests =
         ["/wp/v2/posts"]
       "<wpPosts offset=1 limit=1></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?offset=1"]
-      "<wpPosts offset=0& limit=1></wpPosts>" `shouldQueryTo`
+      "<wpPosts offset=0 limit=1></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?offset=0"]
       "<wpPosts limit=10 page=1></wpPosts>" `shouldQueryTo`
         ["/wp/v2/posts?page=1"]

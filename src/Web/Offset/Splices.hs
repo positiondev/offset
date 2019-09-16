@@ -346,29 +346,22 @@ parseQueryNode attrs =
                 , qnum     = perpage
                 , qoffset  = readLookup "offset" attrs
                 , qpage    = readLookup "page" attrs
-                , qorder   = toWPOrdering $ lookup "order" attrs
+                , qorder   = readLookup "order" attrs
                 , qorderby = lookup "orderby" attrs
                 , qsearch  = lookup "search" attrs
                 , qbefore  = readLookup "before" attrs
                 , qafter   = readLookup "after" attrs
-                , qstatus  = toWPStatus $ lookup "status" attrs
+                , qstatus  = readLookup "status" attrs
                 , qsticky  = readLookup "sticky" attrs
                 , quser    = lookup "user" attrs
                 , qtaxes   = filterTaxonomies attrs }
-  where readLookup n attrs = readSafe =<< lookup n attrs
+  where -- `toTitle` allows us to use the standard Read instance to, e.g.,
+        -- translate the text "asc" to the type constructor `Asc`
+        readLookup n attrs = (readSafe . T.toTitle) =<< lookup n attrs
         perpage =
           case readLookup "per-page" attrs of
             Just n -> Just n
             Nothing -> readLookup "num" attrs
-
-toWPOrdering :: Maybe Text -> Maybe WPOrdering
-toWPOrdering (Just "asc") = Just Asc
-toWPOrdering (Just "desc") = Just Desc
-toWPOrdering _ = Nothing
-
-toWPStatus :: Maybe Text -> Maybe WPPostStatus
-toWPStatus (Just status) = readSafe (T.toTitle status)
-toWPStatus _ = Nothing
 
 listOfFilters = ["limit"
                 , "num"
