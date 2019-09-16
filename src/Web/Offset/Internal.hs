@@ -48,7 +48,7 @@ buildParams (PostsKey filters) = params
         mkFilter (BeforeFilter before) = ("before", T.pack (iso8601FormatWithTime before))
         mkFilter (AfterFilter after) = ("after", T.pack (iso8601FormatWithTime after))
         mkFilter (StatusFilter status) = ("status", T.toLower (tshow status))
-        mkFilter (StickyFilter sticky) = ("stick", T.toLower (tshow sticky))
+        mkFilter (StickyFilter sticky) = ("sticky", T.toLower (tshow sticky))
         mkFilter (UserFilter user) = ("author[]", user)
 buildParams _ = []
 

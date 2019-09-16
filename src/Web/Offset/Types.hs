@@ -189,7 +189,7 @@ instance Show Filter where
   show (NumFilter n) = "num_" ++ show n
   show (OffsetFilter n) = "offset_" ++ show n
   show (OrderFilter ordering) = "order_" ++ show ordering
-  show (OrderByFilter orderby) = "order_" ++ T.unpack orderby
+  show (OrderByFilter orderby) = "orderby_" ++ T.unpack orderby
   show (PageFilter n) = "page_" ++ show n
   show (SearchFilter search) = "search_" ++ T.unpack search
   show (BeforeFilter before) = "before_" ++ show before
