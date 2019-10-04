@@ -218,6 +218,13 @@ fauxRequester _ "/false" [] =
   toWPResp $ enc [boolFieldFalse]
 fauxRequester _ "/true" [] =
   toWPResp $ enc [boolFieldTrue]
+fauxRequester _ "/object_array" [] =
+  toWPResp $ enc $
+    object ["some_array" .=
+      [ object ["object_key" .= ("object value 1" :: Text)]
+      , object ["object_key" .= ("object value 2" :: Text)]]]
+fauxRequester _ "/number_array" [] = toWPResp $ enc $ object ["some_array" .= [1 :: Int, 2 :: Int, 3 :: Int]]
+fauxRequester _ "/string_array" [] =  toWPResp $ enc $ object ["some_array" .= ["a" :: Text, "b" :: Text, "c" :: Text]]
 fauxRequester _ "/many-pages" [] =
   return $ Right $ WPResponse [(CI.mk "X-WP-TotalPages", "478")] (enc [article1])
 fauxRequester mRecord rqPath rqParams = do
