@@ -168,6 +168,18 @@ larcenyFillTests = do
       "<wpCustom endpoint=\"true\"><wpNotThere><wpPerson><wpName /></wpPerson></wpNotThere></wpCustom>"
         `shouldRender` ""
 
+    it "should render arrays of objects correctly" $
+      "<wpCustom endpoint=\"object_array\"><wpSomeArray><wpObjectKey /></wpSomeArray></wpCustom>"
+        `shouldRender` "object value 1 object value 2"
+
+    it "should render arrays of strings correctly" $
+      "<wpCustom endpoint=\"string_array\"><wpSomeArray>The letter <wpArrayItem /></wpSomeArray></wpCustom>"
+        `shouldRender` "The letter a The letter b The letter c"
+
+    it "should render arrays of numbers correctly" $
+      "<wpCustom endpoint=\"number_array\"><wpSomeArray>The number <wpArrayItem /></wpSomeArray></wpCustom>"
+        `shouldRender` "The number 1 The number 2 The number 3"
+
 
   describe "<wpCustomDate>" $ do
     it "should parse a date field with the format string it's given" $

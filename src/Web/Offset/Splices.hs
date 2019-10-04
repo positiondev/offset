@@ -102,7 +102,7 @@ jsonToFill (Object o) =
                      (M.keys o)
 jsonToFill (Array v) =
   Fill $ \attrs (path, tpl) lib ->
-           V.foldr mappend "" <$> V.mapM (\e -> unFill (jsonToFill e) attrs (path, tpl) lib) v
+           V.foldr mappend "" <$> V.mapM (\e -> unFill (jsonToFillArrayItem e) attrs (path, tpl) lib) v
 jsonToFill (String s) = rawTextFill s
 jsonToFill (Number n) = case floatingOrInteger n of
                           Left r -> rawTextFill $ tshow (r :: Double)
@@ -110,6 +110,18 @@ jsonToFill (Number n) = case floatingOrInteger n of
 jsonToFill (Bool True) = rawTextFill $ tshow True
 jsonToFill (Bool False) = rawTextFill "<!-- JSON field found, but value is false. -->"
 jsonToFill (Null) = rawTextFill "<!-- JSON field found, but value is null. -->"
+
+jsonToFillArrayItem :: Value -> Fill s
+jsonToFillArrayItem o@(Object _) = jsonToFill o
+jsonToFillArrayItem a@(Array _) = jsonToFill a
+jsonToFillArrayItem (String s) = fillChildrenWith $ subs [("wpArrayItem", rawTextFill s)]
+jsonToFillArrayItem (Number n) =
+  case floatingOrInteger n of
+    Left r -> fillChildrenWith $ subs [("wpArrayItem", textFill $ tshow (r :: Double))]
+    Right i -> fillChildrenWith $ subs [("wpArrayItem", textFill $ tshow (i :: Integer))]
+jsonToFillArrayItem b@(Bool True) = jsonToFill b
+jsonToFillArrayItem b@(Bool False) = jsonToFill b
+jsonToFillArrayItem n@(Null) = jsonToFill n
 
 wpCustomAggregateFill :: Wordpress b -> Fill s
 wpCustomAggregateFill wp =
