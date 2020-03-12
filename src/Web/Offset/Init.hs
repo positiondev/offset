@@ -9,6 +9,7 @@ import qualified Data.Map                as Map
 import           Data.Text               (Text)
 import qualified Database.Redis          as R
 import           Web.Larceny
+import qualified Data.IntSet as IntSet
 
 import           Web.Offset.Cache
 import           Web.Offset.HTTP
@@ -35,8 +36,7 @@ initWordpress wpconf redis getURI wpLens = do
                           , stopReqMutex = stopReqMutexInt active
                           , runRedis = rrunRedis
                           }
-  let wp = Wordpress{ requestPostSet = Nothing
-                    , wpExpireAggregates = wpExpireAggregatesInt rrunRedis
+  let wp = Wordpress{ wpExpireAggregates = wpExpireAggregatesInt rrunRedis
                     , wpExpirePost = wpExpirePostInt rrunRedis
                     , cachingGet = cachingGetInt wpInt
                     , cachingGetRetry = cachingGetRetryInt wpInt
@@ -45,4 +45,4 @@ initWordpress wpconf redis getURI wpLens = do
                     , wpLogger = logf
                     }
   let extraFields = wpConfExtraFields wpconf
-  return (wp, wordpressSubs wp extraFields getURI wpLens)
+  return (wp, wordpressSubs wp extraFields getURI wpLens Nothing)

@@ -36,17 +36,18 @@ import           Web.Offset.Date
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
-wordpressSubs ::   Wordpress b
+wordpressSubs :: Wordpress b
               -> [Field s]
               -> StateT s IO Text
               -> WPLens b s
+              -> Maybe (MVar (Maybe IntSet))
               -> Substitutions s
-wordpressSubs wp extraFields getURI wpLens =
-  subs [ ("wpPosts", wpPostsFill wp extraFields wpLens)
-       , ("wpPostsAggregate", wpPostsAggregateFill wp extraFields wpLens)
-       , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens)
+wordpressSubs wp extraFields getURI wpLens ids =
+  subs [ ("wpPosts", wpPostsFill wp extraFields wpLens ids)
+       , ("wpPostsAggregate", wpPostsAggregateFill wp extraFields wpLens ids)
+       , ("wpPostByPermalink", wpPostByPermalinkFill extraFields getURI wpLens ids)
        , ("wpPage", wpPageFill wpLens)
-       , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens)
+       , ("wpNoPostDuplicates", wpNoPostDuplicatesFill wpLens ids)
        , ("wp", wpPrefetch wp extraFields getURI wpLens)
        , ("wpCustom", wpCustomFill wp)
        , ("wpCustomAggregate", wpCustomAggregateFill wp)
@@ -150,14 +151,15 @@ customAggregateFill Wordpress{..} endpoint = Fill $ \attrs (path, tpl) lib ->
 wpPostsFill :: Wordpress b
             -> [Field s]
             -> WPLens b s
+            -> Maybe (MVar (Maybe IntSet))
             -> Fill s
-wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
+wpPostsFill wp extraFields wpLens postIdSet = Fill $ \attrs tpl lib ->
   do (postsQuery, wpKey) <- mkPostsQueryAndKey wp attrs
      res <- liftIO $ cachingGetRetry wp wpKey
      case fmap decodeWPResponseBody res of
        Right (Just posts) -> do
-         postsND <- postsWithoutDuplicates wpLens postsQuery posts
-         addPostIds wpLens (map fst postsND)
+         postsND <- postsWithoutDuplicates wpLens postsQuery posts postIdSet
+         addPostIds postIdSet (map fst postsND)
          unFill (wpPostsHelper wp extraFields (map snd postsND)) mempty tpl lib
        Right Nothing -> return ""
        Left code     -> liftIO $ logStatusCode wp code
@@ -165,11 +167,16 @@ wpPostsFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
 postsWithoutDuplicates :: WPLens b s
                        -> WPQuery
                        -> [Object]
+                       -> Maybe (MVar (Maybe IntSet))
                        -> StateT s IO [(Int, Object)]
-postsWithoutDuplicates wpLens postsQuery posts = do
+postsWithoutDuplicates wpLens postsQuery posts postIdSet = do
   wp <- use wpLens
   let postsW = extractPostIds posts
-  return $ take (fromMaybe 20 $ qlimit postsQuery) . removeDupes (requestPostSet wp) $ postsW
+  case postIdSet of
+    Just mvar -> do
+      ids <- liftIO $ readMVar mvar
+      return $ take (fromMaybe 20 $ qlimit postsQuery) . removeDupes ids $ postsW
+    Nothing -> return $ take (fromMaybe 20 $ qlimit postsQuery) postsW
   where removeDupes :: Maybe IntSet -> [(Int, Object)] -> [(Int, Object)]
         removeDupes Nothing = id
         removeDupes (Just wpPostIdSet) =
@@ -194,14 +201,15 @@ logStatusCode wp code = do
 wpPostsAggregateFill :: Wordpress b
             -> [Field s]
             -> WPLens b s
+            -> Maybe (MVar (Maybe IntSet))
             -> Fill s
-wpPostsAggregateFill wp extraFields wpLens = Fill $ \attrs tpl lib ->
+wpPostsAggregateFill wp extraFields wpLens postIdSet = Fill $ \attrs tpl lib ->
   do (postsQuery, wpKey) <- mkPostsQueryAndKey wp attrs
      res <- liftIO $ cachingGetRetry wp wpKey
      case fmap decodeWPResponseBody res of
        Right (Just posts) -> do
-          postsND' <- postsWithoutDuplicates wpLens postsQuery posts
-          addPostIds wpLens (map fst postsND')
+          postsND' <- postsWithoutDuplicates wpLens postsQuery posts postIdSet
+          addPostIds postIdSet (map fst postsND')
           unFill (fillChildrenWith $
                     subs [ ("wpPostsItem", wpPostsHelper wp extraFields (map snd postsND'))
                          , ("wpPostsMeta", wpAggregateMetaFill res (qpage postsQuery)) ])
@@ -247,8 +255,9 @@ wpPostsHelper wp extraFields postsND =
 wpPostByPermalinkFill :: [Field s]
                       -> StateT s IO Text
                       -> WPLens b s
+                      -> Maybe (MVar (Maybe IntSet))
                       -> Fill s
-wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
+wpPostByPermalinkFill extraFields getURI wpLens postIdSet = maybeFillChildrenWith' $
   do uri <- getURI
      let mperma = parsePermalink uri
      case mperma of
@@ -259,32 +268,31 @@ wpPostByPermalinkFill extraFields getURI wpLens = maybeFillChildrenWith' $
        Just (year, month, slug) ->
          do res <- wpGetPost wpLens (PostByPermalinkKey year month slug)
             case res of
-              Just post -> do addPostIds wpLens [fst (extractPostId post)]
+              Just post -> do addPostIds postIdSet [fst (extractPostId post)]
                               wp <- use wpLens
                               return $ Just (postSubs wp extraFields post)
               _ -> return Nothing
 
 
-feedSubs :: [Field s] -> WPLens b s -> Object -> Substitutions s
-feedSubs fields lens obj=
-  subs $ [("wpPost", wpPostFromObjectFill fields lens obj)]
+feedSubs :: [Field s] -> WPLens b s -> Object -> Maybe (MVar (Maybe IntSet)) -> Substitutions s
+feedSubs fields lens obj postIdSet =
+  subs $ [("wpPost", wpPostFromObjectFill fields lens obj postIdSet)]
 
 wpPostFromObjectFill :: [Field s]
                       -> WPLens b s
                       -> Object
+                      -> Maybe (MVar (Maybe IntSet))
                       -> Fill s
-wpPostFromObjectFill extraFields wpLens postObj = maybeFillChildrenWith' $
-  do  addPostIds wpLens [fst (extractPostId postObj)]
+wpPostFromObjectFill extraFields wpLens postObj postIdSet = maybeFillChildrenWith' $
+  do  addPostIds postIdSet [fst (extractPostId postObj)]
       wp <- use wpLens
       return $ Just (postSubs wp extraFields postObj)
 
-wpNoPostDuplicatesFill :: WPLens b s -> Fill s
-wpNoPostDuplicatesFill wpLens = rawTextFill' $
-  do w@Wordpress{..} <- use wpLens
-     case requestPostSet of
-       Nothing -> assign wpLens
-                    w{requestPostSet = Just IntSet.empty}
-       Just _ -> return ()
+wpNoPostDuplicatesFill :: WPLens b s -> (Maybe (MVar (Maybe IntSet))) -> Fill s
+wpNoPostDuplicatesFill wpLens mPostIdSet= rawTextFill' $
+  do case mPostIdSet of
+       Just mvar -> liftIO $ modifyMVar_ mvar (\currentValue -> return (Just IntSet.empty))
+       Nothing -> return ()
      return ""
 
 wpPageFill :: WPLens b s -> Fill s
@@ -408,9 +416,10 @@ wpPrefetch wp extra uri wpLens = Fill $ \ _m (p, tpl) l -> do
     Wordpress{..} <- use wpLens
     mKeys <- liftIO $ newMVar []
     void $ runTemplate tpl p (prefetchSubs wp mKeys) l
+    newPostIdSet <- liftIO $ newMVar Nothing
     wpKeys <- liftIO $ readMVar mKeys
     void $ liftIO $ concurrently $ map cachingGet wpKeys
-    runTemplate tpl p (wordpressSubs wp extra uri wpLens) l
+    runTemplate tpl p (wordpressSubs wp extra uri wpLens (Just newPostIdSet)) l
 
 prefetchSubs :: Wordpress b -> MVar [WPKey] -> Substitutions s
 prefetchSubs wp mkeys =
@@ -499,11 +508,14 @@ transformName = T.append "wp" . snd . T.foldl f (True, "")
         f (False, rest) next = (False, T.snoc rest next)
 
 -- Move this into Init.hs (should retrieve from Wordpress data structure)
-addPostIds :: (MonadState s m, MonadIO m) => WPLens b s -> [Int] -> m ()
-addPostIds wpLens ids =
-  do w@Wordpress{..} <- use wpLens
-     assign wpLens
-            w{requestPostSet = (`IntSet.union` IntSet.fromList ids) <$> requestPostSet }
+addPostIds :: (MonadState s m, MonadIO m) => Maybe (MVar (Maybe IntSet)) -> [Int] -> m ()
+addPostIds mIdSetMVar ids =
+  case mIdSetMVar of
+    Just idSetMVar -> liftIO $ modifyMVar_ idSetMVar addIds
+    Nothing -> return ()
+  where addIds :: Maybe IntSet -> IO (Maybe IntSet)
+        addIds (Just currentSet) = return (Just (currentSet `IntSet.union` (IntSet.fromList ids)))
+        addIds Nothing = return Nothing
 
 idToEndpoint :: IdToEndpoint -> Text -> WPKey
 idToEndpoint (UseId endpoint) id = EndpointKey (endpoint <> id) []

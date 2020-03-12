@@ -176,7 +176,7 @@ renderLarceny ctxt name =
 
 renderFeedContent :: Ctxt -> Object -> IO (Maybe T.Text)
 renderFeedContent ctxt obj =
-  renderWith tplLibrary (feedSubs [] wordpress obj) ctxt ["feed"]
+  renderWith tplLibrary (feedSubs [] wordpress obj Nothing) ctxt ["feed"]
 
 buildEntryLinks :: Object -> [Link]
 buildEntryLinks o =
@@ -289,7 +289,7 @@ shouldRender :: TemplateText
 shouldRender t output = do
   ctxt <- initFauxRequestNoCache
   let s = _wpsubs ctxt
-  rendered <- evalStateT (runTemplate (toTpl t) [] s mempty) ctxt
+  rendered <- evalStateT (runTemplate (toTpl t) ["fake-template"] s tplLibrary) ctxt
   ignoreWhitespace rendered `shouldBe` ignoreWhitespace output
 
 -- Caching helpers

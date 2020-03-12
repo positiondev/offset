@@ -86,13 +86,21 @@ larcenyFillTests = do
     it "should show the content" $
       "<wpPage name=a-first-page />" `shouldRender` "<b>rendered</b> page content"
   describe "<wpNoPostDuplicates/>" $ do
+    it "should only work inside of the <wp> tag" $ do
+      "<wp><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts></wp>" `shouldRender` "<i>Foo</i> bar"
+      "<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
+
     it "should not duplicate any posts after call to wpNoPostDuplicates" $
-      "<wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "<i>Foo</i> bar"
+      "<wp><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts></wp>" `shouldRender` "<i>Foo</i> bar"
     it "should ignore duplicates if they were rendered before wpNoPostDuplicates" $ do
-      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
-      "<wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
+      "<wp><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts></wp>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
+      "<wp><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts></wp>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
     it "should have no effect if it's at the end of the template" $
-      "<wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
+      "<wp><wpPosts><wpTitle/></wpPosts><wpPosts><wpTitle/></wpPosts><wpNoPostDuplicates/></wp>" `shouldRender` "<i>Foo</i> bar<i>Foo</i> bar"
+    it "should work between applied templates" $
+      "<wp><wpNoPostDuplicates/><apply template=\"many\" /><apply template=\"many1\" /></wp>" `shouldRender` "<i>Foo</i> bar"
+
+  describe "<wpPosts> lists" $ do
     it "should render list items with an index" $ do
       "<wpPosts><wpAuthors><wpAuthorsIndex />. <wpName /></wpAuthors></wpPosts>"
         `shouldRender` "1. Emma Goldman"

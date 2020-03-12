@@ -38,6 +38,7 @@ module Web.Offset.Types (
 , WPResponse(..)
 ) where
 
+import qualified Control.Concurrent.MVar  as M
 import           Control.Lens             hiding (children)
 import           Control.Monad.State
 import           Data.Aeson               (FromJSON, Value (..), parseJSON, (.:), (.:?), (.!=), ToJSON(..))
@@ -64,8 +65,7 @@ import           Web.Offset.Field
 import           Web.Offset.Utils
 
 data Wordpress b =
-     Wordpress { requestPostSet     :: Maybe IntSet
-               , wpExpireAggregates :: IO Bool
+     Wordpress { wpExpireAggregates :: IO Bool
                , wpExpirePost       :: WPKey -> IO Bool
                , cachingGet         :: WPKey -> IO (CacheResult WPResponse)
                , cachingGetRetry    :: WPKey -> IO (Either StatusCode WPResponse)
