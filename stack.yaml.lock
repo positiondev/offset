@@ -5,12 +5,12 @@
 
 packages:
 - completed:
-    hackage: html-entities-1.1.4@sha256:cdb89daf449b0efacfa237d35e2194fd6809baccce1552698f799af86956566b,2773
+    hackage: xmlhtml-0.2.5.2@sha256:3f0990f725551985d777e8edb5563fe99aee998f1fde6a7633f720f76df54701,46997
     pantry-tree:
-      size: 643
-      sha256: 45ba7a3073fa70d22d5f9e36fb3c227e7b5a868fbb8085b7d51efe00920b15dc
+      size: 61835
+      sha256: bb1bd95db3738e18d112bbc9724510ee64a51b7eda61494507f4957c5e2281f6
   original:
-    hackage: html-entities-1.1.4
+    hackage: xmlhtml-0.2.5.2@sha256:3f0990f725551985d777e8edb5563fe99aee998f1fde6a7633f720f76df54701,46997
 - completed:
     hackage: logging-3.0.4@sha256:22d7d0ee5d526fa400de9107a07fcffc076dec725da25812ba537dbb32d52106,2374
     pantry-tree:
@@ -52,21 +52,21 @@ packages:
     commit: a57e55c177e135db8097517fc81081274ad2d5c0
 - completed:
     cabal-file:
-      size: 3122
-      sha256: 3525d5a784b3a14b3a7cf41ecd502ff7504da0c7838c42cd8e26d2fd003addc6
+      size: 3113
+      sha256: 6019f6619f607ad172a70a204b72eecf65faaf778e0b416cd4c374dc50e3a9cc
     name: larceny
-    version: 0.2.0.0
+    version: 0.3.2
     git: https://github.com/positiondev/larceny
     pantry-tree:
-      size: 2384
-      sha256: 5ea4de01b3bed64f21055cb5be64b8e2912239a23c76dafc1590b9123d18d545
-    commit: 05286ad4a66b61a363af32b1455145eb4160046c
+      size: 2804
+      sha256: 874d661db16b1471066f0431cbe38807e9bc68ee0c6e1797041d0737f6c583b7
+    commit: 494dcf620577f96bc797f1ba7f75d9053079c12f
   original:
     git: https://github.com/positiondev/larceny
-    commit: 05286ad4a66b61a363af32b1455145eb4160046c
+    commit: 494dcf620577f96bc797f1ba7f75d9053079c12f
 snapshots:
 - completed:
-    size: 514906
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/8/15.yaml
-    sha256: e78b03712c4e9d672323ed3045ac085a5ddff3732863130f12cd661c468c3bbd
-  original: lts-8.15
+    size: 509471
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/12/26.yaml
+    sha256: 95f014df58d0679b1c4a2b7bf2b652b61da8d30de5f571abb0d59015ef678646
+  original: lts-12.26
