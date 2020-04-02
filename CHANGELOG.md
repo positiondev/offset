@@ -1,13 +1,17 @@
 # Changelog
 
-## June 12 2019 
+## April 2 2020
+ * Add `wpTotalItems`, `wpHasMultiplePages`, `wpHasSinglePage`, `wpHasPreviousPages`, `wpHasNoPreviousPages` to `wpAggregates`
+ * Use MVar instead of IntSet for storing displayed posts -  the IntSet wasn't working with `apply` across templates.
+
+## June 12 2019
  * Add `Q` and `QM` `Field`s for fields accessed via an additional request using an ID or slug in the original request.
  * Add `PV` `Field` for custom-parsed field without requiring a specific JSON type.
 
 ## October 29 2018
  * Add Splice for a version of `wpPosts` called `wpPostsAggregate`
  * `wpPostsAggregate` will allow access to some information from the headers, like how many posts and pages of posts there are.
- * Unlike `wpPosts`, the posts are wrapped in `wpPostsItem`. 
+ * Unlike `wpPosts`, the posts are wrapped in `wpPostsItem`.
  * There's also a separate `wpPostsMeta` that currently has the following splices:
     * `wpTotalPages` - displays how many pages of results are there from this query
     * `wpHasMorePages` - shows child markup if there are more pages (uses the post query from `wpPostsAggregate`'s attributes)

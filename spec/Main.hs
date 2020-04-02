@@ -273,7 +273,46 @@ wpCustomAggregateTests = do
           \</wpNoMorePages>\
       \  <wpCustomMeta >\
       \</wpCustomAggregate>" `shouldRender` "<i>Foo</i> bar No more pages"
-
+    it "should be able to show the number of pages" $ do
+      "<wpCustomAggregate endpoint=\"many-pages\">\
+      \  <wpCustomItem><wpTitle><wpRendered /></wpTitle></wpCustomItem>\
+      \  <wpCustomMeta>\
+          \<wpTotalPages />\
+      \  <wpCustomMeta >\
+      \</wpCustomAggregate>" `shouldRender` "<i>Foo</i> bar 478"
+    it "should be able to show the number of items" $ do
+      "<wpCustomAggregate endpoint=\"many-pages\">\
+      \  <wpCustomItem><wpTitle><wpRendered /></wpTitle></wpCustomItem>\
+      \  <wpCustomMeta>\
+          \<wpTotalItems />\
+      \  <wpCustomMeta >\
+      \</wpCustomAggregate>" `shouldRender` "<i>Foo</i> bar 7337"
+    it "should be able to display based on number pages (many pages, first page)" $ do
+      "<wpCustomAggregate endpoint=\"many-pages\">\
+      \  <wpCustomItem><wpTitle><wpRendered /></wpTitle></wpCustomItem>\
+      \  <wpCustomMeta page=\"1\">\
+          \<wpHasMultiplePages>Has Multiple</wpHasMultiplePages>\
+          \<wpHasSinglePage>Has Single</wpHasSinglePage>\
+          \<wpHasNoPreviousPages>Has No Previous Pages</wpHasNoPreviousPages>\
+      \  <wpCustomMeta >\
+      \</wpCustomAggregate>" `shouldRender` "<i>Foo</i> bar Has Multiple Has No Previous Pages"
+    it "should be able to display based on number pages (many pages, second page)" $ do
+      "<wpCustomAggregate endpoint=\"many-pages\">\
+      \  <wpCustomItem><wpTitle><wpRendered /></wpTitle></wpCustomItem>\
+      \  <wpCustomMeta page=\"2\">\
+          \<wpHasMultiplePages>Has Multiple</wpHasMultiplePages>\
+          \<wpHasPreviousPages>Has Previous Pages</wpHasPreviousPages>\
+          \<wpHasNoPreviousPages>Has No Previous Pages</wpHasNoPreviousPages>\
+      \  <wpCustomMeta >\
+      \</wpCustomAggregate>" `shouldRender` "<i>Foo</i> bar Has Multiple Has Previous Pages"
+    it "should be able to display based on number pages (single pages)" $ do
+      "<wpCustomAggregate endpoint=\"single-page\">\
+      \  <wpCustomItem><wpTitle><wpRendered /></wpTitle></wpCustomItem>\
+      \  <wpCustomMeta>\
+          \<wpHasMultiplePages>Has Multiple</wpHasMultiplePages>\
+          \<wpHasSinglePage>Has Single</wpHasSinglePage>\
+      \  <wpCustomMeta >\
+      \</wpCustomAggregate>" `shouldRender` "<i>Foo</i> bar Has Single"
 
 cacheTests :: Spec
 cacheTests = do
