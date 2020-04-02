@@ -226,7 +226,11 @@ fauxRequester _ "/object_array" [] =
 fauxRequester _ "/number_array" [] = toWPResp $ enc $ object ["some_array" .= [1 :: Int, 2 :: Int, 3 :: Int]]
 fauxRequester _ "/string_array" [] =  toWPResp $ enc $ object ["some_array" .= ["a" :: Text, "b" :: Text, "c" :: Text]]
 fauxRequester _ "/many-pages" [] =
-  return $ Right $ WPResponse [(CI.mk "X-WP-TotalPages", "478")] (enc [article1])
+  return $ Right $ WPResponse [(CI.mk "X-WP-TotalPages", "478")
+                              ,(CI.mk "X-WP-Total", "7337")] (enc [article1])
+fauxRequester _ "/single-page" [] =
+  return $ Right $ WPResponse [(CI.mk "X-WP-TotalPages", "1")
+                              ,(CI.mk "X-WP-Total", "5")] (enc [article1])
 fauxRequester mRecord rqPath rqParams = do
   case mRecord of
     Just record -> modifyMVar_ record $ return . (<> [mkUrlUnescape rqPath rqParams])

@@ -221,16 +221,35 @@ wpAggregateMetaFill :: Either StatusCode WPResponse -> Maybe Int -> Fill s
 wpAggregateMetaFill (Right (WPResponse headers _)) mCurrentPage = do
   let totalPagesText = maybe "" T.decodeUtf8
                           (lookup "x-wp-totalpages" headers)
+      totalItemsText = maybe "" T.decodeUtf8
+                          (lookup "x-wp-total" headers)
       totalPages = fromMaybe 1 (readSafe totalPagesText) :: Int
       currentPage = fromMaybe 1 mCurrentPage
   fillChildrenWith $
     subs [ ("wpTotalPages", textFill totalPagesText )
+         , ("wpTotalItems", textFill totalItemsText)
          , ("wpHasMorePages",
                if currentPage < totalPages
                 then fillChildren
                 else textFill "")
          , ("wpNoMorePages",
                if currentPage < totalPages
+                then textFill ""
+                else fillChildren)
+         , ("wpHasMultiplePages",
+               if totalPages > 1
+                then fillChildren
+                else textFill "")
+         , ("wpHasSinglePage",
+               if totalPages > 1
+                then textFill ""
+                else fillChildren)
+         , ("wpHasPreviousPages",
+               if currentPage > 1
+                then fillChildren
+                else textFill "")
+         , ("wpHasNoPreviousPages",
+               if currentPage > 1
                 then textFill ""
                 else fillChildren)]
 wpPostsMetaFill _ _ = textFill ""
