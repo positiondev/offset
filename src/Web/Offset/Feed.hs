@@ -32,7 +32,7 @@ data WPFeed =
          , wpGetAuthors  :: WPAuthorStyle
          , wpRenderEntry :: Object -> IO (Maybe T.Text) }
 
-data WPAuthorStyle = GuestAuthors | DefaultAuthor
+data WPAuthorStyle = GuestAuthors | GuestAuthorsViaReq | DefaultAuthor
 
 toXMLFeed :: Wordpress b -> WPFeed -> IO T.Text
 toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _ _) = do
@@ -101,6 +101,7 @@ toEntry wp wpFeed entry@WPEntry{..} = do
   let baseEntry = makeEntry guid (TextHTML wpEntryTitle) wpEntryUpdated
   authors <- case wpGetAuthors wpFeed of
                GuestAuthors -> getAuthorsInline wpEntryJSON
+               GuestAuthorsViaReq -> getAuthorsViaReq wp wpEntryJSON
                DefaultAuthor -> getAuthorViaReq wp wpEntryJSON
   return $ baseEntry { entryPublished = Just wpEntryPublished
                      , entrySummary = Just (TextHTML wpEntrySummary)
@@ -165,6 +166,21 @@ getAuthorViaReq wp v =
                   case mAuthorName of
                     Nothing -> return []
                     Just authorName ->return (maybeToList authorName)
+
+getAuthorsViaReq :: Wordpress b -> Object -> IO [WPPerson]
+getAuthorsViaReq wp v =
+  do let mAuthorId = parseMaybe (\obj -> obj .: "authors") v :: Maybe [T.Text]
+     case mAuthorId of
+       Nothing -> return []
+       Just authorIds ->
+         do let authList = map (\id -> ("include[]", id)) authorIds
+            eRespError <- cachingGetRetry wp (EndpointKey ("wp/v2/authors") authList)
+            case eRespError of
+              Left _ -> return []
+              Right resp ->
+                case decodeWPResponseBody resp of
+                  Nothing -> return []
+                  Just list -> return list
 
 entryGuid :: T.Text -> Int -> Object -> URI
 entryGuid baseURI wpId wpJSON =
