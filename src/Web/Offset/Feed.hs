@@ -169,11 +169,11 @@ getAuthorViaReq wp v =
 
 getAuthorsViaReq :: Wordpress b -> Object -> IO [WPPerson]
 getAuthorsViaReq wp v =
-  do let mAuthorId = parseMaybe (\obj -> obj .: "authors") v :: Maybe [T.Text]
+  do let mAuthorId = parseMaybe (\obj -> obj .: "authors") v :: Maybe [Int]
      case mAuthorId of
        Nothing -> return []
        Just authorIds ->
-         do let authList = map (\id -> ("include[]", id)) authorIds
+         do let authList = map (\id -> ("include[]", tshow id)) authorIds
             eRespError <- cachingGetRetry wp (EndpointKey ("wp/v2/authors") authList)
             case eRespError of
               Left _ -> return []
