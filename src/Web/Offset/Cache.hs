@@ -96,15 +96,15 @@ cacheSwitch b k = cacheSet b (formatKey k)
 cacheSet :: CacheBehavior -> Text -> Text -> Redis Bool
 cacheSet b k v =
   case b of
-   (CacheSeconds n) -> rsetex k n v
-   CacheForever -> rset k v
+   CacheSeconds n -> rsetex k n v
+   CacheForever n -> rset k v
    NoCache -> return True
 
 cacheSetAlwaysExpire :: CacheBehavior -> Text -> Text -> Redis Bool
 cacheSetAlwaysExpire b k v =
   case b of
-   (CacheSeconds n) -> rsetex k n v
-   CacheForever -> rsetex k (10 * 60) v -- cache 10 minutes
+   CacheSeconds n -> rsetex k n v
+   CacheForever n -> rsetex k n v
    NoCache -> return True
 
 wpExpireAggregatesInt :: RunRedis -> IO Bool
