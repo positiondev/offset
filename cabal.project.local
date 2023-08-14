@@ -1,0 +1,5 @@
+with-compiler: ghc-9.2.8
+source-repository-package
+    type: git
+    location: https://github.com/positiondev/larceny
+    tag: 494dcf620577f96bc797f1ba7f75d9053079c12f
