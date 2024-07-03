@@ -5,6 +5,27 @@
 
 packages:
 - completed:
+    hackage: polyparse-1.13@sha256:4960fad39d3edcc3827ca93546dbf42eb59c1a022ec06a8d756e6a0558c47f29,2754
+    pantry-tree:
+      size: 1776
+      sha256: 8d4d41b25db9681ad7ebef755217be66ead3cbd33e55d00de22d35de27676196
+  original:
+    hackage: polyparse-1.13@sha256:4960fad39d3edcc3827ca93546dbf42eb59c1a022ec06a8d756e6a0558c47f29,2754
+- completed:
+    hackage: HaXml-1.25.13@sha256:92023497a8c93bf703748c21ab2e11b9e9e82f4b1cdd7b84339a3e22c47038f8,4747
+    pantry-tree:
+      size: 4122
+      sha256: e93b9cd2e6eebda645a33c152cb573dcd8eb066c5b65ab7dc403d1e195b9d281
+  original:
+    hackage: HaXml-1.25.13@sha256:92023497a8c93bf703748c21ab2e11b9e9e82f4b1cdd7b84339a3e22c47038f8,4747
+- completed:
+    hackage: rss-3000.2.0.8@sha256:e13b4e27c034e22e0992b59516dabd7280dc24f04bcbdd5c1ecd377285e0315e,1251
+    pantry-tree:
+      size: 205
+      sha256: aadb62118c280bd029becf14f385b70c062d4c5c1275df8e83429d298be106d1
+  original:
+    hackage: rss-3000.2.0.8@sha256:e13b4e27c034e22e0992b59516dabd7280dc24f04bcbdd5c1ecd377285e0315e,1251
+- completed:
     hackage: xmlhtml-0.2.5.2@sha256:3f0990f725551985d777e8edb5563fe99aee998f1fde6a7633f720f76df54701,46997
     pantry-tree:
       size: 61835
@@ -20,9 +41,6 @@ packages:
     hackage: logging-3.0.4
 - completed:
     subdir: fn
-    cabal-file:
-      size: 4417
-      sha256: a779f51f035846595d10439af9d965378ffb62daf87cdd03ea675292aee0e466
     name: fn
     version: 0.4.0.0
     git: https://github.com/positiondev/fn
@@ -36,9 +54,6 @@ packages:
     commit: a57e55c177e135db8097517fc81081274ad2d5c0
 - completed:
     subdir: fn-extra
-    cabal-file:
-      size: 1430
-      sha256: 9f4ab65f25e2ae7da621d8568504ebd2b0e6c214c405f4f8db98e99fc56cc8f1
     name: fn-extra
     version: 0.3.1
     git: https://github.com/positiondev/fn
@@ -51,9 +66,6 @@ packages:
     git: https://github.com/positiondev/fn
     commit: a57e55c177e135db8097517fc81081274ad2d5c0
 - completed:
-    cabal-file:
-      size: 3113
-      sha256: 6019f6619f607ad172a70a204b72eecf65faaf778e0b416cd4c374dc50e3a9cc
     name: larceny
     version: 0.3.2
     git: https://github.com/positiondev/larceny

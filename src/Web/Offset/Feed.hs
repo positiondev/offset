@@ -8,13 +8,17 @@ module Web.Offset.Feed where
 import           Control.Monad.State
 import           Data.Aeson          hiding (decode, encode, json, object)
 import           Data.Aeson.Types    (parseMaybe)
-import           Data.Maybe          (maybeToList)
+import           Data.Maybe          (maybeToList, fromJust)
 import           Data.Monoid
 import qualified Data.Text           as T
 import           Data.Time.Clock
+import           Data.Time.Format    (formatTime, defaultTimeLocale)
 import           Text.XML.Light
 import           Web.Atom            hiding (Link)
 import qualified Web.Atom            as A (Link (..))
+import           Text.RSS            hiding (Link)
+import qualified Text.RSS            as R (ItemElem (..))
+import           Network.URI         (parseURI, URI)
 
 import           Web.Offset.Date
 import           Web.Offset.Link
@@ -33,6 +37,67 @@ data WPFeed =
          , wpRenderEntry :: Object -> IO (Maybe T.Text) }
 
 data WPAuthorStyle = GuestAuthors | DefaultAuthor
+
+generateRSSFeed :: IO String
+generateRSSFeed = do
+    currentTime <- getCurrentTime
+    let formattedTime = formatTime defaultTimeLocale "%a, %d %b %Y %H:%M:%S %z" currentTime
+
+    -- Define the RSS channel
+    -- let channel = RSSChannel
+    --         { Title = "Example Channel"
+    --         , Link = "https://www.example.com/"
+    --         , Description = "This is an example of an RSS 2.0 feed."
+    --         , Language = Just "en-us"
+    --         , Copyright = Just "Copyright 2024 Example.com"
+    --         , ManagingEditor = Just "editor@example.com"
+    --         , WebMaster = Just "webmaster@example.com"
+    --         , PubDate = Just formattedTime
+    --         , LastBuildDate = Just formattedTime
+    --         , Categories = []
+    --         , Generator = Just "Haskell RSS Generator"
+    --         , Docs = Just "https://www.rssboard.org/rss-specification"
+    --         , Cloud = Nothing
+    --         , TTL = Just 60
+    --         , Image = Nothing
+    --         , Rating = Nothing
+    --         , TextInput = Nothing
+    --         , SkipHours = []
+    --         , SkipDays = []
+    --         , Items = [item1, item2]
+    --         }
+
+    -- Define the RSS items
+    let item1 = [
+              Title "Example Item 1"
+            , R.Link (fromJust (parseURI "https://www.example.com/example-item-1"))
+            , Description "This is an example item description."
+            , Author "author@email.com"
+            , PubDate currentTime
+            ]
+
+    let item2 = [
+              Title "Example Item 2"
+            , R.Link (fromJust (parseURI "https://www.example.com/example-item-2"))
+            , Description "This is another example item description."
+            , Author "author@email.com"
+            , PubDate currentTime
+            ]
+
+
+    -- Construct the RSS feed
+    let rss = RSS  "Test Channel" (fromJust (parseURI "https://www.example.com/")) "This is an example of an RSS 2.0 feed."
+                [ Language "en-us"
+                , ManagingEditor "editor@example.com"
+                , WebMaster "webmaster@example.com"
+                , ChannelPubDate currentTime
+                , LastBuildDate currentTime
+                , TTL 60
+                ]
+                [item1, item2]
+
+    -- Convert the RSS feed to XML
+    return $ showXML $ rssToXML rss
 
 toXMLFeed :: Wordpress b -> WPFeed -> IO T.Text
 toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _ _) = do

@@ -48,7 +48,7 @@ mockedTests = do
 
 feedTests :: Spec
 feedTests =
-  describe "rss feed" $ do
+  describe "atom feed" $ do
     it "should make a feed" $ do
       ctxt <- initFauxRequestNoCache
       let wpfeed = WPFeed
