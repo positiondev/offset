@@ -117,4 +117,6 @@ test-Suite test-offset
                      , atom-basic
                      , xml
                      , http-types
+                     , rss
+                     , network-uri
     default-language: Haskell2010

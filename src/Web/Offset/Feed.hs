@@ -26,8 +26,11 @@ import           Web.Offset.Splices
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
+data FeedFormat = AtomFeed | RSSFeed
+
 data WPFeed =
-  WPFeed { wpFeedURI     :: T.Text
+  WPFeed { wpFeedFormat  :: FeedFormat
+         , wpFeedURI     :: T.Text
          , wpFeedTitle   :: T.Text
          , wpFeedIcon    :: Maybe T.Text
          , wpFeedLogo    :: Maybe T.Text
@@ -38,43 +41,22 @@ data WPFeed =
 
 data WPAuthorStyle = GuestAuthors | DefaultAuthor
 
-generateRSSFeed :: IO String
-generateRSSFeed = do
-    currentTime <- getCurrentTime
-    let formattedTime = formatTime defaultTimeLocale "%a, %d %b %Y %H:%M:%S %z" currentTime
-
-    -- Define the RSS channel
-    -- let channel = RSSChannel
-    --         { Title = "Example Channel"
-    --         , Link = "https://www.example.com/"
-    --         , Description = "This is an example of an RSS 2.0 feed."
-    --         , Language = Just "en-us"
-    --         , Copyright = Just "Copyright 2024 Example.com"
-    --         , ManagingEditor = Just "editor@example.com"
-    --         , WebMaster = Just "webmaster@example.com"
-    --         , PubDate = Just formattedTime
-    --         , LastBuildDate = Just formattedTime
-    --         , Categories = []
-    --         , Generator = Just "Haskell RSS Generator"
-    --         , Docs = Just "https://www.rssboard.org/rss-specification"
-    --         , Cloud = Nothing
-    --         , TTL = Just 60
-    --         , Image = Nothing
-    --         , Rating = Nothing
-    --         , TextInput = Nothing
-    --         , SkipHours = []
-    --         , SkipDays = []
-    --         , Items = [item1, item2]
-    --         }
-
-    -- Define the RSS items
-    let item1 = [
+makeItem :: UTCTime -> [ItemElem]
+makeItem currentTime = [
               Title "Example Item 1"
             , R.Link (fromJust (parseURI "https://www.example.com/example-item-1"))
             , Description "This is an example item description."
             , Author "author@email.com"
             , PubDate currentTime
             ]
+
+generateRSSFeed :: IO String
+generateRSSFeed = do
+    currentTime <- getCurrentTime
+    let formattedTime = formatTime defaultTimeLocale "%a, %d %b %Y %H:%M:%S %z" currentTime
+
+    -- Define the RSS items
+    let item1 = makeItem currentTime
 
     let item2 = [
               Title "Example Item 2"
@@ -100,7 +82,7 @@ generateRSSFeed = do
     return $ showXML $ rssToXML rss
 
 toXMLFeed :: Wordpress b -> WPFeed -> IO T.Text
-toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _ _) = do
+toXMLFeed wp wpFeed@(WPFeed format uri title icon logo _ _ _ _) = do
   wpEntries <- getWPEntries wp
   let mostRecentUpdate = maximum (map wpEntryUpdated wpEntries)
   entries <- mapM (toEntry wp wpFeed) wpEntries
@@ -108,7 +90,12 @@ toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _ _) = do
              { feedIcon = unsafeURI <$> T.unpack <$> icon
              , feedLogo = unsafeURI <$> T.unpack <$> logo
              , feedEntries = entries }
-  return $ T.pack $ ppTopElement $ fixNamespace $ feedXML xmlgen feed
+  case format of
+    AtomFeed ->
+      return $ T.pack $ ppTopElement $ fixNamespace $ feedXML xmlgen feed
+    RSSFeed -> do
+      feed <- generateRSSFeed
+      return $ T.pack feed
 
 fixNamespace :: Element -> Element
 fixNamespace el@(Element _name attrs _content _line) =

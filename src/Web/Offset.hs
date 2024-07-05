@@ -31,6 +31,7 @@ module Web.Offset (
  , feedSubs
  , toXMLFeed
  , WPFeed(..)
+ , FeedFormat(..)
  , WPAuthorStyle(..)
  , Link(..)
  , buildPermalink
