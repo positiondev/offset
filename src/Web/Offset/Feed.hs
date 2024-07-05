@@ -11,6 +11,7 @@ import           Data.Aeson.Types    (parseMaybe)
 import           Data.Maybe          (maybeToList, fromJust)
 import           Data.Monoid
 import qualified Data.Text           as T
+import qualified Data.Text.Encoding  as T
 import           Data.Time.Clock
 import           Data.Time.Format    (formatTime, defaultTimeLocale)
 import           Text.XML.Light
@@ -41,22 +42,33 @@ data WPFeed =
 
 data WPAuthorStyle = GuestAuthors | DefaultAuthor
 
-makeItem :: UTCTime -> [ItemElem]
-makeItem currentTime = [
-              Title "Example Item 1"
-            , R.Link (fromJust (parseURI "https://www.example.com/example-item-1"))
-            , Description "This is an example item description."
-            , Author "author@email.com"
-            , PubDate currentTime
-            ]
+makeItem :: Wordpress b
+        -> WPFeed
+        -> WPEntry
+        -> IO [ItemElem]
+makeItem wp wpFeed entry@WPEntry{..} = do
+  content <- wpEntryContent (wpRenderEntry wpFeed) entry
+  let guid = entryGuid (wpBaseURI wpFeed) wpEntryId wpEntryJSON
+  let baseEntry = makeEntry guid (TextHTML wpEntryTitle) wpEntryUpdated
+  authors <- case wpGetAuthors wpFeed of
+               GuestAuthors -> getAuthorsInline wpEntryJSON
+               DefaultAuthor -> getAuthorViaReq wp wpEntryJSON
+  return [
+            Title (T.unpack wpEntryTitle)
+          , R.Link (fromJust (parseURI "https://www.example.com/example-item-1"))
+          , Description (T.unpack wpEntrySummary)
+          , Author (unWP (head authors))
+          , PubDate wpEntryPublished
+          ]
 
-generateRSSFeed :: IO String
-generateRSSFeed = do
+generateRSSFeed :: Wordpress b -> WPFeed -> IO String
+generateRSSFeed wp wpFeed = do
+    wpEntries <- getWPEntries wp
     currentTime <- getCurrentTime
     let formattedTime = formatTime defaultTimeLocale "%a, %d %b %Y %H:%M:%S %z" currentTime
 
     -- Define the RSS items
-    let item1 = makeItem currentTime
+    let item1 = makeItem wp wpFeed (head wpEntries)
 
     let item2 = [
               Title "Example Item 2"
@@ -94,7 +106,7 @@ toXMLFeed wp wpFeed@(WPFeed format uri title icon logo _ _ _ _) = do
     AtomFeed ->
       return $ T.pack $ ppTopElement $ fixNamespace $ feedXML xmlgen feed
     RSSFeed -> do
-      feed <- generateRSSFeed
+      feed <- generateRSSFeed wp wpFeed
       return $ T.pack feed
 
 fixNamespace :: Element -> Element
