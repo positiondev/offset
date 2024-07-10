@@ -22,7 +22,7 @@ import qualified Text.RSS            as R (ItemElem (..))
 import           Network.URI         (parseURI, URI)
 
 import           Web.Offset.Date
-import           Web.Offset.Link
+import           Web.Offset.Link     as O
 import           Web.Offset.Splices
 import           Web.Offset.Types
 import           Web.Offset.Utils
@@ -36,7 +36,7 @@ data WPFeed =
          , wpFeedIcon    :: Maybe T.Text
          , wpFeedLogo    :: Maybe T.Text
          , wpBaseURI     :: T.Text
-         , wpBuildLinks  :: Object -> [Link]
+         , wpBuildLinks  :: Object -> [O.Link]
          , wpGetAuthors  :: WPAuthorStyle
          , wpRenderEntry :: Object -> IO (Maybe T.Text) }
 
@@ -55,42 +55,27 @@ makeItem wp wpFeed entry@WPEntry{..} = do
                DefaultAuthor -> getAuthorViaReq wp wpEntryJSON
   return [
             Title (T.unpack wpEntryTitle)
-          , R.Link (fromJust (parseURI "https://www.example.com/example-item-1"))
+          , R.Link $ fromJust $ parseURI $ T.unpack $ O.linkHref $ head $ wpBuildLinks wpFeed wpEntryJSON
           , Description (T.unpack wpEntrySummary)
-          , Author (unWP (head authors))
+          , Author $ "rss@jacobin.com" ++ " (" ++ (T.unpack $ personName (unWP (head authors))) ++ ")"
           , PubDate wpEntryPublished
           ]
 
 generateRSSFeed :: Wordpress b -> WPFeed -> IO String
 generateRSSFeed wp wpFeed = do
     wpEntries <- getWPEntries wp
-    currentTime <- getCurrentTime
-    let formattedTime = formatTime defaultTimeLocale "%a, %d %b %Y %H:%M:%S %z" currentTime
+    let mostRecentUpdate = maximum (map wpEntryUpdated wpEntries)
 
-    -- Define the RSS items
-    let item1 = makeItem wp wpFeed (head wpEntries)
+    items <- mapM (makeItem wp wpFeed) wpEntries
 
-    let item2 = [
-              Title "Example Item 2"
-            , R.Link (fromJust (parseURI "https://www.example.com/example-item-2"))
-            , Description "This is another example item description."
-            , Author "author@email.com"
-            , PubDate currentTime
-            ]
-
-
-    -- Construct the RSS feed
-    let rss = RSS  "Test Channel" (fromJust (parseURI "https://www.example.com/")) "This is an example of an RSS 2.0 feed."
+    let rss = RSS  (T.unpack $ wpFeedTitle wpFeed) (fromJust (parseURI (T.unpack (wpFeedURI wpFeed)))) ""
                 [ Language "en-us"
-                , ManagingEditor "editor@example.com"
-                , WebMaster "webmaster@example.com"
-                , ChannelPubDate currentTime
-                , LastBuildDate currentTime
+                , ChannelPubDate mostRecentUpdate
+                , LastBuildDate mostRecentUpdate
                 , TTL 60
                 ]
-                [item1, item2]
+                items
 
-    -- Convert the RSS feed to XML
     return $ showXML $ rssToXML rss
 
 toXMLFeed :: Wordpress b -> WPFeed -> IO T.Text
@@ -234,5 +219,5 @@ entryGuid :: T.Text -> Int -> Object -> URI
 entryGuid baseURI wpId wpJSON =
   unsafeURI $ T.unpack $
     case buildPermalink baseURI wpJSON of
-      Just permalink -> Web.Offset.Link.linkHref permalink
+      Just permalink -> O.linkHref permalink
       Nothing -> baseURI <> "/posts?id=" <> tshow wpId
