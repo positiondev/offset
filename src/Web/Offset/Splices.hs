@@ -12,9 +12,10 @@ import           Control.Applicative     ((<|>))
 import           Control.Lens            hiding (children)
 import           Control.Concurrent.MVar
 import           Data.Aeson              hiding (decode, encode, json, object)
+import           Data.Aeson.Key          (fromText, toText)
+import qualified Data.Aeson.KeyMap       as M
 import qualified Data.Attoparsec.Text    as A
 import           Data.Char               (toUpper)
-import qualified Data.HashMap.Strict     as M
 import           Data.List               (lookup)
 import qualified Data.Map as Map
 import           Data.IntSet             (IntSet)
@@ -98,7 +99,7 @@ jsonToFill :: Value -> Fill s
 jsonToFill (Object o) =
   Fill $ \_ (path, tpl) lib -> runTemplate tpl path objectSubstitutions lib
   where objectSubstitutions =
-          subs $ map (\k -> (transformName k,
+          subs $ map (\k -> (transformName (toText k),
                              jsonToFill (fromJust (M.lookup k o))))
                      (M.keys o)
 jsonToFill (Array v) =
@@ -331,36 +332,36 @@ wpPageFill wpLens =
 postSubs :: Wordpress b -> [Field s] -> Object -> Substitutions s
 postSubs wp extra object = subs (map (buildSplice object) (mergeFields postFields extra))
   where buildSplice o (F n) =
-          (transformName n, rawTextFill $ getText n o)
+          (transformName n, rawTextFill $ getText (fromText n) o)
         buildSplice o (B n) =
-          (transformName n, textFill $ getBool n o)
+          (transformName n, textFill $ getBool (fromText n) o)
         buildSplice o (Q n endpoint) =
-          (transformName n, customFill wp (idToEndpoint endpoint $ getText n o))
+          (transformName n, customFill wp (idToEndpoint endpoint $ getText (fromText n) o))
         buildSplice o (QM n endpoint) =
-          (transformName n, customFill wp (idsToEndpoint endpoint (unArray' . M.lookup n $ o)))
+          (transformName n, customFill wp (idsToEndpoint endpoint (unArray' . M.lookup (fromText n) $ o)))
         buildSplice o (P n fill') =
-          (transformName n, fill' $ getText n o)
+          (transformName n, fill' $ getText (fromText n) o)
         buildSplice o (PV n fill') =
-          (transformName n, fill' (M.lookup n $ o))
+          (transformName n, fill' (M.lookup (fromText n) $ o))
         buildSplice o (PN n fill') =
-          (transformName n, fill' (unObj . M.lookup n $ o))
+          (transformName n, fill' (unObj . M.lookup (fromText n) $ o))
         buildSplice o (PM n fill') =
-          (transformName n, fill' (unArray . M.lookup n $ o))
+          (transformName n, fill' (unArray . M.lookup (fromText n) $ o))
         buildSplice o (N n fs) =
           (transformName n, fillChildrenWith $ subs
-                            (map (buildSplice (unObj . M.lookup n $ o)) fs))
+                            (map (buildSplice (unObj . M.lookup (fromText n) $ o)) fs))
         buildSplice o (C n path) =
-          (transformName n, rawTextFill (getText (last path) . traverseObject (init path) $ o))
+          (transformName n, rawTextFill (getText (fromText $ last path) . traverseObject (init (fmap fromText path)) $ o))
         buildSplice o (CB n path) =
-          (transformName n, rawTextFill (getBool (last path) . traverseObject (init path) $ o))
+          (transformName n, rawTextFill (getBool (fromText $ last path) . traverseObject (init (fmap fromText path)) $ o))
         buildSplice o (CN n path fs) =
           (transformName n, fillChildrenWith $ subs
-                            (map (buildSplice (traverseObject path o)) fs))
+                            (map (buildSplice (traverseObject (fmap fromText path) o)) fs))
         buildSplice o (M n fs) =
           (transformName n,
             mapSubs (\(i, oinner) -> subs $ map (buildSplice oinner) fs
                                          <> [(transformName n <> "Index", textFill (tshow i))])
-                    (zip [1..] (unArray . M.lookup n $ o)))
+                    (zip [1..] (unArray . M.lookup (fromText n) $ o)))
         unValue (String t) = t
         unValue (Number i) = either (tshow :: Double -> Text)
                                     (tshow :: Integer -> Text) (floatingOrInteger i)

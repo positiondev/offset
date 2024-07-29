@@ -7,12 +7,11 @@ extra-deps:
  - rss-3000.2.0.8@sha256:e13b4e27c034e22e0992b59516dabd7280dc24f04bcbdd5c1ecd377285e0315e,1251
  - xmlhtml-0.2.5.2@sha256:3f0990f725551985d777e8edb5563fe99aee998f1fde6a7633f720f76df54701,46997
  - logging-3.0.4
- - git: https://github.com/positiondev/fn
-   commit: a57e55c177e135db8097517fc81081274ad2d5c0
+ - git: https://github.com/remeike/fn-monadic
+   commit: 2365dd816915548833b453c3d53f3addedbb3f16
    subdirs:
     - fn
-    - fn-extra
  - git: https://github.com/positiondev/larceny
    commit: 494dcf620577f96bc797f1ba7f75d9053079c12f
 
-resolver: lts-12.26
+resolver: lts-20.26

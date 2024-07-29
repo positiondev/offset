@@ -96,7 +96,7 @@ test-Suite test-offset
                      , containers
                      , data-default
                      , either
-                     , fn
+                     , fn-monadic
                      , hedis
                      , directory
                      , dotenv

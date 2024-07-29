@@ -9,14 +9,15 @@
 module Web.Offset.Posts where
 
 import           Data.Aeson
-import qualified Data.HashMap.Strict as M
+import           Data.Aeson.Key      (fromText)
+import qualified Data.Aeson.KeyMap   as M
 import           Data.Maybe          (fromMaybe)
 import           Data.Ratio
 
 import           Web.Offset.Utils
 
 extractPostId :: Object -> (Int, Object)
-extractPostId p = let i = M.lookup "id" p
+extractPostId p = let i = M.lookup (fromText "id") p
                       is = case i of
                             Just (String n) -> readSafe n
                             Just (Number n) ->
