@@ -13,6 +13,7 @@ import           Control.Monad.State     (StateT, evalStateT)
 import qualified Control.Monad.State     as S
 import           Control.Monad.Trans     (liftIO)
 import           Data.Aeson              hiding (Success)
+import qualified Data.Aeson.KeyMap       as KM
 import           Data.Aeson.Types        (parseMaybe)
 import qualified Data.CaseInsensitive    as CI
 import           Data.Default
@@ -58,8 +59,8 @@ enc val = TL.toStrict . TL.decodeUtf8 . encode $ val
 
 article1 :: Value
 article1 = object [ "id" .= (1 :: Int)
-                  , "date" .= ("2014-10-20T07:00:00" :: T.Text)
-                  , "modified" .= ("2014-10-20T07:00:00" :: T.Text)
+                  , "date" .= ("2014-10-02T07:00:00" :: T.Text)
+                  , "modified" .= ("2014-10-02T07:00:00" :: T.Text)
                   , "slug" .= ("foo-bar" :: T.Text)
                   , "title" .= object ["rendered" .= ("<i>Foo</i> bar" :: T.Text)]
                   , "excerpt" .= object ["rendered" .= ("summary" :: T.Text)]
@@ -126,7 +127,7 @@ customFields = [N "featured_image"
 departmentFill :: [Object] -> Fill s
 departmentFill objs =
   let singleText :: Object -> Text
-      singleText o = toStr $ HM.lookup "name" o
+      singleText o = toStr $ KM.lookup "name" o
       toStr (Just (String s)) = s
       toStr _ = error "not a string" in
   mapSubs (\x -> subs [("name", textFill x)])
