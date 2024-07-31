@@ -8,34 +8,78 @@ module Web.Offset.Feed where
 import           Control.Monad.State
 import           Data.Aeson          hiding (decode, encode, json, object)
 import           Data.Aeson.Types    (parseMaybe)
-import           Data.Maybe          (maybeToList)
+import           Data.Maybe          (maybeToList, fromJust)
 import           Data.Monoid
 import qualified Data.Text           as T
+import qualified Data.Text.Encoding  as T
 import           Data.Time.Clock
+import           Data.Time.Format    (formatTime, defaultTimeLocale)
 import           Text.XML.Light
 import           Web.Atom            hiding (Link)
 import qualified Web.Atom            as A (Link (..))
+import           Text.RSS            hiding (Link)
+import qualified Text.RSS            as R (ItemElem (..))
+import           Network.URI         (parseURI, URI)
 
 import           Web.Offset.Date
-import           Web.Offset.Link
+import           Web.Offset.Link     as O
 import           Web.Offset.Splices
 import           Web.Offset.Types
 import           Web.Offset.Utils
 
+data FeedFormat = AtomFeed | RSSFeed
+
 data WPFeed =
-  WPFeed { wpFeedURI     :: T.Text
+  WPFeed { wpFeedFormat  :: FeedFormat
+         , wpFeedURI     :: T.Text
          , wpFeedTitle   :: T.Text
          , wpFeedIcon    :: Maybe T.Text
          , wpFeedLogo    :: Maybe T.Text
          , wpBaseURI     :: T.Text
-         , wpBuildLinks  :: Object -> [Link]
+         , wpBuildLinks  :: Object -> [O.Link]
          , wpGetAuthors  :: WPAuthorStyle
          , wpRenderEntry :: Object -> IO (Maybe T.Text) }
 
 data WPAuthorStyle = GuestAuthors | DefaultAuthor
 
+makeItem :: Wordpress b
+        -> WPFeed
+        -> WPEntry
+        -> IO [ItemElem]
+makeItem wp wpFeed entry@WPEntry{..} = do
+  content <- wpEntryContent (wpRenderEntry wpFeed) entry
+  let guid = entryGuid (wpBaseURI wpFeed) wpEntryId wpEntryJSON
+  let baseEntry = makeEntry guid (TextHTML wpEntryTitle) wpEntryUpdated
+  authors <- case wpGetAuthors wpFeed of
+               GuestAuthors -> getAuthorsInline wpEntryJSON
+               DefaultAuthor -> getAuthorViaReq wp wpEntryJSON
+  return [
+            Title (T.unpack wpEntryTitle)
+          , R.Link $ fromJust $ parseURI $ T.unpack $ O.linkHref $ head $ wpBuildLinks wpFeed wpEntryJSON
+          , Description (T.unpack wpEntrySummary)
+          , Author $ "rss@jacobin.com" ++ " (" ++ (T.unpack $ personName (unWP (head authors))) ++ ")"
+          , PubDate wpEntryPublished
+          ]
+
+generateRSSFeed :: Wordpress b -> WPFeed -> IO String
+generateRSSFeed wp wpFeed = do
+    wpEntries <- getWPEntries wp
+    let mostRecentUpdate = maximum (map wpEntryUpdated wpEntries)
+
+    items <- mapM (makeItem wp wpFeed) wpEntries
+
+    let rss = RSS  (T.unpack $ wpFeedTitle wpFeed) (fromJust (parseURI (T.unpack (wpFeedURI wpFeed)))) ""
+                [ Language "en-us"
+                , ChannelPubDate mostRecentUpdate
+                , LastBuildDate mostRecentUpdate
+                , TTL 60
+                ]
+                items
+
+    return $ showXML $ rssToXML rss
+
 toXMLFeed :: Wordpress b -> WPFeed -> IO T.Text
-toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _ _) = do
+toXMLFeed wp wpFeed@(WPFeed format uri title icon logo _ _ _ _) = do
   wpEntries <- getWPEntries wp
   let mostRecentUpdate = maximum (map wpEntryUpdated wpEntries)
   entries <- mapM (toEntry wp wpFeed) wpEntries
@@ -43,7 +87,12 @@ toXMLFeed wp wpFeed@(WPFeed uri title icon logo _ _ _ _) = do
              { feedIcon = unsafeURI <$> T.unpack <$> icon
              , feedLogo = unsafeURI <$> T.unpack <$> logo
              , feedEntries = entries }
-  return $ T.pack $ ppTopElement $ fixNamespace $ feedXML xmlgen feed
+  case format of
+    AtomFeed ->
+      return $ T.pack $ ppTopElement $ fixNamespace $ feedXML xmlgen feed
+    RSSFeed -> do
+      feed <- generateRSSFeed wp wpFeed
+      return $ T.pack feed
 
 fixNamespace :: Element -> Element
 fixNamespace el@(Element _name attrs _content _line) =
@@ -170,5 +219,5 @@ entryGuid :: T.Text -> Int -> Object -> URI
 entryGuid baseURI wpId wpJSON =
   unsafeURI $ T.unpack $
     case buildPermalink baseURI wpJSON of
-      Just permalink -> Web.Offset.Link.linkHref permalink
+      Just permalink -> O.linkHref permalink
       Nothing -> baseURI <> "/posts?id=" <> tshow wpId

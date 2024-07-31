@@ -2,6 +2,9 @@ flags: {}
 packages:
 - '.'
 extra-deps:
+ - polyparse-1.13@sha256:4960fad39d3edcc3827ca93546dbf42eb59c1a022ec06a8d756e6a0558c47f29,2754
+ - HaXml-1.25.13@sha256:92023497a8c93bf703748c21ab2e11b9e9e82f4b1cdd7b84339a3e22c47038f8,4747
+ - rss-3000.2.0.8@sha256:e13b4e27c034e22e0992b59516dabd7280dc24f04bcbdd5c1ecd377285e0315e,1251
  - xmlhtml-0.2.5.2@sha256:3f0990f725551985d777e8edb5563fe99aee998f1fde6a7633f720f76df54701,46997
  - logging-3.0.4
  - git: https://github.com/remeike/fn-monadic

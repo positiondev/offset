@@ -47,11 +47,12 @@ mockedTests = do
   feedTests
 
 feedTests :: Spec
-feedTests =
-  describe "rss feed" $ do
-    it "should make a feed" $ do
+feedTests = do
+  describe "atom feed" $ do
+    it "should make an atom feed" $ do
       ctxt <- initFauxRequestNoCache
       let wpfeed = WPFeed
+                     AtomFeed
                      "https://myurl.com/feed"
                      "My Blog"
                      Nothing
@@ -62,6 +63,26 @@ feedTests =
                      (renderFeedContent ctxt)
       ft <- toXMLFeed (_wordpress ctxt) wpfeed
       ft `shouldBe` "<?xml version='1.0' ?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://myurl.com/feed</id>\n  <title type=\"text\">My Blog</title>\n  <updated>2014-10-20T07:00:00Z</updated>\n  <entry>\n    <id>https://myurl.com/2014/10/foo-bar/</id>\n    <title type=\"html\">&lt;i&gt;Foo&lt;/i&gt; bar</title>\n    <updated>2014-10-20T07:00:00Z</updated>\n    <published>2014-10-20T07:00:00Z</published>\n    <summary type=\"html\">summary</summary>\n    <content type=\"html\">This is the title: &lt;i&gt;Foo&lt;/i&gt; bar</content>\n    <author>\n      <name>Emma Goldman</name>\n    </author>\n    <link href=\"https://myurl.com/2014/10/foo-bar/\" title=\"&lt;i&gt;Foo&lt;/i&gt; bar\" />\n  </entry>\n</feed>\n"
+
+  describe "rss feed" $ do
+    it "should make an rss 2.0 feed" $ do
+      ctxt <- initFauxRequestNoCache
+      let wpfeed = WPFeed
+                     RSSFeed
+                     "https://myurl.com/feed"
+                     "My Blog"
+                     Nothing
+                     Nothing
+                     "https://myurl.com"
+                     buildEntryLinks
+                     GuestAuthors
+                     (renderFeedContent ctxt)
+      ft <- toXMLFeed (_wordpress ctxt) wpfeed
+      ft `shouldBe` "<rss version=\"2.0\"><channel><title>My Blog</title><link>https://myurl.com/feed</link><description/><docs>http://www.rssboard.org/rss-specification</docs><language>en-us</language><pubDate>Mon, 20 Oct 2014 07:00:00 UTC</pubDate><lastBuildDate>Mon, 20 Oct 2014 07:00:00 UTC</lastBuildDate><ttl>60</ttl><item><title>&lt;i&gt;Foo&lt;/i&gt; bar</title><link>https://myurl.com/2014/10/foo-bar/</link><description>summary</description><author>rss@jacobin.com (Emma Goldman)</author><pubDate>Mon, 20 Oct 2014 07:00:00 UTC</pubDate></item></channel></rss>"
+
+
+
+
 
 larcenyFillTests :: Spec
 larcenyFillTests = do
